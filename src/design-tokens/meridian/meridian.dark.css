@@ -1,0 +1,32 @@
+[data-theme="meridian-dark"] {
+  --color-bg-primary: #0A0E1A;
+  --color-bg-secondary: #0F1628;
+  --color-bg-tertiary: #1A2240;
+  --color-bg-elevated: #1E2A4A;
+  --color-text-primary: #E8EDF5;
+  --color-text-secondary: #8A9BB8;
+  --color-text-tertiary: #4A5A78;
+  --color-border-primary: #1E2A4A;
+  --color-border-secondary: #2A3A5A;
+  --color-accent-1: #00D4FF;
+  --color-accent-2: #00FF9D;
+  --color-accent-3: #FF4D6D;
+  --color-accent-4: #FFB800;
+  --shadow-card: 0 0 0 1px rgba(0,212,255,0.1),0 4px 24px rgba(0,0,0,0.4);
+  --shadow-hover: 0 0 0 1px rgba(0,212,255,0.35),0 8px 32px rgba(0,212,255,0.12);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --motion-transition: all 0.15s ease;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 36px;
+  --card-padding: 12px;
+  --hero-padding: 24px;
+  --section-gap: 24px;
+}

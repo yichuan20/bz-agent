@@ -1,0 +1,33 @@
+[data-theme="duo-hc"] {
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F0F0F0;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #2A7700;
+  --color-accent-2: #994400;
+  --color-accent-3: #CC0000;
+  --color-accent-4: #660099;
+  --shadow-card: 0 0 0 3px #000000;
+  --shadow-hover: 0 0 0 4px #2A7700;
+  --radius-sm: 16px;
+  --radius-md: 24px;
+  --radius-lg: 32px;
+  --motion-transition: all 0.15s ease;
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 30px;
+  --font-size-2xl: 48px;
+  --card-padding: 24px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+  --font-size-md: 17px; /* HC: +1px for readability */
+}

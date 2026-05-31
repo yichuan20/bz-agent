@@ -1,0 +1,13 @@
+pre-commit:
+  jobs:
+    - name: generate routes
+      run: pnpm tsr generate && git add src/routeTree.gen.ts
+
+    - name: check and fix
+      run: pnpm -s check:fix {staged_files}
+      stage_fixed: true
+      glob: "*.{js,ts,jsx,tsx,json,css}"
+
+    - name: typecheck
+      run: pnpm -s typecheck
+      glob: "*.{ts,tsx}"

@@ -1,0 +1,351 @@
+/* ============================================================
+   BOLTZBIT APPFLOW — Design Tokens (CSS Custom Properties)
+   Version: 1.0.0
+   Philosophy: Brutal Minimalist
+   Grid: 8pt
+   ============================================================ */
+
+/* ─── FONTS ─── */
+/* Import via HTML:
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+*/
+
+:root {
+
+  /* ─── SEMANTIC COLORS: LIGHT MODE — warm sand (aligned with bz-token) ─── */
+  --bg-primary:     #F7F3EC;   /* Cards, main content areas, navbar                        */
+  --bg-secondary:   #E8E2D7;   /* Page background, input backgrounds                       */
+  --bg-tertiary:    #DDD7CB;   /* Hover states, icon/table backgrounds                     */
+
+  --text-primary:   #1C1917;   /* Main body text, headings (warm charcoal)                 */
+  --text-secondary: #6B6358;   /* Secondary text, meta info                                */
+  --text-tertiary:  #9E9488;   /* Disabled text, timestamps, placeholders                  */
+
+  --border-primary:   #D5CFC0; /* Standard borders                                         */
+  --border-secondary: #E0DAD0; /* Subtle borders                                           */
+
+  /* ─── ACCENT COLORS: LIGHT MODE ─── */
+  --accent-blue:    #1473DF;
+  --accent-green:   #2DB970;   /* Slightly richer green for warm bg                        */
+  --accent-orange:  #D97706;   /* Amber, warmer tone                                       */
+  --accent-red:     #E5352B;   /* Slightly deeper red for warm bg                          */
+  --accent-pink:    #EC4899;
+  --accent-cyan:    #06B6D4;
+  --accent-yellow:  #EAB308;
+
+  /* ─── OVERLAY ─── */
+  --overlay-modal:  rgba(0, 0, 0, 0.5);
+
+  /* ─── SPACING (8pt Grid) ─── */
+  --spacing-xs:   8px;
+  --spacing-sm:  16px;
+  --spacing-md:  24px;
+  --spacing-lg:  32px;
+  --spacing-xl:  48px;
+  --spacing-2xl: 64px;
+
+  /* ─── BORDER RADIUS ─── */
+  --radius-sm:  8px;           /* Buttons, inputs, small cards, icon containers            */
+  --radius-md: 12px;           /* Standard cards, dropdowns                                */
+  --radius-lg: 16px;           /* Large cards, modals                                      */
+
+  /* ─── TYPOGRAPHY ─── */
+  --font-heading: 'Martian Mono', monospace;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ─── ON-ACCENT TEXT ─── */
+  --text-on-accent: #FFFFFF;   /* Text placed directly on accent/colored buttons    */
+  --text-on-dark:   #000000;   /* Text on light/success-green surfaces              */
+
+  /* ─── FONT SIZE SCALE ─── */
+  --font-size-2xs:  10px;      /* Labels, badges, tiny meta                        */
+  --font-size-xs:   11px;      /* Captions, timestamps, secondary meta              */
+  --font-size-sm:   12px;      /* Small body, code snippets                        */
+  --font-size-base: 13px;      /* Default body text                                */
+  --font-size-md:   14px;      /* Slightly larger body, nav links                  */
+  --font-size-lg:   16px;      /* Sub-headings, emphasis                           */
+  --font-size-xl:   18px;      /* Section headings                                 */
+  --font-size-2xl:  22px;      /* Page headings                                    */
+  --font-size-3xl:  28px;      /* Hero / display                                   */
+
+  /* ─── SHADOWS ─── */
+  --shadow-none:     none;
+  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.08);   /* Subtle lift                     */
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.08);  /* Menus, tooltips                 */
+  --shadow-md:       0 4px 16px rgba(0, 0, 0, 0.10);  /* Floating panels                 */
+  --shadow-lg:       0 8px 32px rgba(0, 0, 0, 0.12);  /* Modals, dragged widgets         */
+
+  /* ─── TRANSITIONS ─── */
+  --transition-default: all 0.2s ease;
+  --transition-fast:    all 0.12s ease;
+  --transition-slow:    all 0.35s ease;
+
+  /* ─── LAYOUT ─── */
+  --max-width-container: 1400px;
+  --max-width-modal:      480px;
+
+  /* ─── Z-INDEX SCALE ─── */
+  --z-navbar:   1000;
+  --z-dropdown: 1500;
+  --z-modal:    2000;
+}
+
+
+/* ─── DARK MODE — aligned with bz-token [data-theme="dark"] ─── */
+[data-theme="dark"] {
+  --bg-primary:     #0A0A0A;   /* Cards, main areas                                        */
+  --bg-secondary:   #000000;   /* Page background                                          */
+  --bg-tertiary:    #1A1A1A;   /* Hover, surface, table headers                            */
+
+  --text-primary:   #FFFFFF;
+  --text-secondary: #A3A3A3;
+  --text-tertiary:  #737373;
+
+  --border-primary:   #262626;
+  --border-secondary: #1F1F1F;
+
+  /* Accent — brighter in dark for legibility (bz-token dark palette) */
+  --accent-blue:    #2E88FF;
+  --accent-green:   #3FDC7E;
+  --accent-orange:  #F59E0B;
+  --accent-red:     #FA4B42;
+
+  /* Shadows — heavier for dark bg */
+  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.40);
+  --shadow-md:       0 4px 16px rgba(0, 0, 0, 0.40);
+  --shadow-lg:       0 8px 32px rgba(0, 0, 0, 0.50);
+}
+
+
+/* ============================================================
+   COMPONENT TOKENS
+   ============================================================ */
+
+/* ─── Buttons ─── */
+.btn-primary {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+.btn-secondary:hover {
+  border-color: var(--text-primary);
+}
+
+.btn-accent {
+  background: var(--accent-blue);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+.btn-accent:hover {
+  opacity: 0.9;
+}
+
+.btn-cta {
+  width: 100%;
+  padding: 16px var(--spacing-md);
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+}
+.btn-cta:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+.btn:disabled,
+[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+
+/* ─── Form Inputs ─── */
+.input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: var(--transition-default);
+  width: 100%;
+}
+.input:focus {
+  border-color: var(--accent-blue);
+  outline: none;
+}
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+.input.error {
+  border-color: var(--accent-red);
+}
+.input.success {
+  border-color: var(--accent-green);
+}
+
+
+/* ─── Cards ─── */
+.card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  transition: var(--transition-default);
+}
+.card-interactive:hover {
+  border-color: var(--text-primary);
+  transform: translateY(-2px);
+  /* NO box-shadow — brutal minimalism */
+}
+
+
+/* ─── Modals ─── */
+.modal-overlay {
+  background: var(--overlay-modal);
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-content {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  max-width: var(--max-width-modal);
+  width: 100%;
+}
+
+
+/* ─── Dropdowns ─── */
+.dropdown {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  z-index: var(--z-dropdown);
+}
+
+
+/* ─── Tables ─── */
+.table-header {
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.table-row {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+
+/* ─── Navbar ─── */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-navbar);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  max-width: 100%;
+}
+.navbar-inner {
+  max-width: var(--max-width-container);
+  margin: 0 auto;
+}
+
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================
+   Mobile:  < 768px   → Hamburger menu, stacked layout
+   Tablet:  768–1024px → Reduced navigation, 2-col grids
+   Desktop: > 1024px   → Full navigation, multi-col grids
+   ============================================================ */
+
+
+/* ============================================================
+   THEME TOGGLE (JS Reference)
+   ============================================================
+   function toggleTheme() {
+     const html = document.documentElement;
+     const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+     html.setAttribute('data-theme', next);
+     localStorage.setItem('theme', next);
+   }
+   // On load:
+   const saved = localStorage.getItem('theme');
+   if (saved) document.documentElement.setAttribute('data-theme', saved);
+   ============================================================ */

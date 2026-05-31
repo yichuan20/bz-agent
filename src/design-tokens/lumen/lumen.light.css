@@ -1,0 +1,32 @@
+[data-theme="lumen-light"] {
+  --color-bg-primary: #FAFFF0;
+  --color-bg-secondary: #F0FFD8;
+  --color-bg-tertiary: #E4F7C0;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #0A1A00;
+  --color-text-secondary: #3A5A1A;
+  --color-text-tertiary: #7A9A5A;
+  --color-border-primary: #C8E8A0;
+  --color-border-secondary: #B0D880;
+  --color-accent-1: #1A3D00;
+  --color-accent-2: #6B21A8;
+  --color-accent-3: #DC2626;
+  --color-accent-4: #B45309;
+  --shadow-card: 4px 4px 0px #C8E8A0;
+  --shadow-hover: 6px 6px 0px #B0D880;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --motion-transition: all 0.12s ease;
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-body: 'Cabinet Grotesk', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 20px;
+  --font-size-xl: 32px;
+  --font-size-2xl: 56px;
+  --card-padding: 32px;
+  --hero-padding: 72px;
+  --section-gap: 64px;
+}

@@ -1,0 +1,16 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+.content-collections
+*.local
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json
+.bzhub
+.venv
+.npmrc

@@ -1,0 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600;700&display=swap");
+
+/* ─────────────────────────────────────────────────────────────
+   Design Tokens — swap this single import to change the theme.
+   The imported file must define the same CSS custom properties.
+   ───────────────────────────────────────────────────────────── */
+@import "../design_tokens/boltzhub-tokens.css";
+
+/* Markdown rendering styles for chat */
+@import "@boltzbit/md-utils/styles.css";
+
+/* App layout and component classes */
+@import "./styles/app.css";
+
+/* Syntax highlighting */
+@import "./styles/hljs-github-light.css";
+@import "./styles/hljs-github-dark.css";

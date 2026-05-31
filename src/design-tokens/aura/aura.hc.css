@@ -1,0 +1,33 @@
+[data-theme="aura-hc"] {
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F0F0F0;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #0040CC;
+  --color-accent-2: #007700;
+  --color-accent-3: #CC0000;
+  --color-accent-4: #885500;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #0040CC;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.2s ease;
+  --font-display: 'DM Serif Display', serif;
+  --font-body: 'Epilogue', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 36px;
+  --font-size-2xl: 72px;
+  --card-padding: 36px;
+  --hero-padding: 80px;
+  --section-gap: 64px;
+  --font-size-md: 16px; /* HC: +1px for readability */
+}

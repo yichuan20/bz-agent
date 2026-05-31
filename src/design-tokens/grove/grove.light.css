@@ -1,0 +1,32 @@
+[data-theme="grove-light"] {
+  --color-bg-primary: #F2F7F0;
+  --color-bg-secondary: #E8F2E4;
+  --color-bg-tertiary: #DCE9D6;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #1A2A18;
+  --color-text-secondary: #526A4E;
+  --color-text-tertiary: #8FAA8A;
+  --color-border-primary: #C8DCC4;
+  --color-border-secondary: #B0C8AA;
+  --color-accent-1: #2D6A4F;
+  --color-accent-2: #95D5B2;
+  --color-accent-3: #D4A017;
+  --color-accent-4: #74C69D;
+  --shadow-card: 0 2px 12px rgba(26,42,24,0.06);
+  --shadow-hover: 0 6px 24px rgba(26,42,24,0.1);
+  --radius-sm: 6px;
+  --radius-md: 14px;
+  --radius-lg: 28px;
+  --motion-transition: all 0.3s ease;
+  --font-display: 'Instrument Serif', serif;
+  --font-body: 'Epilogue', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 29px;
+  --font-size-2xl: 44px;
+  --card-padding: 28px;
+  --hero-padding: 56px;
+  --section-gap: 48px;
+}

@@ -1,0 +1,32 @@
+[data-theme="nexus-dark"] {
+  --color-bg-primary: #16172E;
+  --color-bg-secondary: #0E0F22;
+  --color-bg-tertiary: #1E2040;
+  --color-bg-elevated: #262848;
+  --color-text-primary: #E8E9FF;
+  --color-text-secondary: #8890C0;
+  --color-text-tertiary: #4A5080;
+  --color-border-primary: #2A2C50;
+  --color-border-secondary: #363860;
+  --color-accent-1: #7C73FF;
+  --color-accent-2: #34D399;
+  --color-accent-3: #F87171;
+  --color-accent-4: #FBBF24;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+  --shadow-hover: 0 8px 28px rgba(124,115,255,0.15);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 20px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+}

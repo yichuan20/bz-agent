@@ -1,0 +1,33 @@
+[data-theme="apex-hc"] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #000000;
+  --color-bg-tertiary: #111111;
+  --color-bg-elevated: #111111;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #FFFFFF;
+  --color-text-tertiary: #CCCCCC;
+  --color-border-primary: #FFFFFF;
+  --color-border-secondary: #FFFFFF;
+  --color-accent-1: #FF4400;
+  --color-accent-2: #FFCC00;
+  --color-accent-3: #0055FF;
+  --color-accent-4: #00BB44;
+  --shadow-card: 0 0 0 2px #FFFFFF;
+  --shadow-hover: 0 0 0 3px #FF4400;
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --motion-transition: all 0.08s linear;
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-body: 'Cabinet Grotesk', sans-serif;
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 16px;
+  --hero-padding: 32px;
+  --section-gap: 28px;
+  --font-size-md: 15px; /* HC: +1px for readability */
+}

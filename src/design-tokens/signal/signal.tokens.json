@@ -1,0 +1,342 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$metadata": {
+    "label": "Signal",
+    "sector": "Media & Music Streaming",
+    "theme": "signal"
+  },
+  "typography": {
+    "font-display": {
+      "$value": "'Bricolage Grotesque', sans-serif",
+      "$type": "fontFamily"
+    },
+    "font-body": {
+      "$value": "'Outfit', sans-serif",
+      "$type": "fontFamily"
+    }
+  },
+  "font-size": {
+    "xs": {
+      "$value": "11px",
+      "$type": "dimension"
+    },
+    "sm": {
+      "$value": "13px",
+      "$type": "dimension"
+    },
+    "md": {
+      "$value": "14px",
+      "$type": "dimension"
+    },
+    "lg": {
+      "$value": "22px",
+      "$type": "dimension"
+    },
+    "xl": {
+      "$value": "32px",
+      "$type": "dimension"
+    },
+    "2xl": {
+      "$value": "52px",
+      "$type": "dimension"
+    }
+  },
+  "spacing": {
+    "card-padding": {
+      "$value": "20px",
+      "$type": "dimension"
+    },
+    "hero-padding": {
+      "$value": "48px",
+      "$type": "dimension"
+    },
+    "section-gap": {
+      "$value": "40px",
+      "$type": "dimension"
+    }
+  },
+  "modes": {
+    "dark": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#121212",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#0A0A0A",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#1A1A1A",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#242424",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#B3B3B3",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#535353",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#282828",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#333333",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#1DB954",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#E8115D",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#509BF5",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#F59B23",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 4px 16px rgba(0,0,0,0.5)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(29,185,84,0.2)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "16px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.2s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "light": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#F5F5F5",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#EBEBEB",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#6A6A6A",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#AAAAAA",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#E0E0E0",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#CCCCCC",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#1AA34A",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#C70852",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#2E77D0",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#D4820A",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 2px 8px rgba(0,0,0,0.06)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 6px 20px rgba(0,0,0,0.1)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "16px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.2s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "hc": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#111111",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#111111",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#CCCCCC",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#00FF55",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#FF0066",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#00AAFF",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FFAA00",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 2px #FFFFFF",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 2px #00FF55",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "16px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.1s ease",
+          "$type": "other"
+        }
+      }
+    }
+  }
+}

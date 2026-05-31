@@ -1,0 +1,342 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$metadata": {
+    "label": "Nexus",
+    "sector": "CRM & Sales",
+    "theme": "nexus"
+  },
+  "typography": {
+    "font-display": {
+      "$value": "'Syne', sans-serif",
+      "$type": "fontFamily"
+    },
+    "font-body": {
+      "$value": "'Outfit', sans-serif",
+      "$type": "fontFamily"
+    }
+  },
+  "font-size": {
+    "xs": {
+      "$value": "11px",
+      "$type": "dimension"
+    },
+    "sm": {
+      "$value": "13px",
+      "$type": "dimension"
+    },
+    "md": {
+      "$value": "14px",
+      "$type": "dimension"
+    },
+    "lg": {
+      "$value": "18px",
+      "$type": "dimension"
+    },
+    "xl": {
+      "$value": "26px",
+      "$type": "dimension"
+    },
+    "2xl": {
+      "$value": "40px",
+      "$type": "dimension"
+    }
+  },
+  "spacing": {
+    "card-padding": {
+      "$value": "20px",
+      "$type": "dimension"
+    },
+    "hero-padding": {
+      "$value": "40px",
+      "$type": "dimension"
+    },
+    "section-gap": {
+      "$value": "36px",
+      "$type": "dimension"
+    }
+  },
+  "modes": {
+    "light": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#F8F9FF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#EEF0FF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#E4E6FF",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#1A1B3A",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#5A5C80",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#9A9CB8",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#D8DAFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#C4C6F0",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#4F46E5",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#059669",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#DC2626",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#D97706",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 2px 12px rgba(26,27,58,0.06)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 8px 28px rgba(79,70,229,0.12)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "14px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "20px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+          "$type": "other"
+        }
+      }
+    },
+    "dark": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#16172E",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#0E0F22",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#1E2040",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#262848",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#E8E9FF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#8890C0",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#4A5080",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#2A2C50",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#363860",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#7C73FF",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#34D399",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#F87171",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FBBF24",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 2px 12px rgba(0,0,0,0.3)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 8px 28px rgba(124,115,255,0.15)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "14px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "20px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+          "$type": "other"
+        }
+      }
+    },
+    "hc": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#EEEEEE",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#333333",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#000000",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#1E00BB",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#005533",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#BB0000",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#885500",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 2px #000000",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 3px #1E00BB",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "14px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "20px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.15s ease",
+          "$type": "other"
+        }
+      }
+    }
+  }
+}

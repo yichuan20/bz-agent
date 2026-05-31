@@ -1,0 +1,33 @@
+[data-theme="canvas-hc"] {
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F0F0F0;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #0055BB;
+  --color-accent-2: #006633;
+  --color-accent-3: #BB0000;
+  --color-accent-4: #885500;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #0055BB;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --motion-transition: all 0.15s ease;
+  --font-display: 'Epilogue', sans-serif;
+  --font-body: 'Epilogue', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 16px;
+  --hero-padding: 32px;
+  --section-gap: 32px;
+  --font-size-md: 15px; /* HC: +1px for readability */
+}

@@ -1,0 +1,99 @@
+[data-theme="meridian-dark"] {
+  --color-bg-primary: #0A0E1A;
+  --color-bg-secondary: #0F1628;
+  --color-bg-tertiary: #1A2240;
+  --color-bg-elevated: #1E2A4A;
+  --color-text-primary: #E8EDF5;
+  --color-text-secondary: #8A9BB8;
+  --color-text-tertiary: #4A5A78;
+  --color-border-primary: #1E2A4A;
+  --color-border-secondary: #2A3A5A;
+  --color-accent-1: #00D4FF;
+  --color-accent-2: #00FF9D;
+  --color-accent-3: #FF4D6D;
+  --color-accent-4: #FFB800;
+  --shadow-card: 0 0 0 1px rgba(0,212,255,0.1),0 4px 24px rgba(0,0,0,0.4);
+  --shadow-hover: 0 0 0 1px rgba(0,212,255,0.35),0 8px 32px rgba(0,212,255,0.12);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --motion-transition: all 0.15s ease;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 36px;
+  --card-padding: 12px;
+  --hero-padding: 24px;
+  --section-gap: 24px;
+}
+
+[data-theme="meridian-light"] {
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F0F4FA;
+  --color-bg-tertiary: #E4EAF5;
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #0A0E1A;
+  --color-text-secondary: #3A4A6A;
+  --color-text-tertiary: #7A8AAA;
+  --color-border-primary: #C8D4E8;
+  --color-border-secondary: #A8B8D8;
+  --color-accent-1: #0066CC;
+  --color-accent-2: #00AA66;
+  --color-accent-3: #DD2244;
+  --color-accent-4: #CC8800;
+  --shadow-card: 0 1px 4px rgba(10,14,26,0.08),0 4px 16px rgba(10,14,26,0.04);
+  --shadow-hover: 0 4px 16px rgba(10,14,26,0.12),0 1px 4px rgba(0,102,204,0.12);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --motion-transition: all 0.15s ease;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 36px;
+  --card-padding: 12px;
+  --hero-padding: 24px;
+  --section-gap: 24px;
+}
+
+[data-theme="meridian-hc"] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #000000;
+  --color-bg-tertiary: #111111;
+  --color-bg-elevated: #111111;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #FFFFFF;
+  --color-text-tertiary: #CCCCCC;
+  --color-border-primary: #FFFFFF;
+  --color-border-secondary: #FFFFFF;
+  --color-accent-1: #00FFFF;
+  --color-accent-2: #00FF00;
+  --color-accent-3: #FF0000;
+  --color-accent-4: #FFFF00;
+  --shadow-card: 0 0 0 2px #FFFFFF;
+  --shadow-hover: 0 0 0 3px #00FFFF;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --motion-transition: all 0.05s linear;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 36px;
+  --card-padding: 12px;
+  --hero-padding: 24px;
+  --section-gap: 24px;
+  --font-size-md: 15px; /* HC: +1px for readability */
+}

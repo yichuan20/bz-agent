@@ -1,0 +1,103 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": false
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended"
+    },
+    "rules": {
+      "a11y": {
+        "useSemanticElements": "warn"
+      },
+      "correctness": {
+        "noUnusedImports": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "hooks": [
+              {
+                "name": "useStableCallback",
+                "stableResult": true
+              },
+              {
+                "name": "useRefCallbackWithCleanup",
+                "stableResult": true
+              },
+              {
+                "name": "useCombineRefs",
+                "stableResult": true
+              },
+              {
+                "name": "useSameOriginIframeLocation",
+                "stableResult": ["setRef", "setHref", "refresh", "back"]
+              },
+              {
+                "name": "useNeverChanging",
+                "stableResult": true
+              },
+              {
+                "name": "useForceRender",
+                "stableResult": true
+              }
+            ]
+          }
+        }
+      },
+      "style": {
+        "noUnusedTemplateLiteral": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConfusingVoidType": "off",
+        "noArrayIndexKey": "off"
+      },
+      "complexity": {
+        "noUselessSwitchCase": "off"
+      },
+
+      "nursery": {
+        "noFloatingPromises": "error",
+        "useExhaustiveSwitchCases": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "asNeeded",
+      "quoteStyle": "single"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**", "!**/dist", "!**/src/routeTree.gen.ts"]
+  }
+}

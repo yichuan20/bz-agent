@@ -1,0 +1,32 @@
+[data-theme="forge-dark"] {
+  --color-bg-primary: #0D0D0D;
+  --color-bg-secondary: #141414;
+  --color-bg-tertiary: #1C1C1C;
+  --color-bg-elevated: #222222;
+  --color-text-primary: #E8E8E8;
+  --color-text-secondary: #888888;
+  --color-text-tertiary: #555555;
+  --color-border-primary: #2A2A2A;
+  --color-border-secondary: #333333;
+  --color-accent-1: #FF6B35;
+  --color-accent-2: #A8FF3E;
+  --color-accent-3: #FF3E6B;
+  --color-accent-4: #3EAEFF;
+  --shadow-card: 0 0 0 1px #2A2A2A,0 4px 16px rgba(0,0,0,0.4);
+  --shadow-hover: 0 0 0 1px #FF6B35,0 4px 24px rgba(255,107,53,0.1);
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --motion-transition: all 0.1s ease;
+  --font-display: 'Space Mono', monospace;
+  --font-body: 'Space Mono', monospace;
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 32px;
+  --card-padding: 12px;
+  --hero-padding: 20px;
+  --section-gap: 20px;
+}
