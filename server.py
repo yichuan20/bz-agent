@@ -37,7 +37,8 @@ SESSIONS_DIR  = Path.home() / ".boltzbit" / "sessions"
 _active_cwds  = set()  # type: ignore[var-annotated]
 # Tracks cwds where bzcode is actively processing a request (status: running)
 _running_cwds = set()  # type: ignore[var-annotated]
-_TITLES_FILE  = SESSIONS_DIR / "_titles.json"
+_TITLES_FILE   = SESSIONS_DIR / "_titles.json"
+_DEFAULTS_FILE = SESSIONS_DIR / "_defaults.json"  # cwd -> sessionId
 
 
 def _load_titles() -> dict:
@@ -52,6 +53,26 @@ def _save_title(session_id: str, title: str) -> None:
     titles[session_id] = title
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     _TITLES_FILE.write_text(json.dumps(titles, indent=2))
+
+
+def _load_defaults() -> dict:
+    try:
+        return json.loads(_DEFAULTS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_default(cwd: str, session_id: str) -> None:
+    defaults = _load_defaults()
+    defaults[cwd] = session_id
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    _DEFAULTS_FILE.write_text(json.dumps(defaults, indent=2))
+
+
+def _clear_default(cwd: str) -> None:
+    defaults = _load_defaults()
+    defaults.pop(cwd, None)
+    _DEFAULTS_FILE.write_text(json.dumps(defaults, indent=2))
 
 # Server-local data — lives alongside server.py so it travels with the project
 SERVER_DATA_DIR = Path(__file__).parent / "server_data"
@@ -622,12 +643,36 @@ async def handle_sessions(request: web.Request) -> web.Response:
                 by_dir[wd] = meta
         sessions = sorted(by_dir.values(), key=lambda s: s["lastModified"], reverse=True)
 
-    # Annotate with live connection and running status
+    # Annotate with live connection, running status, and default session
+    defaults = _load_defaults()
     for s in sessions:
-        s["isActive"]  = s["workingDir"] in _active_cwds
-        s["isRunning"] = s["workingDir"] in _running_cwds
+        wd = s["workingDir"]
+        s["isActive"]         = wd in _active_cwds
+        s["isRunning"]        = wd in _running_cwds
+        s["isDefault"]        = defaults.get(wd) == s["sessionId"]
+        s["defaultSessionId"] = defaults.get(wd)   # only meaningful in global listing
 
     return web.json_response({"sessions": sessions}, headers=CORS_HEADERS)
+
+
+async def handle_set_default_session(request: web.Request) -> web.Response:
+    """POST /sessions/default { cwd, sessionId } — pin a conversation as the default for a cwd.
+    Omit sessionId (or send empty string) to clear the default."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid body"}, status=400, headers=CORS_HEADERS)
+    cwd        = str(body.get("cwd",       "")).strip()
+    session_id = str(body.get("sessionId", "")).strip()
+    if not cwd:
+        return web.json_response({"error": "cwd required"}, status=400, headers=CORS_HEADERS)
+    if session_id:
+        _save_default(cwd, session_id)
+    else:
+        _clear_default(cwd)
+    return web.json_response({"ok": True}, headers=CORS_HEADERS)
 
 
 async def handle_update_session_title(request: web.Request) -> web.Response:
@@ -1239,18 +1284,19 @@ _batch_store: dict = {}   # batchId -> {"items": [...], "created": float}
 class _BatchItem:
     """Runs a single bzcode process in YOLO mode and collects the response."""
 
-    def __init__(self, cwd: str, bzcode_path: str) -> None:
-        self.cwd         = cwd
-        self.dir_name    = Path(cwd).name
-        self.bzcode_path = bzcode_path
-        self.status      = "pending"   # pending | running | done | error
-        self.output      = ""
-        self.error_msg   = ""
-        self.session_id  = ""          # filled from bzcode's session message
-        self._buf: list  = []
-        self._done       = asyncio.Event()
-        self._proc       = None
-        self._msg_sent   = False       # True once the user message has been written to stdin
+    def __init__(self, cwd: str, bzcode_path: str, resume_session_id: str = "") -> None:
+        self.cwd                = cwd
+        self.dir_name           = Path(cwd).name
+        self.bzcode_path        = bzcode_path
+        self.resume_session_id  = resume_session_id  # if set, resume this session
+        self.status             = "pending"   # pending | running | done | error
+        self.output             = ""
+        self.error_msg          = ""
+        self.session_id         = resume_session_id  # filled/confirmed from bzcode's session message
+        self._buf: list         = []
+        self._done              = asyncio.Event()
+        self._proc              = None
+        self._msg_sent          = False       # True once the user message has been written to stdin
 
     def to_dict(self) -> dict:
         return {
@@ -1266,8 +1312,11 @@ class _BatchItem:
         self.status = "running"
         _running_cwds.add(self.cwd)
         try:
+            cmd = [self.bzcode_path, "--stdio"]
+            if self.resume_session_id:
+                cmd += ["--resume", self.resume_session_id]
             self._proc = await asyncio.create_subprocess_exec(
-                self.bzcode_path, "--stdio",
+                *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -1343,18 +1392,20 @@ class _BatchItem:
 
 
 async def handle_batch_run(request: web.Request) -> web.Response:
-    """POST /batch  { cwds: [str], message: str }
+    """POST /batch  { cwds: [str], message: str, sessions?: {cwd: sessionId} }
     Starts bzcode in YOLO mode for each directory concurrently.
+    If sessions[cwd] is provided, resumes that session instead of starting fresh.
     Returns { batchId } for polling."""
     body = await request.json()
-    cwds    = body.get("cwds", [])
-    message = body.get("message", "").strip()
+    cwds     = body.get("cwds", [])
+    message  = body.get("message", "").strip()
+    sessions = body.get("sessions", {})  # optional: cwd -> sessionId to resume
     if not cwds or not message:
         return web.json_response({"error": "cwds and message required"}, status=400, headers=CORS_HEADERS)
 
     bzcode_path = request.app["bzcode_path"]
     batch_id    = _uuid_mod.uuid4().hex[:12]
-    items       = [_BatchItem(cwd, bzcode_path) for cwd in cwds]
+    items       = [_BatchItem(cwd, bzcode_path, resume_session_id=sessions.get(cwd, "")) for cwd in cwds]
     _batch_store[batch_id] = {"items": items, "created": __import__("time").time()}
 
     # Fire and forget — run all items concurrently
@@ -1419,12 +1470,14 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "") -> web.Applicati
     app.router.add_route("OPTIONS", "/batch",          handle_options)
     app.router.add_route("OPTIONS", "/batch/{batchId}", handle_options)
     # Sessions & Search
-    app.router.add_get(   "/sessions",               handle_sessions)
-    app.router.add_delete("/sessions/{sessionId}",        handle_delete_session)
-    app.router.add_post(  "/sessions/{sessionId}/title",  handle_update_session_title)
-    app.router.add_route("OPTIONS", "/sessions",           handle_options)
+    app.router.add_get(   "/sessions",                    handle_sessions)
+    app.router.add_delete("/sessions/{sessionId}",         handle_delete_session)
+    app.router.add_post(  "/sessions/{sessionId}/title",   handle_update_session_title)
+    app.router.add_post(  "/session-default",              handle_set_default_session)
+    app.router.add_route("OPTIONS", "/sessions",                   handle_options)
     app.router.add_route("OPTIONS", "/sessions/{sessionId}",       handle_options)
     app.router.add_route("OPTIONS", "/sessions/{sessionId}/title", handle_options)
+    app.router.add_route("OPTIONS", "/session-default",            handle_options)
     app.router.add_get("/search",                  handle_search)
     app.router.add_route("OPTIONS", "/search",       handle_options)
     # BoltzHub integration

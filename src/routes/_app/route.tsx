@@ -34,28 +34,41 @@ function AppLayout() {
 
   const navOpen = sidebarOpen || hoveredOpen;
 
+  function toggleSidebar() {
+    setSidebarOpen(prev => !prev);
+    setHoveredOpen(false);
+  }
+
   return (
     <div className="app-shell">
-      <TopBar
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => {
-          setSidebarOpen(prev => !prev);
-          setHoveredOpen(false);
-        }}
-      />
+      <TopBar />
 
       <div className="app-body">
         <Sidebar
           open={navOpen}
           onMouseLeave={() => setHoveredOpen(false)}
+          onCollapse={toggleSidebar}
         />
 
-        {/* 2px hover strip — only visible when sidebar is fully closed */}
+        {/* Hover strip + expand indicator — only when sidebar is fully closed */}
         {!sidebarOpen && (
-          <div
-            className="sidebar-hover-zone"
-            onMouseEnter={() => setHoveredOpen(true)}
-          />
+          <>
+            <div
+              className="sidebar-hover-zone"
+              onMouseEnter={() => setHoveredOpen(true)}
+            />
+            <button
+              type="button"
+              className="sidebar-expand-indicator"
+              title="Open navigation"
+              onClick={toggleSidebar}
+              onMouseEnter={() => setHoveredOpen(true)}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </>
         )}
 
         <main className="app-main">

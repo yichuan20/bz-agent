@@ -17,20 +17,13 @@ import {
   SunIcon,
   SignOutIcon,
 } from '@phosphor-icons/react';
-import SideBarExpandIcon from '#/components/icons/SideBarExpandIcon';
-import SideBarFoldIcon   from '#/components/icons/SideBarFoldIcon';
 import { BoltzbitLogo }  from '#/components/BoltzbitLogo';
 import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { clearAccessToken } from '#/auth-store';
 import { getCurrentMode, applyTheme } from '#/design-tokens';
 
-interface TopBarProps {
-  sidebarOpen:     boolean;
-  onToggleSidebar: () => void;
-}
-
-const TopBar: React.FC<TopBarProps> = ({ sidebarOpen, onToggleSidebar }) => {
+const TopBar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(getCurrentMode);
   const navigate = useNavigate();
@@ -76,29 +69,8 @@ const TopBar: React.FC<TopBarProps> = ({ sidebarOpen, onToggleSidebar }) => {
       flexShrink: 0,
     }}>
 
-      {/* ── Left: toggle + logo ── */}
+      {/* ── Left: logo ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {/* Sidebar toggle — exactly like bz-codespace */}
-        <button
-          type="button"
-          title={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
-          onClick={onToggleSidebar}
-          style={iconBtn}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
-          }}
-        >
-          {sidebarOpen
-            ? <SideBarFoldIcon   style={{ fontSize: 18 }} />
-            : <SideBarExpandIcon style={{ fontSize: 18 }} />
-          }
-        </button>
-
         {/* Logo mark + app name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <BoltzbitLogo size={22} />

@@ -26,10 +26,14 @@ import {
   XCircleIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export const Route = createFileRoute('/_app/agent')({
+  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string } => ({
+    ...(typeof search['cwd']       === 'string' && search['cwd']       ? { cwd:       search['cwd'] as string }       : {}),
+    ...(typeof search['sessionId'] === 'string' && search['sessionId'] ? { sessionId: search['sessionId'] as string } : {}),
+  }),
   component: AgentPage,
 });
 
@@ -47,7 +51,8 @@ type DisplayItem =
   | { id: string; kind: 'assistant'; blocks: AssistantBlock[] }
   | { id: string; kind: 'tool'; toolUseId: string; name: string; status: 'running' | 'done' | 'error'; input: unknown; output?: string; isError?: boolean }
   | { id: string; kind: 'push-progress'; step: PushStep; message: string; serviceUrl?: string; appId?: string }
-  | { id: string; kind: 'sync-progress'; step: SyncStep; message: string };
+  | { id: string; kind: 'sync-progress'; step: SyncStep; message: string }
+  | { id: string; kind: 'compact-summary'; text: string };
 
 type BzHubModal =
   | { type: 'create-app'; cwd: string }
@@ -227,6 +232,26 @@ function parseCommandListOutput(text: string): CommandListResult | null {
   }
 
   return entries.length > 0 ? { kind, entries } : null;
+}
+
+// ── Compact summary card ──────────────────────────────────────────────────────
+
+function CompactSummaryCard({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Strip the outer <context-summary> tags if present
+  const inner = text.replace(/^\s*<context-summary>\s*/i, '').replace(/\s*<\/context-summary>\s*$/i, '').trim();
+  return (
+    <div className="compact-summary-card">
+      <div className="compact-summary-header" onClick={() => setExpanded(v => !v)}>
+        <BoltzbitLogo size={11} />
+        <span className="compact-summary-label">Conversation compacted</span>
+        <span className="compact-summary-toggle">{expanded ? '▲ Hide summary' : '▼ Show summary'}</span>
+      </div>
+      {expanded && (
+        <div className="compact-summary-body" dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(inner) }} />
+      )}
+    </div>
+  );
 }
 
 // ── BoltzHub push/sync progress bar ──────────────────────────────────────────
@@ -1731,6 +1756,7 @@ type SessionInfo = {
   lastMessage: string;
   lastModified: number;
   created: string;
+  isDefault?: boolean;
 };
 
 function SessionListPage({
@@ -1873,17 +1899,34 @@ function ConversationsPanel({
   onNew: () => void;
   onClose: () => void;
 }) {
-  const [sessions,  setSessions]  = useState<SessionInfo[]>([]);
-  const [query,     setQuery]     = useState('');
-  const [loading,   setLoading]   = useState(true);
+  const [sessions,          setSessions]          = useState<SessionInfo[]>([]);
+  const [query,             setQuery]             = useState('');
+  const [loading,           setLoading]           = useState(true);
+  const [defaultSessionId,  setDefaultSessionId]  = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  function loadSessions() {
     fetch(`${httpBase}/sessions?cwd=${encodeURIComponent(cwd)}`)
       .then(r => r.json())
-      .then((d: { sessions: SessionInfo[] }) => { setSessions(d.sessions ?? []); setLoading(false); })
+      .then((d: { sessions: SessionInfo[] }) => {
+        const list = d.sessions ?? [];
+        setSessions(list);
+        setDefaultSessionId(list.find(s => s.isDefault)?.sessionId ?? null);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
-  }, [cwd, httpBase]);
+  }
+
+  useEffect(() => { loadSessions(); }, [cwd, httpBase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSetDefault(sessionId: string) {
+    const next = defaultSessionId === sessionId ? null : sessionId;
+    setDefaultSessionId(next); // optimistic update — instant visual feedback
+    fetch(`${httpBase}/session-default`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd, sessionId: next ?? '' }),
+    }).catch(() => setDefaultSessionId(defaultSessionId)); // revert on error
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -1930,43 +1973,57 @@ function ConversationsPanel({
         {!loading && filtered.length === 0 && (
           <div className="conv-empty">No conversations yet.</div>
         )}
-        {filtered.map(s => (
-          <button
+        {filtered.map(s => {
+          const isDefault = defaultSessionId === s.sessionId;
+          return (
+          <div
             key={s.sessionId}
-            type="button"
             className={`conv-item${s.sessionId === activeSessionId ? ' conv-item--active' : ''}`}
-            onClick={() => { onSelect(s.sessionId); onClose(); }}
           >
-            <div className="conv-item-top">
-              <span className="conv-item-title">{s.title}</span>
-              <span className="conv-item-time">{fmtConvTime(s.lastModified)}</span>
-            </div>
-            <div className="conv-item-bottom">
-              <span className="conv-item-id">{s.sessionId}</span>
-              <div className="conv-item-actions">
-                <button
-                  type="button"
-                  className="conv-item-action-btn"
-                  title="Copy ID"
-                  onClick={e => {
-                    e.stopPropagation();
-                    void navigator.clipboard.writeText(s.sessionId);
-                  }}
-                >
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  className="conv-item-action-btn conv-item-action-btn--delete"
-                  title="Delete"
-                  onClick={e => void handleDelete(s.sessionId, e)}
-                >
-                  <TrashIcon size={11} />
-                </button>
+            {/* Clickable title area */}
+            <div className="conv-item-click" role="button" tabIndex={0}
+              onClick={() => { onSelect(s.sessionId); onClose(); }}
+              onKeyDown={e => { if (e.key === 'Enter') { onSelect(s.sessionId); onClose(); } }}
+            >
+              <div className="conv-item-top">
+                <span className="conv-item-title">{s.title}</span>
+                {isDefault && <span className="conv-item-default-badge">default</span>}
+                <span className="conv-item-time">{fmtConvTime(s.lastModified)}</span>
+              </div>
+              <div className="conv-item-id-row">
+                <span className="conv-item-id">{s.sessionId}</span>
               </div>
             </div>
-          </button>
-        ))}
+            {/* Action buttons — separate from click area, no nesting issue */}
+            <div className="conv-item-actions">
+              <button
+                type="button"
+                className={`conv-item-action-btn${isDefault ? ' conv-item-action-btn--default-active' : ''}`}
+                title={isDefault ? 'Unset as default' : 'Set as default for this project'}
+                onClick={() => handleSetDefault(s.sessionId)}
+              >
+                {isDefault ? '★' : '☆'}
+              </button>
+              <button
+                type="button"
+                className="conv-item-action-btn"
+                title="Copy ID"
+                onClick={() => void navigator.clipboard.writeText(s.sessionId)}
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                className="conv-item-action-btn conv-item-action-btn--delete"
+                title="Delete"
+                onClick={e => void handleDelete(s.sessionId, e)}
+              >
+                <TrashIcon size={11} />
+              </button>
+            </div>
+          </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2000,34 +2057,45 @@ function BoltzingIndicator() {
 
 function AgentPage() {
   // ── Session routing ─────────────────────────────────────────────────────────
-  const [view,           setView]           = useState<'list' | 'chat'>('list');
-  const [activeCwd,      setActiveCwd]      = useState('');
-  const [activeSessionId,setActiveSessionId]= useState<string | null>(null);
-  const [activeDirName,  setActiveDirName]  = useState('');
+  const { cwd: searchCwd, sessionId: searchSessionId } = Route.useSearch();
+  const navigate = useNavigate();
+
+  const [view,           setView]           = useState<'list' | 'chat'>(() => searchCwd ? 'chat' : 'list');
+  const [activeCwd,      setActiveCwd]      = useState(searchCwd ?? '');
+  const [activeSessionId,setActiveSessionId]= useState<string | null>(searchSessionId ?? null);
+  const [activeDirName,  setActiveDirName]  = useState(() =>
+    searchCwd ? (searchCwd.split('/').filter(Boolean).pop() ?? searchCwd) : '');
+
+  // Navigate to a session and reflect it in the URL
+  const openSession = useCallback((cwd: string, sessionId?: string | null) => {
+    const sid = sessionId ?? undefined;
+    setActiveCwd(cwd);
+    setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
+    setActiveSessionId(sid ?? null);
+    setView('chat');
+    void navigate({ to: '/agent', search: { cwd, sessionId: sid }, replace: true });
+  }, [navigate]);
+
+  // Go back to the list and clear URL params
+  const goToList = useCallback(() => {
+    setView('list');
+    void navigate({ to: '/agent', search: {}, replace: true });
+  }, [navigate]);
 
   // Clear batch queue from sessionStorage on mount (already loaded into state)
   useEffect(() => { sessionStorage.removeItem('agent:batchQueue'); }, []);
 
-  // Pick up cwd/message pre-filled from home page prompt
+  // On first mount pick up pending message from sessionStorage (cwd/sessionId come via URL now)
   useEffect(() => {
-    const cwd = sessionStorage.getItem('agent:pendingCwd');
     const msg = sessionStorage.getItem('agent:pendingMessage');
-    if (cwd) {
-      const sid = sessionStorage.getItem('agent:pendingSessionId');
-      sessionStorage.removeItem('agent:pendingCwd');
+    if (msg) {
       sessionStorage.removeItem('agent:pendingMessage');
-      sessionStorage.removeItem('agent:pendingSessionId');
-      setActiveCwd(cwd);
-      setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
-      setActiveSessionId(sid ?? null);
-      setView('chat');
-      if (msg) {
-        // Auto-send in YOLO mode once the session connects
-        pendingAutoSendRef.current = msg;
-      }
+      pendingAutoSendRef.current = msg;
     }
   }, []);
 
+  // wsKey increments to force a full reconnect (e.g. after /compact)
+  const [wsKey, setWsKey] = useState(0);
   // WS URL is null while in list view (no connection)
   // Always pass cwd so bzcode runs in the correct directory, even when resuming.
   const wsUrl = view === 'chat' && activeCwd
@@ -2054,6 +2122,7 @@ function AgentPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [bzHubModal,        setBzHubModal]        = useState<BzHubModal | null>(null);
   const [showConversations, setShowConversations] = useState(false);
+  const [isCompacting,      setIsCompacting]      = useState(false);
   const [batchQueue,        setBatchQueue]        = useState<{ cwd: string; message: string }[]>(() => {
     try { return JSON.parse(sessionStorage.getItem('agent:batchQueue') ?? '[]') as { cwd: string; message: string }[]; } catch { return []; }
   });
@@ -2066,7 +2135,8 @@ function AgentPage() {
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
   const wsRef              = useRef<WebSocket | null>(null);
-  const pendingAutoSendRef = useRef<string | null>(null);
+  const pendingAutoSendRef  = useRef<string | null>(null);
+  const isCompactingRef    = useRef(false);
   const streamingBlocksRef = useRef<StreamingBlocks>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -2260,6 +2330,9 @@ function AgentPage() {
         if (msg['sessionId']) {
           const sid = msg['sessionId'] as string;
           setCurrentSessionId(sid);
+          setActiveSessionId(sid);
+          // Keep URL in sync with the actual session ID assigned by bzcode
+          void navigate({ to: '/agent', search: { cwd: activeCwd, sessionId: sid }, replace: true });
           // Load custom/auto title for this session from server
           fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
             .then(r => r.json())
@@ -2274,15 +2347,36 @@ function AgentPage() {
         const history = msg['messages'] as Array<{ role: string; content: unknown }> | undefined;
         if (history?.length) {
           const restored: DisplayItem[] = [];
+          // pendingCompact is set when we see <context-summary>; it's deferred
+          // until the first real user text message that follows (= new post-compact
+          // message), then inserted before it. If no new message follows, it goes
+          // at the end — which is correct because compact happened after the response.
+          let pendingCompact: DisplayItem | null = null;
           for (const m of history) {
             if (m.role === 'user') {
               const text = typeof m.content === 'string' ? m.content : '';
-              if (text) restored.push({ id: uid(), kind: 'user', text });
+              if (!text) continue; // skip tool-result messages (content is array)
+              const trimmed = text.trimStart();
+              // Skip internal bzcode injections (date reminders etc.)
+              if (trimmed.startsWith('<system-reminder>')) continue;
+              // Defer compact summary — insert it BEFORE the next real user message
+              if (trimmed.startsWith('<context-summary>')) {
+                pendingCompact = { id: uid(), kind: 'compact-summary' as const, text };
+                continue;
+              }
+              // Real user text message after compact → insert compact card first
+              if (pendingCompact) {
+                restored.push(pendingCompact);
+                pendingCompact = null;
+              }
+              restored.push({ id: uid(), kind: 'user', text });
             } else {
               const blocks = Array.isArray(m.content) ? bzBlocksToAssistantBlocks(m.content as unknown[]) : [];
               if (blocks.length) restored.push({ id: uid(), kind: 'assistant', blocks });
             }
           }
+          // Compact happened after all preserved responses — append card at end
+          if (pendingCompact) restored.push(pendingCompact);
           setItems(restored);
         }
       }
@@ -2294,10 +2388,20 @@ function AgentPage() {
           streamingBlocksRef.current.clear();
           setStreamingBlocks([]);
         } else {
+          const wasCompacting = isCompactingRef.current;
           setIsStreaming(false);
+          setIsCompacting(false);
+          isCompactingRef.current = false;
           streamingBlocksRef.current.clear();
           setStreamingBlocks([]);
           if (msg['mode']) setMode(msg['mode'] as SessionMode);
+          // After compact completes, force-reconnect so bzcode starts fresh
+          // with the clean compacted history and avoids stale auto-run state
+          if (wasCompacting) {
+            // Force a full reconnect: wsKey change tears down current WS
+            // and opens a fresh one with the clean compacted session
+            setTimeout(() => setWsKey(k => k + 1), 800);
+          }
         }
       }
 
@@ -2376,7 +2480,7 @@ function AgentPage() {
     };
 
     return () => ws.close();
-  }, [wsUrl]);
+  }, [wsUrl, wsKey]);
 
   const handlePermission = useCallback((requestId: string, behavior: 'allow' | 'deny' | 'always') => {
     sendRaw({ type: 'user', subtype: 'permission', requestId, behavior });
@@ -2464,6 +2568,7 @@ function AgentPage() {
     setInputValue('');
     const text = `/${name}`;
     setItems(prev => [...prev, { id: uid(), kind: 'user', text }]);
+    if (name === 'compact') { setIsCompacting(true); isCompactingRef.current = true; }
     sendRaw({ type: 'user', content: text });
   }, [sendRaw]);
 
@@ -2588,18 +2693,8 @@ function AgentPage() {
     return (
       <div className="agent-page">
         <SessionListPage
-          onSelect={(sessionId, cwd) => {
-            setActiveSessionId(sessionId);
-            setActiveCwd(cwd);
-            setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
-            setView('chat');
-          }}
-          onNew={(cwd) => {
-            setActiveSessionId(null);
-            setActiveCwd(cwd);
-            setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
-            setView('chat');
-          }}
+          onSelect={(sessionId, cwd) => openSession(cwd, sessionId)}
+          onNew={(cwd) => openSession(cwd, null)}
         />
       </div>
     );
@@ -2615,15 +2710,10 @@ function AgentPage() {
           {batchQueue.map((item, i) => (
             <button key={i} type="button" className="agent-batch-link"
               onClick={() => {
-                sessionStorage.setItem('agent:pendingCwd', item.cwd);
-                if (item.message) sessionStorage.setItem('agent:pendingMessage', item.message);
                 const remaining = batchQueue.filter((_, j) => j !== i);
-                if (remaining.length > 0) sessionStorage.setItem('agent:batchQueue', JSON.stringify(remaining));
                 setBatchQueue(remaining);
-                setActiveCwd(item.cwd);
-                setActiveDirName(item.cwd.split('/').filter(Boolean).pop() ?? item.cwd);
-                setActiveSessionId(null);
-                setView('chat');
+                if (remaining.length > 0) sessionStorage.setItem('agent:batchQueue', JSON.stringify(remaining));
+                openSession(item.cwd, null);
                 if (item.message) setInputValue(item.message);
               }}>
               {item.cwd.split('/').filter(Boolean).pop()}
@@ -2639,7 +2729,7 @@ function AgentPage() {
           <button
             type="button"
             className="agent-breadcrumb-back"
-            onClick={() => setView('list')}
+            onClick={() => goToList()}
             title="Back to sessions"
           >
             <ArrowLeftIcon size={14} />
@@ -2717,15 +2807,8 @@ function AgentPage() {
               cwd={activeCwd}
               activeSessionId={activeSessionId}
               httpBase={HTTP_BASE}
-              onSelect={sessionId => {
-                setActiveSessionId(sessionId);
-                setView('chat');
-              }}
-              onNew={() => {
-                setActiveSessionId(null);
-                setView('chat');
-                setShowConversations(false);
-              }}
+              onSelect={sessionId => { openSession(activeCwd, sessionId); setShowConversations(false); }}
+              onNew={() => { openSession(activeCwd, null); setShowConversations(false); }}
               onClose={() => setShowConversations(false)}
             />
           )}
@@ -2850,9 +2933,10 @@ function AgentPage() {
                 );
               }
 
-              if (item.kind === 'tool')          return <ToolCard key={item.id} item={item} />;
-              if (item.kind === 'push-progress') return <PushProgressCard key={item.id} item={item} />;
-              if (item.kind === 'sync-progress') return <SyncProgressCard key={item.id} item={item} />;
+              if (item.kind === 'tool')             return <ToolCard key={item.id} item={item} />;
+              if (item.kind === 'push-progress')   return <PushProgressCard key={item.id} item={item} />;
+              if (item.kind === 'sync-progress')   return <SyncProgressCard key={item.id} item={item} />;
+              if (item.kind === 'compact-summary') return <CompactSummaryCard key={item.id} text={item.text} />;
 
               return null;
             })}
@@ -2884,6 +2968,15 @@ function AgentPage() {
               onDismiss={() => setPendingInput(null)}
             />
           )}
+        </div>
+      )}
+
+      {/* Compacting banner — shown while /compact is running */}
+      {isCompacting && (
+        <div className="compact-banner">
+          <BoltzbitLogo size={14} className="boltzbit-logo-animate" />
+          <span className="compact-banner-text">Compacting conversation…</span>
+          <span className="compact-banner-sub">Summarising history to reduce context size. Input disabled until complete.</span>
         </div>
       )}
 
@@ -2930,7 +3023,7 @@ function AgentPage() {
         />
 
         <div
-          className="agent-input-box"
+          className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}`}
           style={{ '--mode-color': modeColor } as React.CSSProperties}
         >
           {/* Attachment chips preview */}
@@ -2958,7 +3051,7 @@ function AgentPage() {
             placeholder={isStreaming ? 'Running…' : 'Ask the agent…'}
             value={inputValue}
             rows={1}
-            disabled={isStreaming}
+            disabled={isStreaming || isCompacting}
             onChange={e => { setInputValue(e.target.value); setSlashMenuDismissed(false); setSlashMenuIdx(0); }}
             onKeyDown={handleKeyDown}
           />

@@ -10,10 +10,8 @@
  */
 import {
   ChatCircleDotsIcon,
-  FolderSimpleIcon,
   HouseSimpleIcon,
   SignOutIcon,
-  SquaresFourIcon,
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -22,19 +20,18 @@ import { clearAccessToken } from '#/auth-store';
 const SIDEBAR_WIDTH = 220;   // px — matches bz-codespace --spacing-bl-sidebar
 
 const NAV_ITEMS = [
-  { to: '/',         label: 'Home',     Icon: HouseSimpleIcon,    exact: true  },
-  { to: '/chat',     label: 'Chat',     Icon: ChatCircleDotsIcon, exact: false },
-  { to: '/agent',    label: 'Agent',    Icon: TerminalIcon,       exact: false },
-  { to: '/files',    label: 'Files',    Icon: FolderSimpleIcon,   exact: false },
-  { to: '/products', label: 'Products', Icon: SquaresFourIcon,    exact: false },
+  { to: '/',      label: 'Home',  Icon: HouseSimpleIcon,    exact: true  },
+  { to: '/chat',  label: 'Chat',  Icon: ChatCircleDotsIcon, exact: false },
+  { to: '/agent', label: 'Agent', Icon: TerminalIcon,       exact: false },
 ] as const;
 
 interface SidebarProps {
   open:          boolean;
   onMouseLeave?: () => void;
+  onCollapse?:   () => void;
 }
 
-export default function Sidebar({ open, onMouseLeave }: SidebarProps) {
+export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps) {
   const navigate = useNavigate();
   const { location } = useRouterState();
 
@@ -162,7 +159,50 @@ export default function Sidebar({ open, onMouseLeave }: SidebarProps) {
         width: SIDEBAR_WIDTH,
         minWidth: SIDEBAR_WIDTH,
         padding: '8px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
       }}>
+        {/* Collapse button */}
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Collapse navigation"
+            style={{
+              display:     'flex',
+              alignItems:  'center',
+              gap:         8,
+              width:       '100%',
+              padding:     '8px 8px',
+              borderRadius: 8,
+              border:      'none',
+              background:  'transparent',
+              fontSize:    13,
+              color:       'var(--text-secondary)',
+              cursor:      'pointer',
+              textAlign:   'left',
+              whiteSpace:  'nowrap',
+              transition:  'background 120ms ease, color 120ms ease',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+            }}
+          >
+            {/* ‹‹ double chevron left */}
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden style={{ flexShrink: 0 }}>
+              <path d="M8.5 3L4.5 7.5L8.5 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M12 3L8 7.5L12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>Collapse</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={handleLogout}

@@ -34,14 +34,16 @@ type BatchItemState = {
 type BatchState = { batchId: string; done: boolean; items: BatchItemState[] };
 
 type SessionInfo = {
-  sessionId:    string;
-  workingDir:   string;
-  dirName:      string;
-  messageCount: number;
-  title:        string;
-  lastModified: number;
-  isActive:     boolean;
-  isRunning:    boolean;
+  sessionId:        string;
+  workingDir:       string;
+  dirName:          string;
+  messageCount:     number;
+  title:            string;
+  lastMessage:      string;
+  lastModified:     number;
+  isActive:         boolean;
+  isRunning:        boolean;
+  defaultSessionId: string | null;  // default conversation for this cwd, if set
 };
 
 function formatNum(n: number) {
@@ -66,6 +68,7 @@ function Home() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatDir,  setNewChatDir]  = useState('');
   const [batch,       setBatch]       = useState<BatchState | null>(null);
+  const [showAllQueries, setShowAllQueries] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const newChatRef   = useRef<HTMLInputElement>(null);
   const batchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -116,33 +119,31 @@ function Home() {
     if (showNewChat) setTimeout(() => newChatRef.current?.focus(), 50);
   }, [showNewChat]);
 
+  // Resolve the best session ID for a cwd: default > most recent
+  function resolveSession(cwd: string): string {
+    const s = sessions.find(s => s.workingDir === cwd);
+    return s?.defaultSessionId ?? s?.sessionId ?? '';
+  }
+
   function launch(cwds: string[], msg: string) {
     if (cwds.length === 0) return;
     if (cwds.length === 1 && !msg.trim()) {
-      // Just open the agent chat for this directory
-      sessionStorage.setItem('agent:pendingCwd', cwds[0]!);
-      void navigate({ to: '/agent' });
+      const cwd = cwds[0]!;
+      const sid = resolveSession(cwd);
+      void navigate({ to: '/agent', search: { cwd, ...(sid ? { sessionId: sid } : {}) } });
       return;
     }
-    if (cwds.length === 1 && msg.trim()) {
-      // Single directory with message — send via batch API (background, YOLO)
-      fetch(`${HTTP_BASE}/batch`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwds, message: msg.trim() }),
-      }).then(r => r.json()).then((d: { batchId: string }) => {
-        setBatch({ batchId: d.batchId, done: false, items: cwds.map(c => ({ cwd: c, dirName: c.split('/').filter(Boolean).pop() ?? c, status: 'pending' as const, output: '', error: '', sessionId: '' })) });
-        startBatchPoll(d.batchId);
-        setInputValue('');
-        setSelected(new Set());
-      }).catch(() => null);
-      return;
+    // Build sessions map: cwd -> sessionId (default or most recent)
+    const sessionsMap: Record<string, string> = {};
+    for (const cwd of cwds) {
+      const sid = resolveSession(cwd);
+      if (sid) sessionsMap[cwd] = sid;
     }
-    // Multiple directories — always use batch API
     fetch(`${HTTP_BASE}/batch`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwds, message: msg.trim() }),
+      body: JSON.stringify({ cwds, message: msg.trim(), sessions: sessionsMap }),
     }).then(r => r.json()).then((d: { batchId: string }) => {
-      setBatch({ batchId: d.batchId, done: false, items: cwds.map(c => ({ cwd: c, dirName: c.split('/').filter(Boolean).pop() ?? c, status: 'pending' as const, output: '', error: '', sessionId: '' })) });
+      setBatch({ batchId: d.batchId, done: false, items: cwds.map(c => ({ cwd: c, dirName: c.split('/').filter(Boolean).pop() ?? c, status: 'pending' as const, output: '', error: '', sessionId: sessionsMap[c] ?? '' })) });
       startBatchPoll(d.batchId);
       setInputValue('');
       setSelected(new Set());
@@ -182,6 +183,9 @@ function Home() {
 
   return (
     <div className="home-page">
+
+      {/* ── Sticky header: brand + prompt ── */}
+      <div className="home-sticky">
 
       {/* ── Top bar ── */}
       <div className="home-top">
@@ -227,6 +231,48 @@ function Home() {
         </div>
       </div>
 
+      </div>{/* end home-sticky */}
+
+      {/* ── Scrollable body ── */}
+      <div className="home-scroll">
+
+      {/* ── Recent queries ── */}
+      {sessions.length > 0 && (() => {
+        const allQueries = sessions.filter(s => s.lastMessage && s.lastMessage !== '(empty)').slice(0, 10);
+        if (!allQueries.length) return null;
+        const visible = showAllQueries ? allQueries : allQueries.slice(0, 3);
+        const hidden  = allQueries.length - 3;
+        return (
+          <section className="home-recent-queries">
+            <h3 className="home-rq-title">Recent queries</h3>
+            <div className="home-rq-list">
+              {visible.map(s => (
+                <button
+                  key={s.sessionId}
+                  type="button"
+                  className="home-rq-item"
+                  onClick={() => void navigate({ to: '/agent', search: { cwd: s.workingDir, sessionId: s.sessionId } })}
+                >
+                  <span className="home-rq-dir"><FolderIcon size={10} />{s.dirName}</span>
+                  <span className="home-rq-text">{s.lastMessage}</span>
+                  <span className="home-rq-time">{relativeTime(s.lastModified)}</span>
+                </button>
+              ))}
+              {!showAllQueries && hidden > 0 && (
+                <button type="button" className="home-rq-expand" onClick={() => setShowAllQueries(true)}>
+                  Show {hidden} more
+                </button>
+              )}
+              {showAllQueries && hidden > 0 && (
+                <button type="button" className="home-rq-expand" onClick={() => setShowAllQueries(false)}>
+                  Show less
+                </button>
+              )}
+            </div>
+          </section>
+        );
+      })()}
+
       {/* ── Batch results panel ── */}
       {batch && (
         <div className="batch-panel">
@@ -255,11 +301,7 @@ function Home() {
                   <span className="batch-item-status">{item.status}</span>
                   {item.status === 'done' && (
                     <button type="button" className="batch-item-open"
-                      onClick={() => {
-                        sessionStorage.setItem('agent:pendingCwd', item.cwd);
-                        if (item.sessionId) sessionStorage.setItem('agent:pendingSessionId', item.sessionId);
-                        void navigate({ to: '/agent' });
-                      }}
+                      onClick={() => void navigate({ to: '/agent', search: { cwd: item.cwd, ...(item.sessionId ? { sessionId: item.sessionId } : {}) } })}
                       title="Open chat">
                       <ArrowSquareOutIcon size={11} />
                     </button>
@@ -272,47 +314,6 @@ function Home() {
                 )}
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── New chat modal ── */}
-      {showNewChat && (
-        <div className="home-modal-overlay" onClick={() => setShowNewChat(false)}>
-          <div className="home-modal" onClick={e => e.stopPropagation()}>
-            <div className="home-modal-header">
-              <FolderOpenIcon size={15} color="var(--accent-blue)" />
-              <span className="home-modal-title">New chat</span>
-              <button type="button" className="canvas-widget-close" onClick={() => setShowNewChat(false)}><XIcon size={13} /></button>
-            </div>
-            <p className="home-modal-hint">Enter a working directory to start a new conversation.</p>
-            <input
-              ref={newChatRef}
-              className="home-modal-input"
-              placeholder="/path/to/your/project"
-              value={newChatDir}
-              onChange={e => setNewChatDir(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleNewChat(); if (e.key === 'Escape') setShowNewChat(false); }}
-            />
-            {/* Recent dirs as quick-pick */}
-            {sessions.length > 0 && (
-              <div className="home-modal-recents">
-                {sessions.slice(0, 6).map(s => (
-                  <button key={s.sessionId} type="button" className="home-modal-recent-item"
-                    onClick={() => { setNewChatDir(s.workingDir); }}>
-                    <FolderIcon size={11} />
-                    <span className="home-modal-recent-name">{s.dirName}</span>
-                    <span className="home-modal-recent-path">{s.workingDir}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="home-modal-actions">
-              <button type="button" className="bzhub-btn bzhub-btn--primary" onClick={handleNewChat} disabled={!newChatDir.trim()}>
-                Start chat
-              </button>
-              <button type="button" className="bzhub-btn" onClick={() => setShowNewChat(false)}>Cancel</button>
-            </div>
           </div>
         </div>
       )}
@@ -344,7 +345,7 @@ function Home() {
                   <div
                     key={s.sessionId}
                     className={`home-project-card${isSelected ? ' home-project-card--selected' : ''}${s.isRunning ? ' home-project-card--active' : ''}`}
-                    onClick={() => launch([s.workingDir], '')}
+                    onClick={() => { const sid = resolveSession(s.workingDir); void navigate({ to: '/agent', search: { cwd: s.workingDir, ...(sid ? { sessionId: sid } : {}) } }); }}
                   >
                     {/* Checkbox */}
                     <button
@@ -386,6 +387,48 @@ function Home() {
             </div>
           )}
         </section>
+      )}
+
+      </div>{/* end home-scroll */}
+
+      {/* ── New chat modal (portal-like, outside scroll) ── */}
+      {showNewChat && (
+        <div className="home-modal-overlay" onClick={() => setShowNewChat(false)}>
+          <div className="home-modal" onClick={e => e.stopPropagation()}>
+            <div className="home-modal-header">
+              <FolderOpenIcon size={15} color="var(--accent-blue)" />
+              <span className="home-modal-title">New chat</span>
+              <button type="button" className="canvas-widget-close" onClick={() => setShowNewChat(false)}><XIcon size={13} /></button>
+            </div>
+            <p className="home-modal-hint">Enter a working directory to start a new conversation.</p>
+            <input
+              ref={newChatRef}
+              className="home-modal-input"
+              placeholder="/path/to/your/project"
+              value={newChatDir}
+              onChange={e => setNewChatDir(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleNewChat(); if (e.key === 'Escape') setShowNewChat(false); }}
+            />
+            {sessions.length > 0 && (
+              <div className="home-modal-recents">
+                {sessions.slice(0, 6).map(s => (
+                  <button key={s.sessionId} type="button" className="home-modal-recent-item"
+                    onClick={() => { setNewChatDir(s.workingDir); }}>
+                    <FolderIcon size={11} />
+                    <span className="home-modal-recent-name">{s.dirName}</span>
+                    <span className="home-modal-recent-path">{s.workingDir}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="home-modal-actions">
+              <button type="button" className="bzhub-btn bzhub-btn--primary" onClick={handleNewChat} disabled={!newChatDir.trim()}>
+                Start chat
+              </button>
+              <button type="button" className="bzhub-btn" onClick={() => setShowNewChat(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
