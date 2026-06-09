@@ -1,0 +1,96 @@
+version: "3"
+
+vars:
+  BINARY: workspace-backend
+
+tasks:
+  gen:
+    desc: Generate Go code from OpenAPI spec
+    sources:
+      - openapi.yaml
+      - oapi-codegen.yaml
+    generates:
+      - api/generated.go
+    cmds:
+      - oapi-codegen --config=oapi-codegen.yaml openapi.yaml
+
+  build:
+    desc: "Build the workspace-backend binary. Use: task build [GOOS=linux] [GOARCH=amd64]"
+    deps:
+      - task: gen
+      - task: ui:build
+    cmds:
+      - GOOS={{.GOOS | default ""}} GOARCH={{.GOARCH | default ""}} go build -o {{.BINARY}} .
+
+  run:
+    desc: Run the workspace-backend server
+    deps:
+      - task: build
+    cmds:
+      - ./{{.BINARY}} {{.CLI_ARGS}}
+
+  dev:
+    desc: Build and run with default settings
+    deps:
+      - task: build
+    cmds:
+      - ./{{.BINARY}}
+
+  test:
+    desc: Run Go tests
+    deps:
+      - task: gen
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: Format Go code with gofmt and golines
+    cmds:
+      - gofmt -w .
+      - golines -w --max-len=120 .
+
+  lint:
+    desc: Run Go vet and format check
+    deps:
+      - task: gen
+    cmds:
+      - go vet ./...
+      - test -z "$(gofmt -l .)" || (echo "Files need formatting (run 'task fmt'):" && gofmt -l . && exit 1)
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f {{.BINARY}}
+      - rm -rf ui/dist
+
+  ui:install:
+    desc: Install UI dependencies
+    dir: ui
+    cmds:
+      - pnpm install
+
+  ui:dev:
+    desc: Start Vite dev server with hot reload
+    dir: ui
+    cmds:
+      - pnpm dev
+
+  ui:build:
+    desc: Build UI for production (output to ui/dist/)
+    dir: ui
+    sources:
+      - src/**/*
+      - index.html
+      - vite.config.ts
+      - tsconfig*.json
+      - package.json
+    generates:
+      - dist/**/*
+    cmds:
+      - pnpm build
+
+  ui:check:
+    desc: Run Biome lint and format checks on UI code
+    dir: ui
+    cmds:
+      - pnpm check

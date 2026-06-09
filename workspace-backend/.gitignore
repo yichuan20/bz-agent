@@ -1,0 +1,13 @@
+# Go binary and tarball
+workspace-backend
+workspace-backend-linux
+workspace-backend-bins.*
+
+# UI build output (embedded at build time)
+ui/dist/
+
+# Dependencies
+ui/node_modules/
+
+# OS
+.DS_Store

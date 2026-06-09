@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Workspace Backend API
+  description: API for managing bzcode agent processes inside workspace containers.
+  version: 0.1.0
+
+servers:
+  - url: /api
+
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      description: Returns service health status. Used by FlowInfra to verify workspace readiness.
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/agents:
+    get:
+      operationId: listAgents
+      summary: List all known agent sessions
+      description: |
+        Scans session files on disk and returns metadata for all known sessions,
+        annotated with whether each is currently running.
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentList"
+    post:
+      operationId: createAgent
+      summary: Start a new agent or resume an existing session
+      description: |
+        Spawns a bzcode process for the given project directory.
+        If sessionId is provided, resumes that existing session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentRequest"
+      responses:
+        "201":
+          description: Agent started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to start agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/agents/{id}:
+    get:
+      operationId: getAgent
+      summary: Get agent details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAgent
+      summary: Stop a running agent
+      description: Stops the bzcode process. Does not delete the session file on disk.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Agent stopped
+        "404":
+          description: Agent not found or not running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+
+    Agent:
+      type: object
+      required:
+        - id
+        - projectDir
+        - status
+        - isRunning
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: bzcode session ID
+        projectDir:
+          type: string
+        status:
+          type: string
+          enum: [starting, running, stopped, error]
+        isRunning:
+          type: boolean
+        title:
+          type: string
+        messageCount:
+          type: integer
+        lastModified:
+          type: number
+          format: double
+          description: Unix timestamp (seconds)
+        createdAt:
+          type: string
+          format: date-time
+
+    AgentList:
+      type: object
+      required:
+        - agents
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+
+    CreateAgentRequest:
+      type: object
+      required:
+        - projectDir
+      properties:
+        projectDir:
+          type: string
+          description: Absolute path to the project directory
+        sessionId:
+          type: string
+          description: If provided, resumes this existing session instead of starting fresh
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string

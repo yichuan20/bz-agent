@@ -1,0 +1,30 @@
+{
+  "name": "workspace-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "biome check",
+    "check:fix": "pnpm -s check --fix",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.166.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@tanstack/router-cli": "^1.166.7",
+    "@tanstack/router-plugin": "^1.166.7",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vite-tsconfig-paths": "^4.3.2"
+  }
+}
