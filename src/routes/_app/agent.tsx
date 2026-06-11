@@ -28,11 +28,16 @@ import {
 } from '@phosphor-icons/react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AGENT_MODES, modeLSKey, type AgentMode } from '#/lib/agentModes';
+import { ModeBadge }    from '#/components/ModeBadge';
+import { ModeSelector } from '#/components/ModeSelector';
+import { EditorPanel }  from '#/components/EditorPanel';
 
 export const Route = createFileRoute('/_app/agent')({
-  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string; mode?: AgentMode } => ({
     ...(typeof search['cwd']       === 'string' && search['cwd']       ? { cwd:       search['cwd'] as string }       : {}),
     ...(typeof search['sessionId'] === 'string' && search['sessionId'] ? { sessionId: search['sessionId'] as string } : {}),
+    ...(typeof search['mode']      === 'string' && AGENT_MODES.includes(search['mode'] as AgentMode) ? { mode: search['mode'] as AgentMode } : {}),
   }),
   component: AgentPage,
 });
@@ -52,7 +57,8 @@ type DisplayItem =
   | { id: string; kind: 'tool'; toolUseId: string; name: string; status: 'running' | 'done' | 'error'; input: unknown; output?: string; isError?: boolean }
   | { id: string; kind: 'push-progress'; step: PushStep; message: string; serviceUrl?: string; appId?: string }
   | { id: string; kind: 'sync-progress'; step: SyncStep; message: string }
-  | { id: string; kind: 'compact-summary'; text: string };
+  | { id: string; kind: 'compact-summary'; text: string }
+  | { id: string; kind: 'system'; message: string };
 
 type BzHubModal =
   | { type: 'create-app'; cwd: string }
@@ -1020,42 +1026,101 @@ type WidgetData = { id: string; kind: WidgetKind; title: string; x: number; y: n
 
 // ── Overlap resolver ─────────────────────────────────────────────────────────
 
-const OVERLAP_PAD = 14; // minimum gap between widgets
+const GAP = 14;       // gap between widgets
+const SNAP = 16;      // drag/resize grid snap
+const CANVAS_PAD = 24; // padding from canvas edge
 
+// Snap a value to the nearest grid point
+function snapVal(v: number): number { return Math.round(v / SNAP) * SNAP; }
+
+// ── Gravity ───────────────────────────────────────────────────────────────────
+// After any change, pull all widgets upward as far as they can go without
+// overlapping — like react-grid-layout's vertical compaction.
+function applyGravity(widgets: WidgetData[]): WidgetData[] {
+  if (widgets.length === 0) return widgets;
+  // Process top-to-bottom so widgets above settle first
+  const sorted = [...widgets].map(w => ({ ...w })).sort((a, b) => a.y - b.y || a.x - b.x);
+  const placed: WidgetData[] = [];
+
+  for (const w of sorted) {
+    let targetY = CANVAS_PAD;
+    // Find the lowest y we can place w without overlapping anything already placed
+    for (const p of placed) {
+      const xOverlap = p.x + p.w + GAP > w.x && w.x + w.w + GAP > p.x;
+      if (xOverlap) targetY = Math.max(targetY, p.y + p.h + GAP);
+    }
+    placed.push({ ...w, y: targetY });
+  }
+  // Restore original order so IDs remain stable
+  const byId = Object.fromEntries(placed.map(w => [w.id, w]));
+  return widgets.map(w => byId[w.id] ?? w);
+}
+
+// ── First-fit spawn placement ─────────────────────────────────────────────────
+// Finds the first available top-left position for a new widget (not diagonal cascade).
+function findSpawnPos(existing: WidgetData[], newW: number, newH: number, canvasW = 1400): { x: number; y: number } {
+  const step = SNAP;
+  const maxX  = Math.max(CANVAS_PAD, canvasW - newW - CANVAS_PAD);
+
+  for (let y = CANVAS_PAD; y < 4000; y += step) {
+    for (let x = CANVAS_PAD; x <= maxX; x += step) {
+      const fits = existing.every(w =>
+        x + newW + GAP <= w.x || w.x + w.w + GAP <= x ||
+        y + newH + GAP <= w.y || w.y + w.h + GAP <= y,
+      );
+      if (fits) return { x, y };
+    }
+  }
+  return { x: CANVAS_PAD, y: CANVAS_PAD };
+}
+
+// ── Auto-arrange (Tidy) ───────────────────────────────────────────────────────
+// Packs widgets into a clean row-wrapping layout, left-to-right, top-to-bottom,
+// matching each widget's natural column width.  Like a masonry grid.
+function autoArrange(widgets: WidgetData[], canvasW = 1400): WidgetData[] {
+  if (widgets.length === 0) return widgets;
+  // Sort by current position so we respect the user's intended order
+  const sorted = [...widgets].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+  const result: WidgetData[] = [];
+  let rowX = CANVAS_PAD;
+  let rowY = CANVAS_PAD;
+  let rowH = 0;
+
+  for (const w of sorted) {
+    // Wrap to next row if widget doesn't fit
+    if (rowX + w.w > canvasW - CANVAS_PAD && rowX > CANVAS_PAD) {
+      rowX  = CANVAS_PAD;
+      rowY += rowH + GAP;
+      rowH  = 0;
+    }
+    result.push({ ...w, x: rowX, y: rowY });
+    rowX += w.w + GAP;
+    rowH  = Math.max(rowH, w.h);
+  }
+  // Restore original array order
+  const byId = Object.fromEntries(result.map(w => [w.id, w]));
+  return widgets.map(w => byId[w.id] ?? w);
+}
+
+// ── Legacy collision resolver (used as fallback during resize) ────────────────
 function resolveOverlaps(widgets: WidgetData[], fixedId?: string): WidgetData[] {
-  const PAD = OVERLAP_PAD;
-  // Work on a mutable copy; objects are re-created on write so downstream reads see updated positions.
+  const PAD = GAP;
   const result = widgets.map(w => ({ ...w }));
-
   for (let iter = 0; iter < 60; iter++) {
     let anyOverlap = false;
-
     for (let i = 0; i < result.length; i++) {
       for (let j = i + 1; j < result.length; j++) {
-        const a = result[i]!;
-        const b = result[j]!;
-
-        // Quick separating-axis reject
-        if (
-          a.x + a.w + PAD <= b.x || b.x + b.w + PAD <= a.x ||
-          a.y + a.h + PAD <= b.y || b.y + b.h + PAD <= a.y
-        ) continue;
-
+        const a = result[i]!; const b = result[j]!;
+        if (a.x + a.w + PAD <= b.x || b.x + b.w + PAD <= a.x ||
+            a.y + a.h + PAD <= b.y || b.y + b.h + PAD <= a.y) continue;
         anyOverlap = true;
-        const aFixed = a.id === fixedId;
-        const bFixed = b.id === fixedId;
+        const aFixed = a.id === fixedId; const bFixed = b.id === fixedId;
         if (aFixed && bFixed) continue;
-
-        // Minimum push distance in each of the 4 directions
-        const pushRight = (a.x + a.w + PAD) - b.x;  // separate by moving b right
-        const pushLeft  = (b.x + b.w + PAD) - a.x;  // separate by moving a right
-        const pushDown  = (a.y + a.h + PAD) - b.y;  // separate by moving b down
-        const pushUp    = (b.y + b.h + PAD) - a.y;  // separate by moving a down
+        const pushRight = (a.x + a.w + PAD) - b.x;
+        const pushLeft  = (b.x + b.w + PAD) - a.x;
+        const pushDown  = (a.y + a.h + PAD) - b.y;
+        const pushUp    = (b.y + b.h + PAD) - a.y;
         const min = Math.min(pushRight, pushLeft, pushDown, pushUp);
-
-        // Key: always apply the FULL separation to exactly ONE widget.
-        // When neither is fixed we push j (later index), giving i priority.
-        // This makes the push chain propagate: fixed→A→B→C without oscillation.
         if (min === pushRight) {
           if (!bFixed) result[j] = { ...result[j]!, x: result[j]!.x + min };
           else         result[i] = { ...result[i]!, x: Math.max(0, result[i]!.x - min) };
@@ -1071,10 +1136,8 @@ function resolveOverlaps(widgets: WidgetData[], fixedId?: string): WidgetData[] 
         }
       }
     }
-
     if (!anyOverlap) break;
   }
-
   return result;
 }
 
@@ -1106,16 +1169,34 @@ function CanvasWidget({
   function handleDragMouseDown(e: React.MouseEvent) {
     e.preventDefault();
     onDragStart(data.id);
-    const startX = e.clientX - data.x;
-    const startY = e.clientY - data.y;
+    document.body.classList.add('canvas-dragging');
+
+    // Find the canvas area once at drag-start so we can convert viewport
+    // clientX/Y into canvas-local coordinates throughout the drag.
+    const canvasEl = (elRef.current?.closest('.canvas-area') ?? null) as HTMLElement | null;
+    const canvasRect = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
+
+    // Grab offset = where within the widget the user clicked, in canvas coords.
+    // Formula: clientX - canvasRect.left + scrollLeft = canvas-local mouseX
+    //          canvas-local mouseX - data.x            = offset from widget edge
+    const grabX = e.clientX - canvasRect.left + (canvasEl?.scrollLeft ?? 0) - data.x;
+    const grabY = e.clientY - canvasRect.top  + (canvasEl?.scrollTop  ?? 0) - data.y;
+
+    function toCanvas(ev: MouseEvent) {
+      // canvas-local position = viewport pos - canvas origin + scroll - grab offset
+      const nx = Math.max(0, ev.clientX - canvasRect.left + (canvasEl?.scrollLeft ?? 0) - grabX);
+      const ny = Math.max(0, ev.clientY - canvasRect.top  + (canvasEl?.scrollTop  ?? 0) - grabY);
+      return { nx, ny };
+    }
 
     function onMouseMove(ev: MouseEvent) {
-      const nx = Math.max(0, ev.clientX - startX);
-      const ny = Math.max(0, ev.clientY - startY);
+      const { nx, ny } = toCanvas(ev);
       if (elRef.current) { elRef.current.style.left = `${nx}px`; elRef.current.style.top = `${ny}px`; }
     }
     function onMouseUp(ev: MouseEvent) {
-      onDrop(data.id, Math.max(0, ev.clientX - startX), Math.max(0, ev.clientY - startY));
+      document.body.classList.remove('canvas-dragging');
+      const { nx, ny } = toCanvas(ev);
+      onDrop(data.id, nx, ny);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     }
@@ -1128,6 +1209,7 @@ function CanvasWidget({
     e.preventDefault();
     e.stopPropagation();   // don't trigger drag
     onDragStart(data.id);  // show the grid while resizing too
+    document.body.classList.add('canvas-dragging');
 
     const startMouseX = e.clientX;
     const startMouseY = e.clientY;
@@ -1155,6 +1237,7 @@ function CanvasWidget({
       }
     }
     function onMouseUp(ev: MouseEvent) {
+      document.body.classList.remove('canvas-dragging');
       const { nx, ny, nw, nh } = calc(ev);
       onResize(data.id, nx, ny, nw, nh);
       document.removeEventListener('mousemove', onMouseMove);
@@ -1167,7 +1250,7 @@ function CanvasWidget({
   // Resolve the JS code: custom widgets carry their own code, builtins come from the registry
   const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
   const code = data.code ?? REGISTRY_MAP[data.kind]?.code ?? '';
-  const content = <IframeWidget code={code} agentHttpBase={agentHttp} refreshKey={data.id} />;
+  const content = <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} refreshKey={data.id} />;
 
   return (
     <div ref={elRef} className="canvas-widget" style={{ left: data.x, top: data.y, width: data.w, height: data.h }}>
@@ -1502,7 +1585,8 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
   const [showNewEditor,    setShowNewEditor]    = useState(false);
   const [showCredManager,  setShowCredManager]  = useState(false);
   const [widgetSearch,     setWidgetSearch]     = useState('');
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canvasAreaRef  = useRef<HTMLDivElement>(null);
   const [codeDrawer,    setCodeDrawer]    = useState<{ id: string; title: string; code: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -1512,18 +1596,44 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
     canvasApi.load(cwd)
       .then(({ widgets: entries }) => {
         if (!entries?.length) return;
-        // Reconstruct WidgetData from saved CanvasEntry records
-        // Code comes from the widget registry / API (not stored in the canvas file)
+        const PAD = 24;
+        // Normalise positions: shift the whole group so the top-left widget
+        // lands at (PAD, PAD), keeping relative positions intact.
+        // This ensures the canvas always opens at origin with content visible.
+        const minX = Math.min(...entries.map(e => e.x));
+        const minY = Math.min(...entries.map(e => e.y));
+        const dx   = PAD - minX;
+        const dy   = PAD - minY;
         setCanvasWidgets(entries.map(e => ({
           id:    e.canvasId,
           kind:  e.kind as WidgetKind,
           title: e.title,
-          x: e.x, y: e.y, w: e.w, h: e.h,
-          // code will be resolved by CanvasWidget from REGISTRY_MAP or API
+          x: e.x + dx, y: e.y + dy, w: e.w, h: e.h,
         })));
       })
       .catch(() => { /* canvas file missing or server offline — start blank */ });
   }, [cwd]);
+
+  // Scroll to origin on the first render that has widgets, then hold that
+  // position for 900 ms — long enough for all widget iframes to finish
+  // loading their CDN scripts (Chart.js etc.), which can otherwise trigger
+  // the browser to scroll the canvas-area to bring them into view.
+  const initScrolledRef = useRef(false);
+  useLayoutEffect(() => {
+    if (canvasWidgets.length === 0 || initScrolledRef.current) return;
+    initScrolledRef.current = true;
+    const area = canvasAreaRef.current;
+    if (!area) return;
+
+    area.scrollTop  = 0;
+    area.scrollLeft = 0;
+
+    let locked = true;
+    const hold = () => { if (locked) { area.scrollTop = 0; area.scrollLeft = 0; } };
+    area.addEventListener('scroll', hold);
+    const t = setTimeout(() => { locked = false; area.removeEventListener('scroll', hold); }, 900);
+    return () => { clearTimeout(t); area.removeEventListener('scroll', hold); };
+  }, [canvasWidgets]);
 
   // Debounced save: whenever the canvas layout changes, persist to <cwd>/.bzcanvas.json
   useEffect(() => {
@@ -1579,14 +1689,13 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
 
   function spawnWidget(entry: typeof toolbarEntries[number]) {
     setCanvasWidgets(prev => {
-      const next = [...prev, {
+      const canvasW = canvasAreaRef.current?.clientWidth ?? 1400;
+      const { x, y } = findSpawnPos(prev, entry.defaultW, entry.defaultH, canvasW);
+      return applyGravity([...prev, {
         id: uid(), kind: entry.kind as WidgetKind,
         title: entry.label, code: entry.code,
-        x: 32 + (prev.length % 6) * 20,
-        y: 32 + (prev.length % 6) * 20,
-        w: entry.defaultW, h: entry.defaultH,
-      }];
-      return resolveOverlaps(next);
+        x, y, w: entry.defaultW, h: entry.defaultH,
+      }]);
     });
   }
 
@@ -1614,7 +1723,7 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
     setCanvasWidgets(prev => {
       const next = [...prev, {
         id: uid(), kind: 'custom' as WidgetKind, title: def.name, code: def.code,
-        x: 32 + (prev.length % 6) * 20, y: 32 + (prev.length % 6) * 20, w: 340, h: 280,
+        ...findSpawnPos(prev, 340, 280, canvasAreaRef.current?.clientWidth ?? 1400), w: 340, h: 280,
       }];
       return resolveOverlaps(next);
     });
@@ -1630,7 +1739,10 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
 
   function handleDrop(id: string, x: number, y: number) {
     setDragging(false);
-    setCanvasWidgets(prev => resolveOverlaps(prev.map(w => w.id === id ? { ...w, x, y } : w), id));
+    // Snap to grid, clamp to canvas edge, then apply gravity
+    const sx = Math.max(0, snapVal(x));
+    const sy = Math.max(0, snapVal(y));
+    setCanvasWidgets(prev => applyGravity(prev.map(w => w.id === id ? { ...w, x: sx, y: sy } : w)));
   }
   function handleResize(id: string, x: number, y: number, w: number, h: number) {
     setDragging(false);
@@ -1691,6 +1803,16 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
 
         <span className="canvas-toolbar-divider" />
 
+        <span className="canvas-toolbar-divider" />
+        {canvasWidgets.length > 1 && (
+          <button type="button" className="canvas-add-btn canvas-add-btn--tidy"
+            title="Auto-arrange: pack all widgets neatly from top-left"
+            onClick={() => setCanvasWidgets(prev =>
+              autoArrange(prev, canvasAreaRef.current?.clientWidth ?? 1400)
+            )}>
+            ⊞ Tidy
+          </button>
+        )}
         <button type="button" className="canvas-add-btn canvas-add-btn--custom" onClick={() => setShowNewEditor(true)}>
           ⚡ + Custom
         </button>
@@ -1722,7 +1844,8 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
       </div>
 
       {/* Grid is a background-image on the area itself — covers full scrollable content */}
-      <div className={`canvas-area${dragging ? ' canvas-area--dragging' : ''}`}>
+      <div ref={canvasAreaRef} className={`canvas-area${dragging ? ' canvas-area--dragging' : ''}`}
+        style={{ overflowAnchor: 'none' } as React.CSSProperties}>
         {canvasWidgets.length === 0 && (
           <div className="canvas-empty">
             <SquaresFourIcon size={36} color="var(--text-tertiary)" weight="duotone" />
@@ -2057,7 +2180,7 @@ function BoltzingIndicator() {
 
 function AgentPage() {
   // ── Session routing ─────────────────────────────────────────────────────────
-  const { cwd: searchCwd, sessionId: searchSessionId } = Route.useSearch();
+  const { cwd: searchCwd, sessionId: searchSessionId, mode: searchMode } = Route.useSearch();
   const navigate = useNavigate();
 
   const [view,           setView]           = useState<'list' | 'chat'>(() => searchCwd ? 'chat' : 'list');
@@ -2066,14 +2189,30 @@ function AgentPage() {
   const [activeDirName,  setActiveDirName]  = useState(() =>
     searchCwd ? (searchCwd.split('/').filter(Boolean).pop() ?? searchCwd) : '');
 
+  // Agent mode — must be declared before openSession which closes over it
+  const [agentMode,        setAgentMode]        = useState<AgentMode>(() => {
+    if (searchMode) return searchMode;
+    if (searchSessionId) return (localStorage.getItem(modeLSKey(searchSessionId)) as AgentMode | null) ?? 'general';
+    return 'general';
+  });
+  const [editorRefreshKey, setEditorRefreshKey] = useState(0);
+  // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
+  const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
+
   // Navigate to a session and reflect it in the URL
-  const openSession = useCallback((cwd: string, sessionId?: string | null) => {
-    const sid = sessionId ?? undefined;
+  const openSession = useCallback((cwd: string, sessionId?: string | null, mode?: AgentMode) => {
+    const sid     = sessionId ?? undefined;
+    const newMode = mode
+      // Resuming an existing session → restore its saved mode
+      ?? (sid ? (localStorage.getItem(modeLSKey(sid)) as AgentMode | null) ?? agentMode : agentMode);
     setActiveCwd(cwd);
     setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
     setActiveSessionId(sid ?? null);
     setView('chat');
-    void navigate({ to: '/agent', search: { cwd, sessionId: sid }, replace: true });
+    setAgentMode(newMode);
+    // Canvas mode is per-session
+    setCanvasMode(sid ? localStorage.getItem(`bz-canvas:${sid}`) === '1' : false);
+    void navigate({ to: '/agent', search: { cwd, sessionId: sid, mode: newMode }, replace: true });
   }, [navigate]);
 
   // Go back to the list and clear URL params
@@ -2099,7 +2238,7 @@ function AgentPage() {
   // WS URL is null while in list view (no connection)
   // Always pass cwd so bzcode runs in the correct directory, even when resuming.
   const wsUrl = view === 'chat' && activeCwd
-    ? `${WS_BASE}?cwd=${encodeURIComponent(activeCwd)}${activeSessionId ? `&sessionId=${encodeURIComponent(activeSessionId)}` : ''}`
+    ? `${WS_BASE}?cwd=${encodeURIComponent(activeCwd)}&mode=${encodeURIComponent(agentMode)}${activeSessionId ? `&sessionId=${encodeURIComponent(activeSessionId)}` : ''}`
     : null;
 
   // ── Chat state ───────────────────────────────────────────────────────────────
@@ -2130,7 +2269,11 @@ function AgentPage() {
   const [isEditingTitle,    setIsEditingTitle]    = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [canvasMode,   setCanvasMode]   = useState(false);
+  const [canvasMode,   setCanvasMode]   = useState(() => {
+    // Canvas mode is per-session, not per-project
+    if (!searchSessionId) return false;
+    return localStorage.getItem(`bz-canvas:${searchSessionId}`) === '1';
+  });
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
@@ -2330,9 +2473,13 @@ function AgentPage() {
         if (msg['sessionId']) {
           const sid = msg['sessionId'] as string;
           setCurrentSessionId(sid);
-          setActiveSessionId(sid);
-          // Keep URL in sync with the actual session ID assigned by bzcode
-          void navigate({ to: '/agent', search: { cwd: activeCwd, sessionId: sid }, replace: true });
+          // Persist the mode for this session so it's restored on reload
+          localStorage.setItem(modeLSKey(sid), agentMode);
+          // Update URL so a refresh resumes this exact session.
+          // Do NOT call setActiveSessionId here — that would change wsUrl
+          // and trigger the useEffect to tear down and rebuild the WebSocket,
+          // causing the visible connect/disconnect flicker.
+          void navigate({ to: '/agent', search: { cwd: activeCwd, sessionId: sid, mode: agentMode }, replace: true });
           // Load custom/auto title for this session from server
           fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
             .then(r => r.json())
@@ -2347,11 +2494,6 @@ function AgentPage() {
         const history = msg['messages'] as Array<{ role: string; content: unknown }> | undefined;
         if (history?.length) {
           const restored: DisplayItem[] = [];
-          // pendingCompact is set when we see <context-summary>; it's deferred
-          // until the first real user text message that follows (= new post-compact
-          // message), then inserted before it. If no new message follows, it goes
-          // at the end — which is correct because compact happened after the response.
-          let pendingCompact: DisplayItem | null = null;
           for (const m of history) {
             if (m.role === 'user') {
               const text = typeof m.content === 'string' ? m.content : '';
@@ -2359,15 +2501,10 @@ function AgentPage() {
               const trimmed = text.trimStart();
               // Skip internal bzcode injections (date reminders etc.)
               if (trimmed.startsWith('<system-reminder>')) continue;
-              // Defer compact summary — insert it BEFORE the next real user message
+              // Compact summary — render in-place at the position bzcode stored it
               if (trimmed.startsWith('<context-summary>')) {
-                pendingCompact = { id: uid(), kind: 'compact-summary' as const, text };
+                restored.push({ id: uid(), kind: 'compact-summary' as const, text });
                 continue;
-              }
-              // Real user text message after compact → insert compact card first
-              if (pendingCompact) {
-                restored.push(pendingCompact);
-                pendingCompact = null;
               }
               restored.push({ id: uid(), kind: 'user', text });
             } else {
@@ -2375,8 +2512,6 @@ function AgentPage() {
               if (blocks.length) restored.push({ id: uid(), kind: 'assistant', blocks });
             }
           }
-          // Compact happened after all preserved responses — append card at end
-          if (pendingCompact) restored.push(pendingCompact);
           setItems(restored);
         }
       }
@@ -2471,11 +2606,19 @@ function AgentPage() {
         }
       }
 
+      else if (type === 'system') {
+        // Informational events (e.g. context compaction) — render as a dim info line
+        const message = msg['message'] as string;
+        if (message) setItems(prev => [...prev, { id: uid(), kind: 'system' as const, message }]);
+      }
+
       else if (type === 'result') {
         if (msg['usage']) setTokenUsage(msg['usage'] as TokenUsage);
         if (msg['status'] === 'success' && msg['output']) {
           setItems(prev => [...prev, { id: uid(), kind: 'assistant', blocks: [{ type: 'text', text: msg['output'] as string }] }]);
         }
+        // Reload editor file in case the agent modified it
+        if (msg['status'] === 'success') setEditorRefreshKey(k => k + 1);
       }
     };
 
@@ -2694,8 +2837,29 @@ function AgentPage() {
       <div className="agent-page">
         <SessionListPage
           onSelect={(sessionId, cwd) => openSession(cwd, sessionId)}
-          onNew={(cwd) => openSession(cwd, null)}
+          onNew={(cwd) => setPendingNewCwd(cwd)}
         />
+        {pendingNewCwd && (
+          <div className="new-session-overlay">
+            <div className="new-session-panel">
+              <div className="new-session-header">
+                <span className="new-session-title">Choose a mode</span>
+                <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
+              </div>
+              <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
+              <ModeSelector
+                selected={agentMode}
+                onSelect={m => {
+                  setPendingNewCwd(null);
+                  openSession(pendingNewCwd, null, m);
+                }}
+              />
+              <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2767,12 +2931,19 @@ function AgentPage() {
           )}
         </div>
 
-        {/* View mode toggle */}
+        {/* Mode badge */}
+        <ModeBadge
+          mode={agentMode}
+          onSwitch={m => openSession(activeCwd, null, m)}
+        />
+
+        {/* Canvas/Chat toggle — only relevant in widget mode */}
+        {agentMode === 'widget' && (
         <div className="agent-view-toggle">
           <button
             type="button"
             className={`agent-view-btn${!canvasMode ? ' agent-view-btn--active' : ''}`}
-            onClick={() => setCanvasMode(false)}
+            onClick={() => { setCanvasMode(false); const k = currentSessionId ?? activeSessionId; if (k) localStorage.setItem(`bz-canvas:${k}`, '0'); }}
           >
             <ChatCircleDotsIcon size={13} />
             Chat
@@ -2780,12 +2951,13 @@ function AgentPage() {
           <button
             type="button"
             className={`agent-view-btn${canvasMode ? ' agent-view-btn--active' : ''}`}
-            onClick={() => setCanvasMode(true)}
+            onClick={() => { setCanvasMode(true);  const k = currentSessionId ?? activeSessionId; if (k) localStorage.setItem(`bz-canvas:${k}`, '1'); }}
           >
             <SquaresFourIcon size={13} />
             Canvas
           </button>
         </div>
+        )}
 
         <div className={`agent-connection agent-connection--${connStatus}`}>
           <span className="agent-connection-dot" />
@@ -2808,15 +2980,19 @@ function AgentPage() {
               activeSessionId={activeSessionId}
               httpBase={HTTP_BASE}
               onSelect={sessionId => { openSession(activeCwd, sessionId); setShowConversations(false); }}
-              onNew={() => { openSession(activeCwd, null); setShowConversations(false); }}
+              onNew={() => { setShowConversations(false); setPendingNewCwd(activeCwd); }}
               onClose={() => setShowConversations(false)}
             />
           )}
         </div>
       </div>
 
-      {/* Body — flex row in canvas mode, column in chat-only mode */}
-      <div className={canvasMode ? 'agent-canvas-layout' : 'agent-chat-col'}>
+      {/* Body — layout depends on mode */}
+      <div className={
+        (agentMode === 'widget' && canvasMode) || agentMode === 'worker' || agentMode === 'coder'
+          ? 'agent-canvas-layout'
+          : 'agent-chat-col'
+      }>
       <div className="agent-chat-col">
 
       {/* Messages wrapper — position:relative so the sticky overlay anchors here, not inside the scrollable area */}
@@ -2937,6 +3113,9 @@ function AgentPage() {
               if (item.kind === 'push-progress')   return <PushProgressCard key={item.id} item={item} />;
               if (item.kind === 'sync-progress')   return <SyncProgressCard key={item.id} item={item} />;
               if (item.kind === 'compact-summary') return <CompactSummaryCard key={item.id} text={item.text} />;
+              if (item.kind === 'system') return (
+                <div key={item.id} className="agent-system-msg">{item.message}</div>
+              );
 
               return null;
             })}
@@ -3133,8 +3312,38 @@ function AgentPage() {
 
       </div>
 
-      {canvasMode && <CanvasPanel cwd={activeCwd} />}
+      {agentMode === 'widget' && canvasMode && <CanvasPanel cwd={activeCwd} />}
+      {(agentMode === 'worker' || agentMode === 'coder') && (
+        <EditorPanel
+          cwd={activeCwd}
+          codeMode={agentMode === 'coder'}
+          refreshKey={editorRefreshKey}
+        />
+      )}
     </div>
+
+    {/* Mode selector — shown when user clicks "+" to create a new session */}
+    {pendingNewCwd && (
+      <div className="new-session-overlay">
+        <div className="new-session-panel">
+          <div className="new-session-header">
+            <span className="new-session-title">Choose a mode</span>
+            <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
+          </div>
+          <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
+          <ModeSelector
+            selected={agentMode}
+            onSelect={m => {
+              setPendingNewCwd(null);
+              openSession(pendingNewCwd, null, m);
+            }}
+          />
+          <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
 
     {/* BoltzHub modals — rendered inside agent-page so they overlay the chat */}
     {(() => {

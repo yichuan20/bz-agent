@@ -118,11 +118,36 @@ document.body.appendChild(wrap);
 
 const BAR_CODE = `
 const COLORS = ['#1473DF','#3FDC7E','#F59E0B','#FA4B42','#EC4899','#06B6D4','#EAB308'];
-let chartData = [
+const DEFAULT_DATA = [
   {name:'Jan',value:42},{name:'Feb',value:67},{name:'Mar',value:53},
   {name:'Apr',value:88},{name:'May',value:61}
 ];
+// Each row: { id, name, value }  — id comes from Postgres (null for in-memory fallback)
+let chartData = [];
 let chart, editing = false;
+
+// ── DB helpers (no-op if window.db is unavailable, e.g. in the preview editor) ──
+function dbEnsure() {
+  return Promise.resolve(!!window.db); // file-based storage needs no schema setup
+}
+async function dbLoad() {
+  if (!window.db) return null;
+  const { rows } = await window.db.query({ order: 'sort', dir: 'asc' });
+  return rows;
+}
+async function dbInsert(name, value, sort) {
+  if (!window.db) return null;
+  const { inserted } = await window.db.insert({ name, value, sort });
+  return inserted[0];
+}
+async function dbUpdate(id, name, value) {
+  if (!window.db) return;
+  await window.db.update(id, { name, value });
+}
+async function dbDelete(id) {
+  if (!window.db) return;
+  await window.db.delete(id);
+}
 
 // Read actual resolved CSS var values — Chart.js cannot resolve CSS custom properties itself
 const cs = getComputedStyle(document.documentElement);
@@ -173,21 +198,26 @@ function renderEdit() {
     const nameI = document.createElement('input');
     nameI.value = d.name; nameI.placeholder = 'Label';
     nameI.style.cssText = 'flex:1;border:1px solid '+colorBorder+';border-radius:4px;padding:4px 8px;font-size:12px;background:'+colorBg2+';color:'+colorText+';font-family:'+fontFamily;
-    nameI.oninput = (e) => { chartData[i].name = e.target.value; refreshChart(); };
+    nameI.onchange = (e) => { chartData[i].name = e.target.value; dbUpdate(d.id, chartData[i].name, chartData[i].value); refreshChart(); };
     const valI = document.createElement('input');
     valI.type = 'number'; valI.value = d.value;
     valI.style.cssText = 'width:70px;border:1px solid '+colorBorder+';border-radius:4px;padding:4px 8px;font-size:12px;background:'+colorBg2+';color:'+colorText+';text-align:right;font-family:'+fontFamily;
-    valI.oninput = (e) => { chartData[i].value = +e.target.value; refreshChart(); };
+    valI.onchange = (e) => { chartData[i].value = +e.target.value; dbUpdate(d.id, chartData[i].name, chartData[i].value); refreshChart(); };
     const rm = document.createElement('button');
     rm.textContent = '×'; rm.style.cssText = 'background:none;border:none;cursor:pointer;color:'+colorMuted+';font-size:16px;padding:0 2px;line-height:1';
-    rm.onclick = () => { chartData.splice(i,1); renderEdit(); refreshChart(); };
+    rm.onclick = () => { dbDelete(d.id); chartData.splice(i,1); renderEdit(); refreshChart(); };
     row.append(nameI, valI, rm);
     editArea.appendChild(row);
   });
   const addBtn = document.createElement('button');
   addBtn.textContent = '+ Row';
   addBtn.style.cssText = 'padding:3px 10px;border:1px solid '+colorBorder+';border-radius:4px;background:'+colorBg2+';color:'+colorMuted+';cursor:pointer;font-size:11px;align-self:flex-start;font-family:'+fontFamily;
-  addBtn.onclick = () => { chartData.push({name:'',value:0}); renderEdit(); };
+  addBtn.onclick = async () => {
+    const sort = chartData.length;
+    const rec = await dbInsert('', 0, sort);
+    chartData.push({ id: rec ? rec.id : null, name: '', value: 0 });
+    renderEdit();
+  };
   editArea.appendChild(addBtn);
 }
 
@@ -209,7 +239,26 @@ editBtn.onclick = () => {
 
 const s = document.createElement('script');
 s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-s.onload = () => {
+s.onload = async () => {
+  // ── Load data from DB, or seed defaults ──────────────────────────────────
+  const hasDb = await dbEnsure();
+  if (hasDb) {
+    const rows = await dbLoad();
+    if (rows && rows.length > 0) {
+      chartData = rows.map(r => ({ id: r.id, name: r.name, value: Number(r.value) }));
+    } else {
+      // First time: seed the DB with default data
+      for (let i = 0; i < DEFAULT_DATA.length; i++) {
+        const d = DEFAULT_DATA[i];
+        const rec = await dbInsert(d.name, d.value, i);
+        chartData.push({ id: rec ? rec.id : null, name: d.name, value: d.value });
+      }
+    }
+  } else {
+    // No DB (preview editor) — use hardcoded defaults
+    chartData = DEFAULT_DATA.map(d => ({ id: null, name: d.name, value: d.value }));
+  }
+
   // Apply resolved colours as Chart.js defaults
   Chart.defaults.color           = colorMuted;
   Chart.defaults.borderColor     = gridColor;
@@ -254,8 +303,15 @@ document.head.appendChild(s);
 
 const PIE_CODE = `
 const COLORS = ['#1473DF','#3FDC7E','#F59E0B','#FA4B42','#EC4899','#06B6D4'];
-let chartData = [{name:'Alpha',value:35},{name:'Beta',value:25},{name:'Gamma',value:20},{name:'Delta',value:20}];
+const DEFAULT_DATA = [{name:'Alpha',value:35},{name:'Beta',value:25},{name:'Gamma',value:20},{name:'Delta',value:20}];
+let chartData = [];
 let chart, editing = false;
+
+// ── DB helpers (fall back to in-memory if no canvasId, e.g. preview editor) ──
+function dbLoad() { return window.db ? window.db.query({order:'sort',dir:'asc'}) : Promise.resolve({rows:[]}); }
+function dbInsert(name, value, sort) { return window.db ? window.db.insert({name, value, sort}) : Promise.resolve({inserted:[{id:null,name,value}]}); }
+function dbUpdate(id, name, value) { if (window.db && id != null) window.db.update(id, {name, value}); }
+function dbDelete(id) { if (window.db && id != null) window.db.delete(id); }
 
 // Resolve CSS vars to actual values — Chart.js cannot read CSS custom properties
 const cs = getComputedStyle(document.documentElement);
@@ -299,18 +355,28 @@ function renderEdit() {
     const nameI = document.createElement('input');
     nameI.value = d.name; nameI.placeholder = 'Label';
     nameI.style.cssText = 'flex:1;border:1px solid '+colorBorder+';border-radius:4px;padding:4px 8px;font-size:12px;background:'+colorBg2+';color:'+colorText+';font-family:'+fontFamily;
-    nameI.oninput = (e) => { chartData[i].name = e.target.value; refreshChart(); };
+    nameI.oninput  = (e) => { chartData[i].name = e.target.value; refreshChart(); };
+    nameI.onchange = () => { dbUpdate(d.id, chartData[i].name, chartData[i].value); };
     const valI = document.createElement('input');
     valI.type = 'number'; valI.value = d.value;
     valI.style.cssText = 'width:70px;border:1px solid '+colorBorder+';border-radius:4px;padding:4px 8px;font-size:12px;background:'+colorBg2+';color:'+colorText+';text-align:right;font-family:'+fontFamily;
-    valI.oninput = (e) => { chartData[i].value = +e.target.value; refreshChart(); };
-    row.append(dot, nameI, valI);
+    valI.oninput  = (e) => { chartData[i].value = +e.target.value; refreshChart(); };
+    valI.onchange = () => { dbUpdate(d.id, chartData[i].name, chartData[i].value); };
+    const rm = document.createElement('button');
+    rm.textContent = '×'; rm.style.cssText = 'background:none;border:none;cursor:pointer;color:'+colorMuted+';font-size:16px;padding:0 2px;line-height:1';
+    rm.onclick = () => { dbDelete(d.id); chartData.splice(i,1); renderEdit(); refreshChart(); };
+    row.append(dot, nameI, valI, rm);
     editArea.appendChild(row);
   });
   const addBtn = document.createElement('button');
   addBtn.textContent = '+ Slice';
   addBtn.style.cssText = 'padding:3px 10px;border:1px solid '+colorBorder+';border-radius:4px;background:'+colorBg2+';color:'+colorMuted+';cursor:pointer;font-size:11px;align-self:flex-start;font-family:'+fontFamily;
-  addBtn.onclick = () => { chartData.push({name:'',value:0}); renderEdit(); refreshChart(); };
+  addBtn.onclick = async () => {
+    const sort = chartData.length;
+    const res = await dbInsert('', 0, sort);
+    chartData.push({id: res.inserted?.[0]?.id ?? null, name:'', value:0});
+    renderEdit(); refreshChart();
+  };
   editArea.appendChild(addBtn);
 }
 
@@ -331,7 +397,19 @@ editBtn.onclick = () => {
 
 const s = document.createElement('script');
 s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-s.onload = () => {
+s.onload = async () => {
+  // Load from DB or seed defaults on first use
+  const { rows } = await dbLoad();
+  if (rows && rows.length > 0) {
+    chartData = rows.map(r => ({id: r.id, name: r.name, value: Number(r.value)}));
+  } else {
+    for (let i = 0; i < DEFAULT_DATA.length; i++) {
+      const d = DEFAULT_DATA[i];
+      const res = await dbInsert(d.name, d.value, i);
+      chartData.push({id: res.inserted?.[0]?.id ?? null, name: d.name, value: d.value});
+    }
+  }
+
   Chart.defaults.color       = colorMuted;
   Chart.defaults.font.family = fontFamily;
   Chart.defaults.font.size   = 12;

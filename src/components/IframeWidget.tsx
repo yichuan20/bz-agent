@@ -17,10 +17,11 @@ function getThemeCss(): string {
   return THEME_VARS.map(v => `${v}:${cs.getPropertyValue(v).trim() || 'inherit'}`).join(';');
 }
 
-function buildSrcdoc(code: string, agentHttpBase: string): string {
+function buildSrcdoc(code: string, agentHttpBase: string, canvasId?: string): string {
   const themeCss = getThemeCss();
   const safeCode = code.replace(/<\/script>/gi, '<\\/script>');
   const isDark   = document.documentElement.getAttribute('data-theme') === 'dark';
+  const safeId   = canvasId ?? '';
 
   return `<!DOCTYPE html>
 <html>
@@ -43,6 +44,23 @@ input,textarea,select,button{font-family:inherit;font-size:inherit}
 /**
  * window.__agentHttpBase__  — base URL of the Python backend (e.g. http://localhost:5081)
  * window.__isDark__         — true when dark mode is active
+ * window.__canvasId__       — unique ID for this widget placement on the canvas
+ *
+ * window.db  — persistent data store scoped to this widget (JSON file on disk, no DB needed)
+ *
+ *   // No schema declaration needed — just insert any dict and it's stored.
+ *
+ *   // 2. Query rows
+ *   const { rows, total } = await db.query({ order: 'id', dir: 'asc', limit: 100 });
+ *
+ *   // 3. Insert
+ *   const { inserted } = await db.insert({ label: 'Jan', value: 42 });
+ *
+ *   // 4. Update row by id
+ *   await db.update(inserted[0].id, { value: 50 });
+ *
+ *   // 5. Delete row by id
+ *   await db.delete(inserted[0].id);
  *
  * To call external APIs with stored credentials, route requests through the proxy:
  *
@@ -56,12 +74,61 @@ input,textarea,select,button{font-family:inherit;font-size:inherit}
  *       body:   JSON.stringify({ model: 'gpt-4o-mini', messages: [...] })
  *     })
  *   });
- *
- * The server replaces {{OPENAI_API_KEY}} with the stored credential before forwarding.
- * Credentials are managed via the 🔑 Credentials button in the canvas toolbar.
  */
 window.__agentHttpBase__ = '${agentHttpBase}';
 window.__isDark__        = ${isDark};
+window.__canvasId__      = '${safeId}';
+(function(){
+  const _base = window.__agentHttpBase__;
+  const _id   = window.__canvasId__;
+  if (!_id) { window.db = null; return; }
+  window.db = {
+    ensure: function(columns) {
+      return fetch(_base + '/db/widget/' + _id + '/schema', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columns: columns })
+      }).then(function(r){ return r.json(); });
+    },
+    query: function(opts) {
+      opts = opts || {};
+      var p = new URLSearchParams();
+      if (opts.limit  != null) p.set('limit',  opts.limit);
+      if (opts.offset != null) p.set('offset', opts.offset);
+      if (opts.order)          p.set('order',  opts.order);
+      if (opts.dir)            p.set('dir',    opts.dir);
+      if (opts.filter) {
+        Object.keys(opts.filter).forEach(function(k){
+          p.append('filter', k + '=' + opts.filter[k]);
+        });
+      }
+      return fetch(_base + '/db/widget/' + _id + '/rows?' + p).then(function(r){ return r.json(); });
+    },
+    insert: function(rowOrRows) {
+      var body = Array.isArray(rowOrRows) ? { rows: rowOrRows } : { row: rowOrRows };
+      return fetch(_base + '/db/widget/' + _id + '/rows', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function(r){ return r.json(); });
+    },
+    update: function(id, data) {
+      return fetch(_base + '/db/widget/' + _id + '/rows/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: data })
+      }).then(function(r){ return r.json(); });
+    },
+    delete: function(id) {
+      return fetch(_base + '/db/widget/' + _id + '/rows/' + id, {
+        method: 'DELETE'
+      }).then(function(r){ return r.json(); });
+    },
+    exec: function(code) {
+      return fetch(_base + '/db/widget/' + _id + '/exec', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code })
+      }).then(function(r){ return r.json(); });
+    }
+  };
+})();
 (function(){
   try{
     ${safeCode}
@@ -77,26 +144,27 @@ window.__isDark__        = ${isDark};
 type Props = {
   code:           string;
   agentHttpBase?: string;
+  canvasId?:      string;
   refreshKey?:    string | number;
 };
 
-export function IframeWidget({ code, agentHttpBase = 'http://localhost:5081', refreshKey }: Props) {
+export function IframeWidget({ code, agentHttpBase = 'http://localhost:5081', canvasId, refreshKey }: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const iframe = ref.current;
     if (!iframe) return;
-    iframe.srcdoc = buildSrcdoc(code, agentHttpBase);
-  }, [code, agentHttpBase, refreshKey]);
+    iframe.srcdoc = buildSrcdoc(code, agentHttpBase, canvasId);
+  }, [code, agentHttpBase, canvasId, refreshKey]);
 
   useEffect(() => {
     const rebuild = () => {
       const iframe = ref.current;
-      if (iframe) iframe.srcdoc = buildSrcdoc(code, agentHttpBase);
+      if (iframe) iframe.srcdoc = buildSrcdoc(code, agentHttpBase, canvasId);
     };
     window.addEventListener('themechange', rebuild);
     return () => window.removeEventListener('themechange', rebuild);
-  }, [code, agentHttpBase]);
+  }, [code, agentHttpBase, canvasId]);
 
   return (
     <iframe

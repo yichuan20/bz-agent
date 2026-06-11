@@ -6,18 +6,18 @@
       "widgetId": "clock",
       "kind": "clock",
       "title": "Clock",
-      "x": 15,
-      "y": 14,
-      "w": 830,
-      "h": 119
+      "x": 32,
+      "y": 24,
+      "w": 364,
+      "h": 189
     },
     {
       "canvasId": "gindop16afe",
       "widgetId": "kpi",
       "kind": "kpi",
       "title": "Key Figures",
-      "x": 11,
-      "y": 147,
+      "x": 416,
+      "y": 24,
       "w": 440,
       "h": 213
     },
@@ -26,8 +26,8 @@
       "widgetId": "pie",
       "kind": "pie",
       "title": "Pie Chart",
-      "x": 13,
-      "y": 374,
+      "x": 32,
+      "y": 553,
       "w": 315,
       "h": 238
     },
@@ -36,9 +36,9 @@
       "widgetId": "bar",
       "kind": "bar",
       "title": "Bar Chart",
-      "x": 465,
-      "y": 145,
-      "w": 534,
+      "x": 736,
+      "y": 251,
+      "w": 476,
       "h": 216
     },
     {
@@ -46,50 +46,60 @@
       "widgetId": "whiteboard",
       "kind": "whiteboard",
       "title": "Whiteboard",
-      "x": 346,
-      "y": 375,
+      "x": 381,
+      "y": 565,
       "w": 692,
       "h": 254
-    },
-    {
-      "canvasId": "2sp5dknzf4y",
-      "widgetId": "web-preview",
-      "kind": "web-preview",
-      "title": "Web Preview",
-      "x": 714,
-      "y": 654,
-      "w": 420,
-      "h": 360
     },
     {
       "canvasId": "b0pbcsy8jeb",
       "widgetId": "weather",
       "kind": "weather",
       "title": "Weather",
-      "x": 17,
-      "y": 627,
+      "x": 53,
+      "y": 805,
       "w": 300,
       "h": 320
-    },
-    {
-      "canvasId": "b3fxz9h2w3g",
-      "widgetId": "terminal",
-      "kind": "terminal",
-      "title": "Terminal",
-      "x": 1148,
-      "y": 643,
-      "w": 440,
-      "h": 340
     },
     {
       "canvasId": "pxt67bag73",
       "widgetId": "github",
       "kind": "github",
       "title": "GitHub",
-      "x": 340,
-      "y": 646,
+      "x": 24,
+      "y": 227,
       "w": 360,
-      "h": 360
+      "h": 312
+    },
+    {
+      "canvasId": "z11n7w2hkba",
+      "widgetId": "calendar",
+      "kind": "calendar",
+      "title": "Calendar",
+      "x": 372,
+      "y": 833,
+      "w": 280,
+      "h": 290
+    },
+    {
+      "canvasId": "f0qlpzxwxj",
+      "widgetId": "bar",
+      "kind": "bar",
+      "title": "Bar Chart",
+      "x": 666,
+      "y": 833,
+      "w": 380,
+      "h": 280
+    },
+    {
+      "canvasId": "uh1woovvg2",
+      "widgetId": "news",
+      "kind": "news",
+      "title": "News",
+      "x": 400,
+      "y": 251,
+      "w": 320,
+      "h": 300
     }
   ]
 }

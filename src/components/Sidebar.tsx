@@ -10,6 +10,7 @@
  */
 import {
   ChatCircleDotsIcon,
+  GearIcon,
   HouseSimpleIcon,
   SignOutIcon,
   TerminalIcon,
@@ -163,6 +164,50 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
         flexDirection: 'column',
         gap: 2,
       }}>
+        {/* Settings link */}
+        <Link
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          to={'/settings' as any}
+          style={{
+            display:     'flex',
+            alignItems:  'center',
+            gap:         8,
+            padding:     '8px 8px',
+            borderRadius: 8,
+            fontSize:    13,
+            fontWeight:  isActive('/settings', false) ? 500 : 400,
+            color:       isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
+            background:  isActive('/settings', false) ? 'var(--accent-blue)' : 'transparent',
+            textDecoration: 'none',
+            whiteSpace:  'nowrap',
+            transition:  'background 120ms ease, color 120ms ease',
+          }}
+          onMouseEnter={e => {
+            if (!isActive('/settings', false)) {
+              (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-tertiary)';
+              (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)';
+            }
+          }}
+          onMouseLeave={e => {
+            if (!isActive('/settings', false)) {
+              (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+              (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)';
+            }
+          }}
+        >
+          <span style={{
+            flexShrink: 0, width: 24, height: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 6,
+            background: isActive('/settings', false) ? 'rgba(255,255,255,0.18)' : 'var(--bg-tertiary)',
+            border: isActive('/settings', false) ? '1px solid rgba(255,255,255,0.12)' : '1px solid var(--border-primary)',
+            color: isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
+          }}>
+            <GearIcon size={14} weight={isActive('/settings', false) ? 'fill' : 'duotone'} />
+          </span>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>Settings</span>
+        </Link>
+
         {/* Collapse button */}
         {onCollapse && (
           <button

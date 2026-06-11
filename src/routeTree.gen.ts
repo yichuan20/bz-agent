@@ -9,14 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as MarketingRouteImport } from './routes/marketing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppProductsRouteImport } from './routes/_app/products'
 import { Route as AppFilesRouteImport } from './routes/_app/files'
 import { Route as AppChatRouteImport } from './routes/_app/chat'
 import { Route as AppAgentRouteImport } from './routes/_app/agent'
 
+const MarketingRoute = MarketingRouteImport.update({
+  id: '/marketing',
+  path: '/marketing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -29,6 +36,11 @@ const AppRouteRoute = AppRouteRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppProductsRoute = AppProductsRouteImport.update({
@@ -55,52 +67,84 @@ const AppAgentRoute = AppAgentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/marketing': typeof MarketingRoute
   '/agent': typeof AppAgentRoute
   '/chat': typeof AppChatRoute
   '/files': typeof AppFilesRoute
   '/products': typeof AppProductsRoute
+  '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/marketing': typeof MarketingRoute
   '/agent': typeof AppAgentRoute
   '/chat': typeof AppChatRoute
   '/files': typeof AppFilesRoute
   '/products': typeof AppProductsRoute
+  '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/marketing': typeof MarketingRoute
   '/_app/agent': typeof AppAgentRoute
   '/_app/chat': typeof AppChatRoute
   '/_app/files': typeof AppFilesRoute
   '/_app/products': typeof AppProductsRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/agent' | '/chat' | '/files' | '/products'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/marketing'
+    | '/agent'
+    | '/chat'
+    | '/files'
+    | '/products'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/agent' | '/chat' | '/files' | '/products' | '/'
+  to:
+    | '/login'
+    | '/marketing'
+    | '/agent'
+    | '/chat'
+    | '/files'
+    | '/products'
+    | '/settings'
+    | '/'
   id:
     | '__root__'
     | '/_app'
     | '/login'
+    | '/marketing'
     | '/_app/agent'
     | '/_app/chat'
     | '/_app/files'
     | '/_app/products'
+    | '/_app/settings'
     | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
+  MarketingRoute: typeof MarketingRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/marketing': {
+      id: '/marketing'
+      path: '/marketing'
+      fullPath: '/marketing'
+      preLoaderRoute: typeof MarketingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -120,6 +164,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/products': {
@@ -158,6 +209,7 @@ interface AppRouteRouteChildren {
   AppChatRoute: typeof AppChatRoute
   AppFilesRoute: typeof AppFilesRoute
   AppProductsRoute: typeof AppProductsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -166,6 +218,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppChatRoute: AppChatRoute,
   AppFilesRoute: AppFilesRoute,
   AppProductsRoute: AppProductsRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
@@ -176,6 +229,7 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   LoginRoute: LoginRoute,
+  MarketingRoute: MarketingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

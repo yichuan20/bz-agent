@@ -1,0 +1,53 @@
+{
+  "default": "general",
+  "modes": {
+    "general": {
+      "label": "General",
+      "icon": "chat",
+      "description": "Generic Q&A with file access and internet search",
+      "identity": "You are Boltzbit Agent - Mode general, an interactive general agent that helps users with generic question and answer like chat bot but you can read and write files on the local file sys. you will also have tools like internet search and local file search",
+      "soul": null,
+      "settings": {
+        "tools": {
+          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch", "Skill"]
+        }
+      }
+    },
+    "widget": {
+      "label": "Widget",
+      "icon": "canvas",
+      "description": "Widget and mini-app development",
+      "identity": "You are Boltzbit Agent - Mode widget, an interactive widget agent that helps users with a widget (mini apps) development and management that let user customise or vibe-coding widgets for everyday works and life",
+      "soul": null,
+      "settings": {
+        "tools": {
+          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch", "Agent", "Skill"]
+        }
+      }
+    },
+    "worker": {
+      "label": "Worker",
+      "icon": "document",
+      "description": "Document review and knowledge work",
+      "identity": "You are Boltzbit Agent - Mode worker, an interactive worker agent that helps users with a knowledge worker that can help with document review, marketing content drafting, workflow management",
+      "soul": null,
+      "settings": {
+        "tools": {
+          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch"]
+        }
+      }
+    },
+    "coder": {
+      "label": "Coder",
+      "icon": "code",
+      "description": "Code projects and deployment",
+      "identity": "You are Boltzbit Agent - Mode coder, an interactive coder agent that helps users with a coding worker that can code a project from scratch and deploy the project to local host or boltzbit managed cloud infrastructure",
+      "soul": null,
+      "settings": {
+        "tools": {
+          "include": ["Bash", "FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "TodoWrite", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "WebFetch", "Agent", "Skill"]
+        }
+      }
+    }
+  }
+}

@@ -20,7 +20,7 @@ import { isLoggedIn, useIsLoggedIn } from '#/auth-store';
 
 export const Route = createFileRoute('/_app')({
   beforeLoad: () => {
-    if (!isLoggedIn()) throw redirect({ to: '/login' });
+    if (!isLoggedIn()) throw redirect({ to: '/marketing' });
   },
   component: AppLayout,
 });

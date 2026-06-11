@@ -59,6 +59,56 @@ function relativeTime(ts: number) {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
+// ── Greeting pool ─────────────────────────────────────────────────────────────
+type GreetFn = (city?: string) => string;
+const GREETING_POOL: Record<'morning' | 'afternoon' | 'evening', GreetFn[]> = {
+  morning: [
+    c => `Good morning${c ? `, ${c}` : ''}.`,
+    c => `Rise and code${c ? `, ${c}` : ''}.`,
+    _ => `Morning. What's on the build list?`,
+    _ => `Early start. Let's ship something.`,
+    c => `${c ? `${c} mornings hit different.` : `Fresh morning, fresh code.`}`,
+  ],
+  afternoon: [
+    c => `Good afternoon${c ? `, ${c}` : ''}.`,
+    c => `Afternoon push${c ? ` in ${c}` : ''}. Let's go.`,
+    _ => `Halfway through the day. What's next?`,
+    _ => `Good afternoon. Ready to ship?`,
+    c => `${c ? `Coding from ${c} this afternoon.` : `Afternoon session. Let's build.`}`,
+  ],
+  evening: [
+    c => `Good evening${c ? `, ${c}` : ''}.`,
+    c => `Evening session${c ? ` in ${c}` : ''}. Let's code.`,
+    _ => `One more feature before bed?`,
+    _ => `Good evening. What are we building?`,
+    c => `${c ? `Late night in ${c}.` : `Burning the midnight oil?`}`,
+  ],
+};
+
+const HINTS = [
+  'Select multiple projects and send a message to all of them at once',
+  'Pin a default conversation per project with ★ in the conversations panel',
+  '/compact summarises long sessions to free up context',
+  'YOLO mode auto-approves all tool requests — great for automation',
+  'Press Enter to send, Shift+Enter for a new line',
+  'Sessions are saved automatically and resume exactly where you left off',
+  '/help shows all available slash commands and skills',
+  'Click a project card to open its most recent conversation',
+  'Search projects by name, path, or last message',
+  '/push deploys your app to BoltzHub with one command',
+];
+
+function getTimeSlot(): 'morning' | 'afternoon' | 'evening' {
+  const h = new Date().getHours();
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  return 'evening';
+}
+
+function safeLocalStorage(key: string): string {
+  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
+}
+
 function Home() {
   const navigate = useNavigate();
   const [sessions,    setSessions]    = useState<SessionInfo[]>([]);
@@ -68,7 +118,99 @@ function Home() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatDir,  setNewChatDir]  = useState('');
   const [batch,       setBatch]       = useState<BatchState | null>(null);
-  const [showAllQueries, setShowAllQueries] = useState(false);
+  const [showAllQueries,  setShowAllQueries]  = useState(false);
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const [tokens24h,       setTokens24h]       = useState<number | null>(null);
+  const PROJECT_LIMIT = 6;
+
+  // ── Entry animation ──────────────────────────────────────────────────────────
+  const [animPhase,   setAnimPhase]   = useState<0 | 1 | 2>(0);
+  const [greetText,   setGreetText]   = useState('');
+  const [greetDone,   setGreetDone]   = useState(false);
+  const [hintIdx,     setHintIdx]     = useState(() => Math.floor(Math.random() * HINTS.length));
+  const [hintVisible, setHintVisible] = useState(false);
+
+  // Compute greeting once on mount using cached city + random pool entry
+  const [GREETING] = useState<string>(() => {
+    const city = safeLocalStorage('bz-user-city');
+    const slot  = getTimeSlot();
+    const pool  = GREETING_POOL[slot];
+    const fn    = pool[Math.floor(Math.random() * pool.length)]!;
+    return fn(city || undefined);
+  });
+
+  // Typewriter: 44 ms/char
+  useEffect(() => {
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setGreetText(GREETING.slice(0, i));
+      if (i >= GREETING.length) { clearInterval(id); setGreetDone(true); }
+    }, 44);
+    return () => clearInterval(id);
+  }, [GREETING]);
+
+  // Hint appears 200 ms after typing finishes
+  useEffect(() => {
+    if (!greetDone) return;
+    const t = setTimeout(() => setHintVisible(true), 200);
+    return () => clearTimeout(t);
+  }, [greetDone]);
+
+  // Hint rotates every 10 s with a fade transition
+  useEffect(() => {
+    const id = setInterval(() => {
+      setHintVisible(false);
+      setTimeout(() => {
+        setHintIdx(prev => (prev + 1) % HINTS.length);
+        setHintVisible(true);
+      }, 350);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Background geolocation — updates city for next visit
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const r = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client` +
+            `?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&localityLanguage=en`
+          );
+          const d = await r.json() as { city?: string; locality?: string };
+          const c = d.city || d.locality || '';
+          if (c) { try { localStorage.setItem('bz-user-city', c); } catch {} }
+        } catch { /* ignore */ }
+      },
+      () => { /* permission denied — silent */ },
+      { timeout: 8000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, []);
+
+  // Phase gates: prompt at 820 ms, content at 1 350 ms
+  useEffect(() => {
+    const t1 = setTimeout(() => setAnimPhase(1), 820);
+    const t2 = setTimeout(() => setAnimPhase(2), 1350);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // Poll local token counter (accumulated from bzcode result messages)
+  useEffect(() => {
+    function load() {
+      fetch(`${HTTP_BASE}/token-stats`)
+        .then(r => r.ok ? r.json() : null)
+        .then((d: { total?: number } | null) => {
+          if (d && typeof d.total === 'number') setTokens24h(d.total);
+        })
+        .catch(() => null);
+    }
+    load();
+    const id = setInterval(load, 15_000); // refresh every 15 s
+    return () => clearInterval(id);
+  }, []);
+
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const newChatRef   = useRef<HTMLInputElement>(null);
   const batchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -189,19 +331,32 @@ function Home() {
 
       {/* ── Top bar ── */}
       <div className="home-top">
-        <div className="home-brand">
-          <h1 className="home-brand-title">BoltzAgent</h1>
-          <p className="home-brand-sub">AI coding assistant — one session per project</p>
+        <div className="home-brand-area">
+          {/* Typewriter greeting */}
+          <div className="home-greeting-wrap">
+            <span className="home-greeting-text">{greetText}</span>
+            {!greetDone
+              ? <span className="home-greeting-cursor" />
+              : animPhase < 1 && <span className="home-greeting-cursor home-greeting-cursor--done" />
+            }
+          </div>
+          {/* Rotating hint — appears after typing, fades every 10 s */}
+          <p className={`home-hint${hintVisible ? ' home-hint--visible' : ''}`}>
+            <span className="home-hint-arrow">→</span>
+            {HINTS[hintIdx]}
+          </p>
         </div>
-        <div className="home-stats">
+        {/* Stats fade in with prompt at phase 1 */}
+        <div className={`home-stats${animPhase >= 1 ? ' home-stats--visible' : ''}`}>
           <div className="home-stat"><span className="home-stat-value">{formatNum(sessions.length)}</span><span className="home-stat-label">Projects</span></div>
           {activeCount > 0 && <div className="home-stat home-stat--active"><span className="home-stat-value">{activeCount}</span><span className="home-stat-label">Running</span></div>}
           <div className="home-stat"><span className="home-stat-value">{formatNum(totalMsgs)}</span><span className="home-stat-label">Messages</span></div>
+          {tokens24h !== null && <div className="home-stat"><span className="home-stat-value">{formatNum(tokens24h)}</span><span className="home-stat-label">Tokens</span></div>}
         </div>
       </div>
 
-      {/* ── Prompt window ── */}
-      <div className="home-prompt-box">
+      {/* ── Prompt window — slides up at phase 1 ── */}
+      <div className={`home-prompt-box${animPhase >= 1 ? ' home-prompt-enter' : ' home-prompt-pre'}`}>
         <textarea
           ref={textareaRef}
           className="home-prompt-textarea"
@@ -233,8 +388,8 @@ function Home() {
 
       </div>{/* end home-sticky */}
 
-      {/* ── Scrollable body ── */}
-      <div className="home-scroll">
+      {/* ── Scrollable body — reveals at phase 2 ── */}
+      <div className={`home-scroll${animPhase >= 2 ? ' home-scroll--visible' : ' home-scroll--hidden'}`}>
 
       {/* ── Recent queries ── */}
       {sessions.length > 0 && (() => {
@@ -338,53 +493,65 @@ function Home() {
           {filtered.length === 0 ? (
             <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', padding: '12px 0' }}>No projects match "{search}"</p>
           ) : (
-            <div className="home-project-grid">
-              {filtered.map(s => {
-                const isSelected = selected.has(s.workingDir);
-                return (
-                  <div
-                    key={s.sessionId}
-                    className={`home-project-card${isSelected ? ' home-project-card--selected' : ''}${s.isRunning ? ' home-project-card--active' : ''}`}
-                    onClick={() => { const sid = resolveSession(s.workingDir); void navigate({ to: '/agent', search: { cwd: s.workingDir, ...(sid ? { sessionId: sid } : {}) } }); }}
-                  >
-                    {/* Checkbox */}
-                    <button
-                      type="button"
-                      className="home-project-check"
-                      onClick={e => { e.stopPropagation(); toggleSelect(s.workingDir); }}
-                      title={isSelected ? 'Deselect' : 'Select'}
+            <>
+              <div className="home-project-grid">
+                {(showAllProjects || search ? filtered : filtered.slice(0, PROJECT_LIMIT)).map(s => {
+                  const isSelected = selected.has(s.workingDir);
+                  return (
+                    <div
+                      key={s.sessionId}
+                      className={`home-project-card${isSelected ? ' home-project-card--selected' : ''}${s.isRunning ? ' home-project-card--active' : ''}`}
+                      onClick={() => { const sid = resolveSession(s.workingDir); void navigate({ to: '/agent', search: { cwd: s.workingDir, ...(sid ? { sessionId: sid } : {}) } }); }}
                     >
-                      {isSelected
-                        ? <CheckSquareIcon size={14} color="var(--accent-blue)" weight="fill" />
-                        : <SquareIcon size={14} color="var(--text-tertiary)" />
-                      }
-                    </button>
-
-                    <div className="home-project-body">
-                      <div className="home-project-card-top">
-                        <FolderOpenIcon size={13} color={s.isRunning ? 'var(--accent-green)' : 'var(--accent-blue)'} weight="duotone" />
-                        <span className="home-project-name">{s.dirName}</span>
-                        {s.isRunning && (
-                          <span className="home-running-tag">
-                            <SpinnerIcon size={9} className="home-running-spin" />
-                            Running
-                          </span>
+                      <button
+                        type="button"
+                        className="home-project-check"
+                        onClick={e => { e.stopPropagation(); toggleSelect(s.workingDir); }}
+                        title={isSelected ? 'Deselect' : 'Select'}
+                      >
+                        {isSelected
+                          ? <CheckSquareIcon size={14} color="var(--accent-blue)" weight="fill" />
+                          : <SquareIcon size={14} color="var(--text-tertiary)" />
+                        }
+                      </button>
+                      <div className="home-project-body">
+                        <div className="home-project-card-top">
+                          <FolderOpenIcon size={13} color={s.isRunning ? 'var(--accent-green)' : 'var(--accent-blue)'} weight="duotone" />
+                          <span className="home-project-name">{s.dirName}</span>
+                          {s.isRunning && (
+                            <span className="home-running-tag">
+                              <SpinnerIcon size={9} className="home-running-spin" />
+                              Running
+                            </span>
+                          )}
+                          <span className="home-project-time">{relativeTime(s.lastModified)}</span>
+                        </div>
+                        <div className="home-project-path" title={s.workingDir}>{s.workingDir}</div>
+                        {s.title && s.title !== '(empty)' && (
+                          <div className="home-project-preview">{s.title}</div>
                         )}
-                        <span className="home-project-time">{relativeTime(s.lastModified)}</span>
-                      </div>
-                      <div className="home-project-path" title={s.workingDir}>{s.workingDir}</div>
-                      {s.title && s.title !== '(empty)' && (
-                        <div className="home-project-preview">{s.title}</div>
-                      )}
-                      <div className="home-project-meta">
-                        <TerminalIcon size={10} />
-                        {s.messageCount} message{s.messageCount !== 1 ? 's' : ''}
+                        <div className="home-project-meta">
+                          <TerminalIcon size={10} />
+                          {s.messageCount} message{s.messageCount !== 1 ? 's' : ''}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              {!search && filtered.length > PROJECT_LIMIT && (
+                <button
+                  type="button"
+                  className="home-rq-expand"
+                  onClick={() => setShowAllProjects(v => !v)}
+                >
+                  {showAllProjects
+                    ? 'Show less'
+                    : `Show ${filtered.length - PROJECT_LIMIT} more project${filtered.length - PROJECT_LIMIT !== 1 ? 's' : ''}`
+                  }
+                </button>
+              )}
+            </>
           )}
         </section>
       )}

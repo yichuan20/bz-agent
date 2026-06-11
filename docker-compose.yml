@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bz-agent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       bz_agent
+      POSTGRES_USER:     bz_agent
+      POSTGRES_PASSWORD: bz_agent_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bz_agent -d bz_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+    name: bz-agent-postgres-data

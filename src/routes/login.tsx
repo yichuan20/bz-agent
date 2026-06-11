@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { setAccessToken, useIsLoggedIn } from '#/auth-store';
 import { BoltzbitLogo } from '#/components/BoltzbitLogo';
 import ThemeToggle from '#/components/ThemeToggle';
+import { CubeGridBackground } from '#/components/CubeGridBackground';
 
 export const Route = createFileRoute('/login')({
   component: Login,
@@ -53,121 +54,6 @@ async function pushBzcodeCredentials(
   }
 }
 
-// Canvas-based cube grid animation — matches the screenshot style.
-// A dense grid of small rounded squares with an organic interference-wave pattern.
-// Colors are read from CSS custom properties so they adapt to light/dark mode.
-function CubeGridBackground() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Capture as non-null for use inside nested closures
-    const cv  = canvas as HTMLCanvasElement;
-    const c2d = ctx    as CanvasRenderingContext2D;
-
-    const CELL = 8;
-    const GAP  = 2;
-    const STEP = CELL + GAP;
-
-    let animId: number;
-    let t = 0;
-
-    function resize() {
-      cv.width  = cv.offsetWidth;
-      cv.height = cv.offsetHeight;
-    }
-    resize();
-
-    const ro = new ResizeObserver(resize);
-    ro.observe(cv);
-
-    const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
-    const token  = (name: string) =>
-      getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-    function draw() {
-      const dark = isDark();
-      const cols = Math.ceil(cv.width  / STEP) + 1;
-      const rows = Math.ceil(cv.height / STEP) + 1;
-
-      c2d.fillStyle = token('--bg-secondary') || (dark ? '#000' : '#E8E2D7');
-      c2d.fillRect(0, 0, cv.width, cv.height);
-
-      // Use a muted colour so the grid stays in the background
-      const accent = token('--text-tertiary') || (dark ? '#555' : '#9E9488');
-
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          // ── Domain warping (Inigo Quilez technique) ──────────────────────
-          // Layer 1 — compute a warp displacement field from raw grid coords.
-          // Two independent warp axes move in opposite temporal directions,
-          // which creates regions that flow and swirl against each other.
-          const wx =
-            Math.sin(col * 0.11 + row * 0.08 + t * 0.55) * 14 +
-            Math.cos(col * 0.07 - row * 0.13 - t * 0.40) *  8;
-          const wy =
-            Math.cos(col * 0.09 + row * 0.12 - t * 0.48) * 14 +
-            Math.sin(col * 0.14 - row * 0.06 + t * 0.35) *  8;
-
-          // Layer 2 — warp the warp (double domain warp = cloud turbulence)
-          const wc = col + wx;
-          const wr = row + wy;
-          const wx2 =
-            Math.sin(wc * 0.10 + wr * 0.07 + t * 0.60) * 7 +
-            Math.cos(wc * 0.06 - wr * 0.10 - t * 0.45) * 4;
-          const wy2 =
-            Math.cos(wc * 0.08 + wr * 0.11 - t * 0.52) * 7 +
-            Math.sin(wc * 0.12 - wr * 0.05 + t * 0.38) * 4;
-
-          // Layer 3 — evaluate the brightness at doubly-warped coordinates.
-          // Multiple scales create fBm-like cloud texture.
-          const fc = wc + wx2;
-          const fr = wr + wy2;
-          const wave =
-            Math.sin(fc * 0.13 + fr * 0.10 + t * 0.50) * 0.50 +
-            Math.sin(fc * 0.26 - fr * 0.20 - t * 0.65) * 0.28 +
-            Math.cos(fc * 0.19 + fr * 0.23 + t * 0.42) * 0.16 +
-            Math.sin(fc * 0.38 - fr * 0.31 - t * 0.55) * 0.09;
-
-          // Normalise and apply contrast curve — only peaks glow brightly
-          const norm   = (wave + 1.03) / 2.06;
-          const curved = Math.max(0, norm) ** 2.8;
-
-          c2d.globalAlpha = dark ? curved * 0.32 + 0.02 : curved * 0.20 + 0.02;
-          c2d.fillStyle   = accent;
-
-          c2d.beginPath();
-          c2d.roundRect(col * STEP, row * STEP, CELL, CELL, 2);
-          c2d.fill();
-        }
-      }
-
-      c2d.globalAlpha = 1;
-      t += 0.006; // doubled speed — ~18 s per full cycle
-      animId = requestAnimationFrame(draw);
-    }
-
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animId);
-      ro.disconnect();
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%',
-               pointerEvents: 'none', zIndex: 0 }}
-    />
-  );
-}
 
 function Login() {
   const navigate = useNavigate();

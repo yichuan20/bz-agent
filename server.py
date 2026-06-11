@@ -30,6 +30,76 @@ try:
 except ImportError:
     sys.exit("Missing dependency: pip install aiohttp")
 
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None  # type: ignore[assignment]
+
+# ── Agent mode configuration ──────────────────────────────────────────────────
+# agent_modes.json lives next to server.py. Re-read on every connection so
+# edits take effect without a server restart.
+
+_MODES_CONFIG_FILE = Path(__file__).parent / "agent_modes.json"
+
+def _load_mode_config() -> dict:
+    try:
+        return json.loads(_MODES_CONFIG_FILE.read_text())
+    except Exception:
+        return {"default": "general", "modes": {}}
+
+def _mode_entry(mode: str) -> dict:
+    cfg = _load_mode_config()
+    modes = cfg.get("modes", {})
+    return modes.get(mode) or modes.get(cfg.get("default", "general"), {}) or {}
+
+def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> None:
+    """Write IDENTITY.md, SOUL.md, settings.json, and meta.json into the session
+    config directory before spawning bzcode.  bzcode picks these up at startup and
+    on every --resume, so they are re-applied on reconnect too.
+    meta.json is our own metadata (not read by bzcode) used by _read_session_file."""
+    entry = _mode_entry(mode)
+    cfg_dir = SESSIONS_DIR / session_id
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+
+    # Our own metadata — used by _read_session_file since new bzcode no longer
+    # writes a session header line into the .jsonl
+    meta = {"sessionId": session_id, "workingDir": working_dir, "mode": mode}
+    (cfg_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+    # IDENTITY.md — who the agent is
+    identity = entry.get("identity", "")
+    if identity:
+        (cfg_dir / "IDENTITY.md").write_text(f"# Identity\n\n{identity}\n", encoding="utf-8")
+    else:
+        # Remove stale config from a previous mode
+        (cfg_dir / "IDENTITY.md").unlink(missing_ok=True)
+
+    # SOUL.md — how the agent behaves (optional, falls back to project/user default)
+    soul = entry.get("soul")
+    if soul:
+        (cfg_dir / "SOUL.md").write_text(soul, encoding="utf-8")
+    else:
+        (cfg_dir / "SOUL.md").unlink(missing_ok=True)
+
+    # settings.json — tools, model, permissions, etc.
+    settings = entry.get("settings")
+    if settings:
+        (cfg_dir / "settings.json").write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    else:
+        (cfg_dir / "settings.json").unlink(missing_ok=True)
+
+
+# ── Database configuration ────────────────────────────────────────────────────
+# Override any of these with environment variables:
+#   export BZ_DB_HOST=localhost BZ_DB_PORT=5432 BZ_DB_NAME=bz_agent ...
+DB_CONFIG = {
+    "host":     os.environ.get("BZ_DB_HOST",     "localhost"),
+    "port":     int(os.environ.get("BZ_DB_PORT", "5432")),
+    "database": os.environ.get("BZ_DB_NAME",     "bz_agent"),
+    "user":     os.environ.get("BZ_DB_USER",     "bz_agent"),
+    "password": os.environ.get("BZ_DB_PASSWORD", "bz_agent_secret"),
+}
+
 # Bzcode session files (written by bzcode itself — location is fixed)
 SESSIONS_DIR  = Path.home() / ".boltzbit" / "sessions"
 
@@ -39,6 +109,16 @@ _active_cwds  = set()  # type: ignore[var-annotated]
 _running_cwds = set()  # type: ignore[var-annotated]
 _TITLES_FILE   = SESSIONS_DIR / "_titles.json"
 _DEFAULTS_FILE = SESSIONS_DIR / "_defaults.json"  # cwd -> sessionId
+
+# Accumulated token usage since server start (counts every result message)
+_token_stats: dict = {"input": 0, "output": 0, "total": 0}
+
+def _add_tokens(usage: dict) -> None:
+    inp = int(usage.get("inputTokens", 0) or 0)
+    out = int(usage.get("outputTokens", 0) or 0)
+    _token_stats["input"]  += inp
+    _token_stats["output"] += out
+    _token_stats["total"]  += inp + out
 
 
 def _load_titles() -> dict:
@@ -80,22 +160,53 @@ SERVER_DATA_DIR = Path(__file__).parent / "server_data"
 # ── Session reader ────────────────────────────────────────────────────────────
 
 def _read_session_file(path: Path) -> Optional[dict]:
-    """Parse a session JSONL and return metadata. Returns None on any error."""
+    """Parse a session JSONL and return metadata.  Handles two formats:
+
+    Old format (bzcode < new version):
+      Line 0: {"type": "session", "sessionId": "...", "workingDir": "..."}
+      Lines 1+: message objects
+
+    New format (bzcode >= new version):
+      No header — messages start on line 0.
+      workingDir/sessionId are read from {sessionId}/meta.json written by us.
+    """
     try:
         with open(path, encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip()]
         if not lines:
             return None
 
-        header = json.loads(lines[0])
-        if header.get("type") != "session":
-            return None
+        # Detect format from first line
+        first = json.loads(lines[0])
+        session_id  = path.stem
+        working_dir = ""
+        created     = ""
 
-        # Walk messages to get title (first user msg) and preview (last user msg)
+        if first.get("type") == "session":
+            # ── Old format: first line is the session header ──────────────────
+            working_dir = first.get("workingDir", "")
+            session_id  = first.get("sessionId", path.stem)
+            created     = first.get("created", "")
+            msg_lines   = lines[1:]
+        else:
+            # ── New format: no header, look up our meta.json ──────────────────
+            meta_file = SESSIONS_DIR / session_id / "meta.json"
+            if meta_file.exists():
+                try:
+                    meta        = json.loads(meta_file.read_text())
+                    working_dir = meta.get("workingDir", "")
+                    session_id  = meta.get("sessionId", session_id)
+                except Exception:
+                    pass
+            if not working_dir:
+                return None   # can't place this session in any project
+            msg_lines = lines
+
+        # Walk messages to extract title and last preview
         title        = ""
         last_preview = ""
         msg_count    = 0
-        for line in lines[1:]:
+        for line in msg_lines:
             try:
                 msg = json.loads(line)
                 if msg.get("role") == "user":
@@ -116,10 +227,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
             except json.JSONDecodeError:
                 pass
 
-        stat        = path.stat()
-        working_dir = header.get("workingDir", "")
-
-        session_id    = header.get("sessionId", path.stem)
+        stat          = path.stat()
         custom_titles = _load_titles()
         return {
             "sessionId":    session_id,
@@ -129,7 +237,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
             "title":        custom_titles.get(session_id) or title or "(empty)",
             "lastMessage":  last_preview,
             "lastModified": stat.st_mtime,
-            "created":      header.get("created", ""),
+            "created":      created,
         }
     except Exception:
         return None
@@ -139,7 +247,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "*",
 }
 
@@ -569,21 +677,32 @@ async def handle_seed_widgets(request: web.Request) -> web.Response:
 
     for w in incoming:
         wid = w.get("id", "")
-        if not wid or wid in existing_ids:
+        if not wid:
             continue
         code = w.pop("code", "")  # extract before storing metadata
-        entry = {
-            **w,
-            "id":        wid,
-            "isBuiltin": True,
-            "archived":  False,
-            "createdAt": now,
-            "updatedAt": now,
-        }
-        widgets.append(entry)
-        existing_ids.add(wid)
-        _save_code(wid, code)
-        seeded += 1
+        if wid in existing_ids:
+            # Built-in widgets are always updated from the registry — this ensures
+            # changes to widgetRegistry.ts are reflected immediately on next load.
+            # User-created custom widgets (isBuiltin=False) are never overwritten here.
+            idx = next(i for i, x in enumerate(widgets) if x["id"] == wid)
+            if not widgets[idx].get("isBuiltin", False):
+                continue  # preserve user-edited custom widgets
+            widgets[idx] = {**widgets[idx], **w, "updatedAt": now}
+            _save_code(wid, code)
+            seeded += 1
+        else:
+            entry = {
+                **w,
+                "id":        wid,
+                "isBuiltin": True,
+                "archived":  False,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            widgets.append(entry)
+            existing_ids.add(wid)
+            _save_code(wid, code)
+            seeded += 1
 
     data["widgets"] = widgets
     _save_index(data)
@@ -1382,6 +1501,8 @@ class _BatchItem:
                 elif t == "result":
                     if msg.get("output"):
                         self._buf.append(msg["output"])
+                    if msg.get("usage"):
+                        _add_tokens(msg["usage"])
                 elif t == "status" and msg.get("status") == "idle":
                     # Only complete after the user message has been sent —
                     # ignores startup auto-run idle that arrives before our message
@@ -1389,6 +1510,307 @@ class _BatchItem:
                         self._done.set()
             except Exception:
                 pass
+
+
+async def handle_token_stats(request: web.Request) -> web.Response:
+    """GET /token-stats — accumulated token usage since server start."""
+    return web.json_response(_token_stats, headers=CORS_HEADERS)
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+async def handle_settings_resources(request: web.Request) -> web.Response:
+    """GET /settings/resources — disk usage for sessions and server data."""
+    import shutil as _shutil
+
+    session_count = 0
+    session_bytes = 0
+    if SESSIONS_DIR.exists():
+        for f in SESSIONS_DIR.glob("*.jsonl"):
+            try:
+                session_bytes += f.stat().st_size
+                session_count += 1
+            except Exception:
+                pass
+
+    server_data_bytes = 0
+    if SERVER_DATA_DIR.exists():
+        for f in SERVER_DATA_DIR.rglob("*"):
+            try:
+                if f.is_file():
+                    server_data_bytes += f.stat().st_size
+            except Exception:
+                pass
+
+    try:
+        disk = _shutil.disk_usage(Path.home())
+        disk_info = {"total": disk.total, "used": disk.used, "free": disk.free}
+    except Exception:
+        disk_info = {"total": 0, "used": 0, "free": 0}
+
+    return web.json_response({
+        "sessions": {"count": session_count, "bytes": session_bytes},
+        "serverData": {"bytes": server_data_bytes},
+        "disk": disk_info,
+    }, headers=CORS_HEADERS)
+
+
+async def handle_settings_clear_sessions(request: web.Request) -> web.Response:
+    """DELETE /settings/sessions/clear?olderThanDays=N — remove old session files."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    days = max(1, int(request.query.get("olderThanDays", "30")))
+    cutoff = __import__("time").time() - days * 86_400
+    deleted = 0
+    if SESSIONS_DIR.exists():
+        for f in SESSIONS_DIR.glob("*.jsonl"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    deleted += 1
+            except Exception:
+                pass
+    return web.json_response({"deleted": deleted}, headers=CORS_HEADERS)
+
+
+# ── Database health ───────────────────────────────────────────────────────────
+
+async def handle_db_health(request: web.Request) -> web.Response:
+    """GET /db/health — ping the Postgres pool; returns connection status."""
+    pool = request.app.get("db")
+    if pool is None:
+        return web.json_response(
+            {"ok": False, "error": "asyncpg not installed or DB disabled"},
+            status=503, headers=CORS_HEADERS,
+        )
+    try:
+        async with pool.acquire() as conn:
+            version = await conn.fetchval("SELECT version()")
+        return web.json_response({"ok": True, "version": version}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response(
+            {"ok": False, "error": str(exc)}, status=503, headers=CORS_HEADERS,
+        )
+
+
+# ── Widget data (file-based) ──────────────────────────────────────────────────
+# Each widget placement stores its records in a single JSON file.
+# Complex queries are handled by executing a Python snippet server-side —
+# this is intentional: widgets are vibe-coded through bzcode, not hand-injected.
+#
+# File location: server_data/widget_data/{canvasId}.json
+# File format:   { "_next_id": N, "records": [{id, created_at, ...}, ...] }
+
+import re as _re
+import threading as _threading
+
+_CANVAS_ID_RE = _re.compile(r'^[a-z0-9]{4,32}$')
+WIDGET_DATA_DIR = SERVER_DATA_DIR / "widget_data"
+_widget_locks: dict = {}   # per-canvasId write locks
+_widget_locks_meta = _threading.Lock()
+
+
+def _widget_lock(canvas_id: str) -> _threading.Lock:
+    with _widget_locks_meta:
+        if canvas_id not in _widget_locks:
+            _widget_locks[canvas_id] = _threading.Lock()
+        return _widget_locks[canvas_id]
+
+
+def _widget_path(canvas_id: str) -> Path:
+    if not _CANVAS_ID_RE.match(canvas_id):
+        raise ValueError(f"Invalid canvasId: {canvas_id!r}")
+    WIDGET_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return WIDGET_DATA_DIR / f"{canvas_id}.json"
+
+
+def _widget_load(canvas_id: str) -> dict:
+    p = _widget_path(canvas_id)
+    if not p.exists():
+        return {"_next_id": 1, "records": []}
+    with open(p) as f:
+        return json.load(f)
+
+
+def _widget_save(canvas_id: str, data: dict) -> None:
+    p = _widget_path(canvas_id)
+    with open(p, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+_WIDGET_CORS = {"Access-Control-Allow-Origin": "*"}
+
+
+def _wj(data: object, status: int = 200) -> web.Response:
+    return web.Response(
+        text=json.dumps(data, default=str),
+        status=status,
+        content_type="application/json",
+        headers=_WIDGET_CORS,
+    )
+
+
+async def handle_widget_query(request: web.Request) -> web.Response:
+    """GET /db/widget/{canvasId}/rows — return all records, optional sort/limit."""
+    try:
+        cid     = request.match_info["canvasId"]
+        data    = _widget_load(cid)
+        records = data["records"]
+        order   = request.query.get("order", "id")
+        desc    = request.query.get("dir", "asc").upper() == "DESC"
+        limit   = min(int(request.query.get("limit", "1000")), 10000)
+        offset  = int(request.query.get("offset", "0"))
+        for f in request.query.getall("filter", []):
+            if "=" not in f: continue
+            k, _, v = f.partition("=")
+            records = [r for r in records if str(r.get(k, "")) == v]
+        records = sorted(records, key=lambda r: r.get(order, 0), reverse=desc)
+        page    = records[offset: offset + limit]
+        return _wj({"rows": page, "total": len(records), "limit": limit, "offset": offset})
+    except Exception as exc:
+        return _wj({"error": str(exc)}, 400)
+
+
+async def handle_widget_insert(request: web.Request) -> web.Response:
+    """POST /db/widget/{canvasId}/rows  Body: { row } or { rows: [...] }"""
+    if request.method == "OPTIONS":
+        return web.Response(headers={**_WIDGET_CORS,
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*"})
+    try:
+        import datetime as _dt
+        cid  = request.match_info["canvasId"]
+        body = await request.json()
+        rows = body.get("rows") or ([body["row"]] if "row" in body else [])
+        if not rows:
+            return _wj({"error": "Provide 'row' or 'rows'"}, 400)
+        with _widget_lock(cid):
+            data = _widget_load(cid)
+            inserted = []
+            for row in rows:
+                row = {k: v for k, v in row.items() if k not in ("id", "created_at")}
+                row["id"] = data["_next_id"]
+                row["created_at"] = _dt.datetime.utcnow().isoformat() + "Z"
+                data["_next_id"] += 1
+                data["records"].append(row)
+                inserted.append(row)
+            _widget_save(cid, data)
+        return _wj({"inserted": inserted})
+    except Exception as exc:
+        return _wj({"error": str(exc)}, 400)
+
+
+async def handle_widget_update(request: web.Request) -> web.Response:
+    """PUT /db/widget/{canvasId}/rows/{id}  Body: { data: {...} }"""
+    if request.method == "OPTIONS":
+        return web.Response(headers={**_WIDGET_CORS,
+            "Access-Control-Allow-Methods": "PUT, OPTIONS",
+            "Access-Control-Allow-Headers": "*"})
+    try:
+        cid    = request.match_info["canvasId"]
+        row_id = int(request.match_info["id"])
+        body   = await request.json()
+        patch  = {k: v for k, v in body.get("data", {}).items()
+                  if k not in ("id", "created_at")}
+        if not patch:
+            return _wj({"error": "'data' required"}, 400)
+        with _widget_lock(cid):
+            data = _widget_load(cid)
+            for r in data["records"]:
+                if r.get("id") == row_id:
+                    r.update(patch)
+                    _widget_save(cid, data)
+                    return _wj({"updated": r})
+        return _wj({"error": "Row not found"}, 404)
+    except Exception as exc:
+        return _wj({"error": str(exc)}, 400)
+
+
+async def handle_widget_delete(request: web.Request) -> web.Response:
+    """DELETE /db/widget/{canvasId}/rows/{id}"""
+    try:
+        cid    = request.match_info["canvasId"]
+        row_id = int(request.match_info["id"])
+        with _widget_lock(cid):
+            data    = _widget_load(cid)
+            before  = len(data["records"])
+            data["records"] = [r for r in data["records"] if r.get("id") != row_id]
+            if len(data["records"]) == before:
+                return _wj({"error": "Row not found"}, 404)
+            _widget_save(cid, data)
+        return _wj({"deleted": row_id})
+    except Exception as exc:
+        return _wj({"error": str(exc)}, 400)
+
+
+async def handle_widget_exec(request: web.Request) -> web.Response:
+    """
+    POST /db/widget/{canvasId}/exec
+    Body: { "code": "python snippet" }
+
+    The snippet runs with `records` (list of dicts) in scope.
+    Set `result` to whatever you want returned.
+
+    Example:
+        total = sum(r['value'] for r in records)
+        result = {'total': total, 'avg': total / len(records) if records else 0}
+    """
+    if request.method == "OPTIONS":
+        return web.Response(headers={**_WIDGET_CORS,
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*"})
+    try:
+        cid  = request.match_info["canvasId"]
+        body = await request.json()
+        code = body.get("code", "").strip()
+        if not code:
+            return _wj({"error": "'code' is required"}, 400)
+        data    = _widget_load(cid)
+        ns      = {"records": data["records"], "result": None}
+        exec(compile(code, "<widget-exec>", "exec"), ns)  # nosec — intentional by design
+        return _wj({"result": ns.get("result")})
+    except Exception as exc:
+        return _wj({"error": str(exc)}, 400)
+
+
+# ── Agent mode + file endpoints ───────────────────────────────────────────────
+
+async def handle_agent_modes(request: web.Request) -> web.Response:
+    """GET /agent-modes — return the full mode config so the frontend can read labels/descriptions."""
+    return web.json_response(_load_mode_config(), headers=CORS_HEADERS)
+
+
+async def handle_read_file(request: web.Request) -> web.Response:
+    """GET /api/file?path=<abs> — read a file's content as text."""
+    path_str = request.query.get("path", "").strip()
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists() or not p.is_file():
+        return web.json_response({"error": "file not found"}, status=404, headers=CORS_HEADERS)
+    try:
+        content = p.read_text(errors="replace")
+        return web.json_response({"path": str(p), "content": content}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_write_file(request: web.Request) -> web.Response:
+    """PUT /api/file { path, content } — write text content to a file."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body     = await request.json()
+        path_str = str(body.get("path", "")).strip()
+        content  = str(body.get("content", ""))
+        if not path_str:
+            return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+        p = Path(path_str)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return web.json_response({"ok": True, "path": str(p)}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
 async def handle_batch_run(request: web.Request) -> web.Response:
@@ -1431,6 +1853,33 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "") -> web.Applicati
     app = web.Application()
     app["bzcode_path"] = bzcode_path
     app["default_cwd"] = default_cwd
+    app["db"] = None  # filled by on_startup if asyncpg is available
+
+    # ── DB pool lifecycle ─────────────────────────────────────────────────────
+    async def _on_startup(application: web.Application) -> None:
+        if asyncpg is None:
+            print("[db] asyncpg not installed — Postgres disabled", file=sys.stderr)
+            return
+        try:
+            pool = await asyncpg.create_pool(**DB_CONFIG, min_size=2, max_size=10)
+            application["db"] = pool
+            print(
+                f"[db] connected  host={DB_CONFIG['host']}:{DB_CONFIG['port']}"
+                f"  db={DB_CONFIG['database']}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            print(f"[db] connection failed (server continues without DB): {exc}", file=sys.stderr)
+
+    async def _on_shutdown(application: web.Application) -> None:
+        pool = application.get("db")
+        if pool is not None:
+            await pool.close()
+            print("[db] pool closed", file=sys.stderr)
+
+    app.on_startup.append(_on_startup)
+    app.on_shutdown.append(_on_shutdown)
+
     # WhatsApp (Twilio webhook)
     app.router.add_post("/whatsapp/incoming",  handle_whatsapp_incoming)
     app.router.add_post("/whatsapp/status",    handle_whatsapp_status)
@@ -1455,16 +1904,40 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "") -> web.Applicati
     app.router.add_delete("/credentials/{key}",        handle_delete_credential)
     app.router.add_route("OPTIONS", "/credentials",       handle_options)
     app.router.add_route("OPTIONS", "/credentials/{key}", handle_options)
+    # Agent modes config
+    app.router.add_get( "/agent-modes",             handle_agent_modes)
+    app.router.add_route("OPTIONS", "/agent-modes",   handle_options)
     # Shell + Files
     app.router.add_get( "/shell",                  handle_shell)
     app.router.add_route("OPTIONS", "/shell",         handle_options)
     app.router.add_get( "/files",                  handle_files)
     app.router.add_route("OPTIONS", "/files",         handle_options)
+    # File read / write (for worker + coder editor panel)
+    app.router.add_get( "/api/file",               handle_read_file)
+    app.router.add_put( "/api/file",               handle_write_file)
+    app.router.add_route("OPTIONS", "/api/file",    handle_options)
     # Canvas
     app.router.add_get( "/canvas",                 handle_get_canvas)
     app.router.add_post("/canvas",                 handle_post_canvas)
     app.router.add_route("OPTIONS", "/canvas",      handle_options)
+    # Database
+    app.router.add_get(   "/db/health",                      handle_db_health)
+    app.router.add_route("OPTIONS", "/db/health",             handle_options)
+    # Widget-scoped database (one table per canvas widget placement)
+    app.router.add_get(   "/db/widget/{canvasId}/rows",           handle_widget_query)
+    app.router.add_post(  "/db/widget/{canvasId}/rows",           handle_widget_insert)
+    app.router.add_put(   "/db/widget/{canvasId}/rows/{id}",      handle_widget_update)
+    app.router.add_delete("/db/widget/{canvasId}/rows/{id}",      handle_widget_delete)
+    app.router.add_post(  "/db/widget/{canvasId}/exec",           handle_widget_exec)
+    for _wp in ("/db/widget/{canvasId}/rows", "/db/widget/{canvasId}/rows/{id}",
+                "/db/widget/{canvasId}/exec"):
+        app.router.add_route("OPTIONS", _wp, handle_options)
     # Batch background execution
+    app.router.add_get(   "/token-stats",                    handle_token_stats)
+    app.router.add_get(   "/settings/resources",             handle_settings_resources)
+    app.router.add_delete("/settings/sessions/clear",        handle_settings_clear_sessions)
+    app.router.add_route("OPTIONS", "/settings/resources",          handle_options)
+    app.router.add_route("OPTIONS", "/settings/sessions/clear",     handle_options)
     app.router.add_post(  "/batch",                  handle_batch_run)
     app.router.add_get(   "/batch/{batchId}",        handle_batch_status)
     app.router.add_route("OPTIONS", "/batch",          handle_options)
@@ -1505,6 +1978,7 @@ async def read_bzcode_stdout(
     out_queue: asyncio.Queue,
     ready_event: asyncio.Event,
     cwd: str = "",
+    mode: str = "general",
 ) -> None:
     try:
         while True:
@@ -1529,6 +2003,8 @@ async def read_bzcode_stdout(
                     elif mtype == "result":
                         ready_event.set()
                         if cwd: _running_cwds.discard(cwd)
+                        if msg.get("usage"):
+                            _add_tokens(msg["usage"])
                 except Exception:
                     pass
     finally:
@@ -1543,7 +2019,11 @@ async def send_to_client(queue: asyncio.Queue, websocket) -> None:
         if raw is None:
             break
         if raw and raw[0] == "{":
-            await websocket.send(raw)
+            try:
+                await websocket.send(raw)
+            except Exception:
+                # Socket already closing (write_eof / ConnectionClosed) — stop sending
+                break
 
 
 async def drain_bzcode_stderr(proc: asyncio.subprocess.Process) -> None:
@@ -1584,12 +2064,37 @@ async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> Non
     # Validate cwd; fall back to default if the path doesn't exist
     effective_cwd = req_cwd if os.path.isdir(req_cwd) else default_cwd
 
-    # Build bzcode command
-    cmd = [bzcode_path, "--stdio"]
-    if req_session_id:
-        cmd += ["--resume", req_session_id]
+    # Determine mode.
+    req_mode = (params.get("mode") or [_load_mode_config().get("default", "general")])[0]
 
-    print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}", file=sys.stderr)
+    # Validate any requested session ID — if its .jsonl is missing, treat as new.
+    if req_session_id:
+        session_file = SESSIONS_DIR / f"{req_session_id}.jsonl"
+        if not session_file.exists():
+            print(
+                f"[ws] session file not found for {req_session_id!r} — starting fresh",
+                file=sys.stderr,
+            )
+            req_session_id = None
+
+    # If no session ID, generate one now (before spawning) so we can write the
+    # config directory first.  bzcode starts a fresh session when it sees no
+    # existing .jsonl, but it DOES load the config directory — so the identity
+    # and tool settings take effect from the very first message.
+    if not req_session_id:
+        import secrets as _secrets
+        req_session_id = f"bz-{_secrets.token_hex(6)}"
+        print(f"[ws] generated new sessionId={req_session_id}", file=sys.stderr)
+
+    # Write IDENTITY.md, SOUL.md, settings.json, meta.json into the session config dir.
+    # Done before spawning so bzcode picks them up on first startup.
+    _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
+
+    # Always use --resume so bzcode loads the session config directory.
+    # If no .jsonl exists yet, bzcode starts a fresh conversation with this ID.
+    cmd = [bzcode_path, "--stdio", "--resume", req_session_id]
+
+    print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}  mode={req_mode}", file=sys.stderr)
     _active_cwds.add(effective_cwd)
 
     try:
@@ -1612,7 +2117,8 @@ async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> Non
     ready_event = asyncio.Event()  # unused now, kept for signature compatibility
     try:
         await asyncio.gather(
-            read_bzcode_stdout(proc, out_queue, ready_event, effective_cwd),
+            read_bzcode_stdout(proc, out_queue, ready_event,
+                               cwd=effective_cwd, mode=req_mode),
             send_to_client(out_queue, websocket),
             drain_bzcode_stderr(proc),
             relay_client_messages(proc, websocket, ready_event),
@@ -1622,11 +2128,18 @@ async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> Non
     finally:
         _active_cwds.discard(effective_cwd)
         print(f"[ws] disconnect  pid={proc.pid}", file=sys.stderr)
+        # Process may have already exited (e.g. crashed) — ignore lookup errors
         try:
             proc.terminate()
+        except ProcessLookupError:
+            pass
+        try:
             await asyncio.wait_for(proc.wait(), timeout=5)
         except (ProcessLookupError, asyncio.TimeoutError):
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

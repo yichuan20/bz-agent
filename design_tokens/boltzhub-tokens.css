@@ -13,16 +13,16 @@
 :root {
 
   /* ─── SEMANTIC COLORS: LIGHT MODE — warm sand (aligned with bz-token) ─── */
-  --bg-primary:     #F7F3EC;   /* Cards, main content areas, navbar                        */
-  --bg-secondary:   #E8E2D7;   /* Page background, input backgrounds                       */
-  --bg-tertiary:    #DDD7CB;   /* Hover states, icon/table backgrounds                     */
+  --bg-primary:     #FFFFFF;   /* Surfaces — cards, modals, prompt, navbar (pure white)    */
+  --bg-secondary:   #EDE8E0;   /* Page & zone backgrounds (warm sand)                      */
+  --bg-tertiary:    #E0DAD1;   /* Hover states, icon/table backgrounds                     */
 
   --text-primary:   #1C1917;   /* Main body text, headings (warm charcoal)                 */
   --text-secondary: #6B6358;   /* Secondary text, meta info                                */
   --text-tertiary:  #9E9488;   /* Disabled text, timestamps, placeholders                  */
 
-  --border-primary:   #D5CFC0; /* Standard borders                                         */
-  --border-secondary: #E0DAD0; /* Subtle borders                                           */
+  --border-primary:   #E2DDD4; /* Standard borders (white surfaces need visible edges)     */
+  --border-secondary: #EDE8E0; /* Subtle borders                                           */
 
   /* ─── ACCENT COLORS: LIGHT MODE ─── */
   --accent-blue:    #1473DF;
