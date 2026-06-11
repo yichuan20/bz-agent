@@ -20,7 +20,7 @@ export const Route = createFileRoute('/_app/')({
   component: Home,
 });
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 const POLL_MS   = 5000; // refresh active status every 5s
 
 type BatchItemState = {

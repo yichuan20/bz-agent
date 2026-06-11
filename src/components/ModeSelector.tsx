@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AGENT_MODES, MODE_FALLBACK, MODE_ICONS, type AgentMode, type ModeConfig } from '#/lib/agentModes';
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 interface Props {
   selected: AgentMode;

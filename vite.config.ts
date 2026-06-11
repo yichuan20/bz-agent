@@ -12,6 +12,11 @@ const config = defineConfig({
   server: {
     port: 5010,
   },
+  build: {
+    outDir: 'dist',
+    // Raise the chunk warning threshold — the agent UI is intentionally large
+    chunkSizeWarningLimit: 1500,
+  },
   optimizeDeps: {
     include: ['recharts'],
   },

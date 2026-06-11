@@ -103,8 +103,13 @@ type SlashCommandGroup = { title: string; commands: SlashCommand[] };
 type StreamingBlocks = Map<number, { type: string; content: string }>;
 type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
-const WS_BASE   = (import.meta.env.VITE_AGENT_WS_URL   as string | undefined) ?? 'ws://localhost:8765';
-const HTTP_BASE  = (import.meta.env.VITE_AGENT_HTTP_URL  as string | undefined) ?? 'http://localhost:8766';
+// In production (dist served by Python on port 18789), derive URLs from current origin.
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+const WS_BASE   = (import.meta.env.VITE_AGENT_WS_URL   as string | undefined)
+  || (import.meta.env.PROD
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
+    : 'ws://localhost:18789/ws');
 
 const MODE_META: Record<SessionMode, { label: string; description: string; color: string }> = {
   default: { label: 'Default', description: 'Normal operation', color: 'var(--accent-blue)' },
@@ -466,7 +471,7 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
   const [notes,     setNotes]     = useState('');
   const [version,   setVersion]   = useState('');
   const [versions,  setVersions]  = useState<{ versionNumber: string }[]>([]);
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   useEffect(() => {
     fetch(`${agentHttp}/boltzhub/versions?appId=${encodeURIComponent(appId)}`)
@@ -639,7 +644,7 @@ function TokenUsageModal({ data, onClose }: {
   const [summary, setSummary] = useState(data.summary);
   const [trends,  setTrends]  = useState(data.trends ?? []);
   const [error,   setError]   = useState('');
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   async function fetchUsage(p: string) {
     setLoading(true); setError('');
@@ -1248,7 +1253,7 @@ function CanvasWidget({
   }
 
   // Resolve the JS code: custom widgets carry their own code, builtins come from the registry
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
   const code = data.code ?? REGISTRY_MAP[data.kind]?.code ?? '';
   const content = <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} refreshKey={data.id} />;
 
@@ -1299,7 +1304,7 @@ type WidgetRecord = {
 };
 
 const AGENT_HTTP_BASE =
-  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 // Canvas persistence — one .bzcanvas.json per working directory
 type CanvasEntry = {
@@ -1451,7 +1456,7 @@ function CustomWidgetEditor({
   const [code,        setCode]        = useState(initial?.code        ?? REGISTRY_MAP['custom']?.code ?? '');
   const [refreshKey,  setRefreshKey]  = useState(0);
 
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   function handleSave() {
     onSave({ id: initial?.id ?? uid(), name, keywords, description, meta, code });

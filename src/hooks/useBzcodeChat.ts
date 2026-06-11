@@ -51,7 +51,7 @@ function streamingBlocksToContentBlocks(
 
 // ── hook ─────────────────────────────────────────────────────────────────────
 
-const DEFAULT_WS = (import.meta.env.VITE_AGENT_WS_URL as string | undefined) ?? 'ws://localhost:5080';
+const DEFAULT_WS = (import.meta.env.VITE_AGENT_WS_URL as string | undefined) ?? 'ws://localhost:18789/ws';
 
 export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
   const [finalMessages, setFinalMessages] = useState<Message[]>([]);

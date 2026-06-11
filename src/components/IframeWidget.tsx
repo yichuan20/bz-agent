@@ -42,7 +42,7 @@ input,textarea,select,button{font-family:inherit;font-size:inherit}
 <body>
 <script>
 /**
- * window.__agentHttpBase__  — base URL of the Python backend (e.g. http://localhost:5081)
+ * window.__agentHttpBase__  — base URL of the Python backend (e.g. http://localhost:18789)
  * window.__isDark__         — true when dark mode is active
  * window.__canvasId__       — unique ID for this widget placement on the canvas
  *
@@ -148,7 +148,7 @@ type Props = {
   refreshKey?:    string | number;
 };
 
-export function IframeWidget({ code, agentHttpBase = 'http://localhost:5081', canvasId, refreshKey }: Props) {
+export function IframeWidget({ code, agentHttpBase = 'http://localhost:18789', canvasId, refreshKey }: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {

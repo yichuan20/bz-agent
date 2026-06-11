@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileIcon, FolderIcon, FolderOpenIcon, XIcon } from '@phosphor-icons/react';
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 // Structural colours come from CSS variables (theme-adaptive).
 // Token colours are handled by .tok-* CSS classes in app.css.

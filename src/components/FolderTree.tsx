@@ -1,7 +1,7 @@
 import { CaretRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 type FsEntry = { name: string; path: string; isDir: boolean; size?: number };
 

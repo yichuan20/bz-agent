@@ -19,10 +19,9 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    import websockets
-    from websockets.server import serve
+    import websockets  # kept for legacy compatibility; WS now runs inside aiohttp
 except ImportError:
-    sys.exit("Missing dependency: pip install websockets")
+    websockets = None  # type: ignore[assignment]
 
 try:
     import aiohttp
@@ -1849,11 +1848,18 @@ async def handle_batch_status(request: web.Request) -> web.Response:
     return web.json_response({"batchId": batch_id, "done": done, "items": items}, headers=CORS_HEADERS)
 
 
-def make_http_app(bzcode_path: str = "", default_cwd: str = "") -> web.Application:
+def make_http_app(bzcode_path: str = "", default_cwd: str = "",
+                  port: int = 18789) -> web.Application:
     app = web.Application()
     app["bzcode_path"] = bzcode_path
     app["default_cwd"] = default_cwd
+    app["port"]        = port
     app["db"] = None  # filled by on_startup if asyncpg is available
+
+    # ── bzcode WebSocket bridge at /ws ────────────────────────────────────────
+    async def _ws_handler(request: web.Request) -> web.WebSocketResponse:
+        return await handle_ws_client(request, bzcode_path, default_cwd)
+    app.router.add_get("/ws", _ws_handler)
 
     # ── DB pool lifecycle ─────────────────────────────────────────────────────
     async def _on_startup(application: web.Application) -> None:
@@ -1971,6 +1977,50 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "") -> web.Applicati
     return app
 
 
+def _add_frontend(app: web.Application, dist_dir: Path) -> None:
+    """Mount a Vite production build so the Python server also serves the SPA.
+
+    Route priority (registered in this order so API always wins):
+      1. All existing API routes (already registered above)
+      2. /assets/* and other static asset files from dist/
+      3. Catch-all → dist/index.html (client-side routing / SPA fallback)
+    """
+    if not dist_dir.is_dir():
+        print(f"[frontend] dist dir not found: {dist_dir} — skipping static serving",
+              file=sys.stderr)
+        return
+
+    index_html = dist_dir / "index.html"
+    if not index_html.exists():
+        print(f"[frontend] index.html not found in {dist_dir} — run 'pnpm build' first",
+              file=sys.stderr)
+        return
+
+    # Serve /assets and any other top-level static directories
+    for entry in dist_dir.iterdir():
+        if entry.is_dir():
+            app.router.add_static(f"/{entry.name}", entry, show_index=False)
+
+    # Serve root-level static files (favicon.ico, manifest etc.)
+    async def handle_static_file(request: web.Request) -> web.Response:
+        filepath = dist_dir / request.match_info["filename"]
+        if filepath.is_file():
+            return web.FileResponse(filepath)
+        # Not a known file → SPA fallback
+        return web.FileResponse(index_html)
+
+    app.router.add_get("/{filename:[^/]+\\.[^/]+}", handle_static_file)  # e.g. favicon.ico
+
+    # SPA catch-all: every unmatched route returns index.html
+    async def handle_spa(request: web.Request) -> web.Response:
+        return web.FileResponse(index_html)
+
+    app.router.add_get("/",         handle_spa)
+    app.router.add_get("/{path:.*}", handle_spa)
+
+    print(f"[frontend] serving {dist_dir}", file=sys.stderr)
+
+
 # ── bzcode WebSocket bridge ───────────────────────────────────────────────────
 
 async def read_bzcode_stdout(
@@ -2013,16 +2063,16 @@ async def read_bzcode_stdout(
         if cwd: _running_cwds.discard(cwd)
 
 
-async def send_to_client(queue: asyncio.Queue, websocket) -> None:
+async def send_to_client(queue: asyncio.Queue, ws: "web.WebSocketResponse") -> None:
     while True:
         raw = await queue.get()
         if raw is None:
             break
         if raw and raw[0] == "{":
             try:
-                await websocket.send(raw)
+                await ws.send_str(raw)
             except Exception:
-                # Socket already closing (write_eof / ConnectionClosed) — stop sending
+                # Socket already closing — stop sending
                 break
 
 
@@ -2036,36 +2086,35 @@ async def drain_bzcode_stderr(proc: asyncio.subprocess.Process) -> None:
 
 async def relay_client_messages(
     proc: asyncio.subprocess.Process,
-    websocket,
+    ws: "web.WebSocketResponse",
     ready_event: asyncio.Event,
 ) -> None:
-    async for raw in websocket:
-        if isinstance(raw, bytes):
-            raw = raw.decode()
-        if not raw.endswith("\n"):
-            raw += "\n"
-        proc.stdin.write(raw.encode())
-        await proc.stdin.drain()
+    async for msg in ws:
+        if msg.type == aiohttp.WSMsgType.TEXT:
+            raw: str = msg.data
+            if not raw.endswith("\n"):
+                raw += "\n"
+            proc.stdin.write(raw.encode())
+            await proc.stdin.drain()
+        elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+            break
 
 
-async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> None:
-    # Parse query params from the WebSocket upgrade URL
-    try:
-        path = websocket.request.path
-    except AttributeError:
-        path = getattr(websocket, "path", "/")
+async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: str) -> web.WebSocketResponse:
+    """aiohttp WebSocket handler — mounted at GET /ws."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
 
-    parsed = urllib.parse.urlparse(path)
-    params = urllib.parse.parse_qs(parsed.query)
+    params = request.rel_url.query
 
-    req_session_id = (params.get("sessionId") or [None])[0]
-    req_cwd        = (params.get("cwd") or [default_cwd])[0]
+    req_session_id = params.get("sessionId") or None
+    req_cwd        = params.get("cwd") or default_cwd
 
     # Validate cwd; fall back to default if the path doesn't exist
     effective_cwd = req_cwd if os.path.isdir(req_cwd) else default_cwd
 
     # Determine mode.
-    req_mode = (params.get("mode") or [_load_mode_config().get("default", "general")])[0]
+    req_mode = params.get("mode") or _load_mode_config().get("default", "general")
 
     # Validate any requested session ID — if its .jsonl is missing, treat as new.
     if req_session_id:
@@ -2107,23 +2156,24 @@ async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> Non
             env={**os.environ},
         )
     except FileNotFoundError:
-        await websocket.send(json.dumps({
+        await ws.send_str(json.dumps({
             "type": "result", "status": "error",
             "error": f"bzcode not found: {bzcode_path}",
         }))
-        return
+        await ws.close()
+        return ws
 
     out_queue   = asyncio.Queue()
-    ready_event = asyncio.Event()  # unused now, kept for signature compatibility
+    ready_event = asyncio.Event()
     try:
         await asyncio.gather(
             read_bzcode_stdout(proc, out_queue, ready_event,
                                cwd=effective_cwd, mode=req_mode),
-            send_to_client(out_queue, websocket),
+            send_to_client(out_queue, ws),
             drain_bzcode_stderr(proc),
-            relay_client_messages(proc, websocket, ready_event),
+            relay_client_messages(proc, ws, ready_event),
         )
-    except (websockets.exceptions.ConnectionClosed, BrokenPipeError):
+    except (BrokenPipeError, ConnectionResetError, asyncio.CancelledError):
         pass
     finally:
         _active_cwds.discard(effective_cwd)
@@ -2140,6 +2190,7 @@ async def handle_ws_client(websocket, bzcode_path: str, default_cwd: str) -> Non
                 proc.kill()
             except ProcessLookupError:
                 pass
+    return ws
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -2148,30 +2199,40 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="bzcode bridge + search/session server")
     parser.add_argument("--bzcode", default="./bzcode")
     parser.add_argument("--host",   default="localhost")
-    parser.add_argument("--port",   type=int, default=5080)
+    parser.add_argument("--port",   type=int, default=18789)
     parser.add_argument("--cwd",    default=os.getcwd())
+    parser.add_argument(
+        "--dist",
+        default="",
+        metavar="DIR",
+        help="Path to the Vite production build (dist/) to serve as the frontend. "
+             "When set, the HTTP server also serves the SPA on the same port.",
+    )
     args = parser.parse_args()
 
     bzcode_path = os.path.abspath(args.bzcode)
     default_cwd = os.path.abspath(args.cwd)
-    ws_port     = args.port
-    http_port   = args.port + 1
-
-    async def ws_handler(websocket):
-        await handle_ws_client(websocket, bzcode_path, default_cwd)
+    port        = args.port   # single port for everything
 
     async def run() -> None:
-        ws_server   = await serve(ws_handler, args.host, ws_port)
-        http_runner = web.AppRunner(make_http_app(bzcode_path, default_cwd))
+        http_app = make_http_app(bzcode_path, default_cwd, port=port)
+
+        # Optionally mount the built frontend
+        if args.dist:
+            _add_frontend(http_app, Path(args.dist).resolve())
+
+        http_runner = web.AppRunner(http_app)
         await http_runner.setup()
-        await web.TCPSite(http_runner, args.host, http_port).start()
+        await web.TCPSite(http_runner, args.host, port).start()
 
         whatsapp_dir = Path(default_cwd) / "whatsapp"
         whatsapp_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"bzcode bridge : ws://{args.host}:{ws_port}?cwd=<dir>  or  ?sessionId=<id>", flush=True)
-        print(f"HTTP API      : http://{args.host}:{http_port}/widgets  |  /sessions  |  /search", flush=True)
-        print(f"WhatsApp hook : http://{args.host}:{http_port}/whatsapp/incoming", flush=True)
+        print(f"bzcode bridge : ws://{args.host}:{port}/ws?cwd=<dir>  or  ?sessionId=<id>", flush=True)
+        print(f"HTTP API      : http://{args.host}:{port}/widgets  |  /sessions  |  /search", flush=True)
+        if args.dist:
+            print(f"Frontend      : http://{args.host}:{port}/", flush=True)
+        print(f"WhatsApp hook : http://{args.host}:{port}/whatsapp/incoming", flush=True)
         print(f"bzcode        : {bzcode_path}", flush=True)
         print(f"default cwd   : {default_cwd}", flush=True)
         print(f"whatsapp cwd  : {whatsapp_dir}", flush=True)
@@ -2179,7 +2240,6 @@ def main() -> None:
         try:
             await asyncio.Future()
         finally:
-            ws_server.close()
             await http_runner.cleanup()
 
     try:

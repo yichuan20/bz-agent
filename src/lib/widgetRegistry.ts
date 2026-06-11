@@ -569,7 +569,7 @@ document.body.appendChild(wrap);
 `.trim();
 
 const SEARCH_CODE = `
-const HTTP_BASE = window.__agentHttpBase__ || 'http://localhost:5081';
+const HTTP_BASE = window.__agentHttpBase__ || 'http://localhost:18789';
 let apiKey = localStorage.getItem('serpapi-key') || '';
 
 const wrap = document.createElement('div');
@@ -1061,7 +1061,7 @@ const B = (category: string) => ({ author: 'builtin', version: '1.0.0', category
 // ─────────────────────────────── NEW WIDGETS ─────────────────────────────────
 
 const LLM_CHAT_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim() || '#1C1917';
 const textSecondary = cs.getPropertyValue('--text-secondary').trim() || '#6B6358';
@@ -1152,7 +1152,7 @@ document.body.appendChild(wrap);
 `.trim();
 
 const TERMINAL_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1288,7 +1288,7 @@ document.head.appendChild(s);
 `.trim();
 
 const MARKDOWN_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1470,7 +1470,7 @@ tree.innerHTML='<span style="color:'+textSecondary+'">Paste JSON and click Parse
 `.trim();
 
 const FILE_BROWSER_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1636,7 +1636,7 @@ update();
 `.trim();
 
 const WEATHER_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1703,7 +1703,7 @@ fetchWeather();
 `.trim();
 
 const GITHUB_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1790,7 +1790,7 @@ document.body.appendChild(wrap);
 `.trim();
 
 const STOCK_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -1986,7 +1986,7 @@ render();
 `.trim();
 
 const WEB_PREVIEW_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();
@@ -2054,7 +2054,7 @@ preview.innerHTML='<p style="color:'+textSecondary+';text-align:center;margin-to
 `.trim();
 
 const SQL_CODE = `
-const H = window.__agentHttpBase__ || 'http://localhost:5081';
+const H = window.__agentHttpBase__ || 'http://localhost:18789';
 const cs = getComputedStyle(document.documentElement);
 const textPrimary = cs.getPropertyValue('--text-primary').trim();
 const textSecondary = cs.getPropertyValue('--text-secondary').trim();

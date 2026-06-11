@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_app/settings')({
   component: SettingsPage,
 });
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:5081';
+const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
