@@ -169,7 +169,7 @@ export function IframeWidget({ code, agentHttpBase = 'http://localhost:18789', c
   return (
     <iframe
       ref={ref}
-      sandbox="allow-scripts allow-popups allow-forms"
+      sandbox="allow-scripts allow-popups allow-forms allow-same-origin"
       style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
       title="widget"
     />

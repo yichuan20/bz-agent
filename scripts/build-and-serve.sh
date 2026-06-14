@@ -22,7 +22,7 @@ echo "[build] Running pnpm build…"
 pnpm build
 echo "[build] Frontend built → dist/"
 
-echo "[serve] Starting server on port 18789…"
-exec .venv/bin/python server.py \
+echo "[serve] Starting FastAPI server on port 18789…"
+exec .venv/bin/python app.py \
   --dist "./dist" \
   "$@"

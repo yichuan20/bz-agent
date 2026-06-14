@@ -9,7 +9,17 @@
       "soul": null,
       "settings": {
         "tools": {
-          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch", "Skill"]
+          "include": [
+            "FileRead",
+            "FileEdit",
+            "FileWrite",
+            "Glob",
+            "Grep",
+            "AskUserQuestion",
+            "TodoWrite",
+            "WebFetch",
+            "Skill"
+          ]
         }
       }
     },
@@ -21,8 +31,22 @@
       "soul": null,
       "settings": {
         "tools": {
-          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch", "Agent", "Skill"]
+          "include": [
+            "Bash",
+            "FileRead",
+            "FileEdit",
+            "FileWrite",
+            "Glob",
+            "Grep",
+            "AskUserQuestion",
+            "TodoWrite",
+            "Skill"
+          ]
         }
+      },
+      "agents_md": "# Widget Agent — Workflow\n\n## Creating widgets\n\nWhenever the user asks to create/build/add/vibe-code a widget:\n1. Invoke `/new-widget` skill first — it tells you exactly what to run\n2. Follow the skill instructions precisely\n\n**Never** call `curl`, `POST /canvas/deploy-widget`, or any HTTP endpoint to create widgets. Always use the Python script from the skill.\n\n## Modifying existing widgets\n\nRead the widget code from `server_data/custom_widgets/{canvasId}.js`, edit it with FileEdit, done — no skill needed.\n",
+      "skills": {
+        "new-widget": "# Skill: new-widget\n\n## Step 1 — Match to a built-in template FIRST\n\nAlways prefer a built-in template over writing code from scratch.\nUse the table below to match the user’s request to a template name:\n\n{widget_template_table}\n\nIf matched — deploy with one command (no file writing):\n```\npython3 {scripts_path}/create-widget.py --title \"<name>\" --template <template-name> --cwd {working_dir}\n```\n\n## Step 2 — Custom code only if no template matches\n\nWrite self-contained JS, then deploy:\n1. FileWrite the widget JS to `{server_data_path}/custom_widgets/.pending.js`\n2. `python3 {scripts_path}/create-widget.py --title \"<name>\" --cwd {working_dir} [--w 380] [--h 280]`\n\n### Rules for custom widgets\n- Root: `height:100vh; overflow:hidden; background:var(--bg-primary); color:var(--text-primary)`\n- CSS vars only — no hex. Key vars: `--bg-primary --text-primary --text-secondary --border-primary --accent-blue --accent-green --accent-red --radius-md --font-body`\n- Guard all db calls: `if(window.db){ ... }` — db is null in preview\n- db API: `await db.ensure([{name,type}])` · `await db.query({order,dir,limit})→{rows}` · `await db.insert({...})` · `await db.update(id,{...})` · `await db.delete(id)`\n- CDN libs: `const s=document.createElement('script');s.src='URL';s.onload=()=>{};document.head.appendChild(s)`\n\nCanvas reloads automatically. Tell user: ✓ **[Name]** added to canvas.\n"
       }
     },
     "worker": {
@@ -33,7 +57,16 @@
       "soul": null,
       "settings": {
         "tools": {
-          "include": ["FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "AskUserQuestion", "TodoWrite", "WebFetch"]
+          "include": [
+            "FileRead",
+            "FileEdit",
+            "FileWrite",
+            "Glob",
+            "Grep",
+            "AskUserQuestion",
+            "TodoWrite",
+            "WebFetch"
+          ]
         }
       }
     },
@@ -45,7 +78,21 @@
       "soul": null,
       "settings": {
         "tools": {
-          "include": ["Bash", "FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "TodoWrite", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "WebFetch", "Agent", "Skill"]
+          "include": [
+            "Bash",
+            "FileRead",
+            "FileEdit",
+            "FileWrite",
+            "Glob",
+            "Grep",
+            "TodoWrite",
+            "AskUserQuestion",
+            "EnterPlanMode",
+            "ExitPlanMode",
+            "WebFetch",
+            "Agent",
+            "Skill"
+          ]
         }
       }
     }

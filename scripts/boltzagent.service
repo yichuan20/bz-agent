@@ -1,0 +1,22 @@
+[Unit]
+Description=BoltzAgent FastAPI server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/boltzagent
+ExecStart=/opt/boltzagent/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 18789
+Restart=on-failure
+RestartSec=5
+
+Environment=BZCODE_PATH=/opt/boltzagent/bzcode
+Environment=BZCODE_CWD=/opt/boltzagent
+Environment=PORT=18789
+
+# Optional: keep logs in systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=boltzagent
+
+[Install]
+WantedBy=multi-user.target

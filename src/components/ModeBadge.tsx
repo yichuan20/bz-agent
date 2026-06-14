@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AGENT_MODES, MODE_FALLBACK, MODE_ICONS, type AgentMode } from '#/lib/agentModes';
+import { AGENT_MODES, MODE_FALLBACK, type AgentMode } from '#/lib/agentModes';
+import { ModeIconSvg } from '#/components/ModeIconSvg';
 import { XIcon } from '@phosphor-icons/react';
 
 interface Props {
@@ -19,7 +20,7 @@ export function ModeBadge({ mode, onSwitch }: Props) {
         onClick={() => setOpen(v => !v)}
         title="Switch agent mode (starts a new session)"
       >
-        {MODE_ICONS[cfg.icon] ?? '🤖'}&nbsp;{cfg.label}
+        <ModeIconSvg iconKey={cfg.icon} size={14} />&nbsp;{cfg.label}
       </button>
 
       {open && (
@@ -41,7 +42,7 @@ export function ModeBadge({ mode, onSwitch }: Props) {
                   className={`mode-badge-option${m === mode ? ' mode-badge-option--active' : ''}`}
                   onClick={() => { onSwitch(m); setOpen(false); }}
                 >
-                  <span className="mode-badge-option-icon">{MODE_ICONS[c.icon] ?? '🤖'}</span>
+                  <span className="mode-badge-option-icon"><ModeIconSvg iconKey={c.icon} size={16} /></span>
                   <span>
                     <span className="mode-badge-option-label">{c.label}</span>
                     <span className="mode-badge-option-desc">{c.description}</span>

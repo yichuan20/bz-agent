@@ -2,12 +2,16 @@ import { parseMarkdownToHTML } from '@boltzbit/md-utils';
 import { IframeWidget } from '#/components/IframeWidget';
 import { WIDGET_REGISTRY, REGISTRY_MAP, type WidgetKind } from '#/lib/widgetRegistry';
 import {
+  ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
   ArrowSquareOutIcon,
   ArrowUpIcon,
   CaretDownIcon,
   ChartBarIcon,
   ChatCircleDotsIcon,
+  CopyIcon,
+  FolderIcon,
+  MagnifyingGlassIcon,
   CheckCircleIcon,
   ClockCounterClockwiseIcon,
   CloudArrowDownIcon,
@@ -31,6 +35,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { AGENT_MODES, modeLSKey, type AgentMode } from '#/lib/agentModes';
 import { ModeBadge }    from '#/components/ModeBadge';
 import { ModeSelector } from '#/components/ModeSelector';
+import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
 import { EditorPanel }  from '#/components/EditorPanel';
 
 export const Route = createFileRoute('/_app/agent')({
@@ -832,6 +837,67 @@ function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
   );
 }
 
+function CopyPathButton({ path, label }: { path: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy() {
+    if (!path) return;
+    navigator.clipboard.writeText(path).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button
+      type="button"
+      className="agent-breadcrumb-page agent-breadcrumb-copy"
+      title={copied ? 'Copied!' : path}
+      onClick={handleCopy}
+    >
+      {label}
+      {copied && <span className="agent-breadcrumb-copied">✓ copied</span>}
+    </button>
+  );
+}
+
+function CopyPathInline({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(path).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <div className="agent-session-path" title={copied ? 'Copied!' : path} onClick={handleCopy}>
+      <span className="agent-session-path-text">{path}</span>
+      <span className={`agent-session-path-copy${copied ? ' agent-session-path-copy--done' : ''}`}>
+        {copied ? '✓' : <CopyIcon size={11} />}
+      </span>
+    </div>
+  );
+}
+
+function WidgetSkillBadge({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
+  const skillName = (item.input as Record<string, unknown>)?.['skill'] as string | undefined;
+  const label = skillName ? `/${skillName}` : item.name;
+  const statusIcon = item.status === 'running'
+    ? <SpinnerIcon size={10} className="agent-tool-spin" />
+    : item.isError
+      ? <XCircleIcon size={10} weight="fill" color="var(--accent-red)" />
+      : <CheckCircleIcon size={10} weight="fill" color="var(--accent-green)" />;
+  return (
+    <div className="agent-msg-row">
+      <span className="agent-block-icon agent-block-icon--tool"><BlockDot size={10} /></span>
+      <div className="widget-skill-badge">
+        <TerminalIcon size={10} weight="bold" />
+        <span className="widget-skill-badge-name">{label}</span>
+        {statusIcon}
+      </div>
+    </div>
+  );
+}
+
 function PermissionCard({
   prompt,
   mode,
@@ -1252,10 +1318,15 @@ function CanvasWidget({
     document.addEventListener('mouseup', onMouseUp);
   }
 
-  // Resolve the JS code: custom widgets carry their own code, builtins come from the registry
+  // Resolve the JS code: custom widgets carry their own code, builtins come from the registry.
+  // For custom-kind widgets (deployed by the agent), data.code is loaded async — hold off
+  // rendering the iframe until the code arrives to avoid flashing the CUSTOM_CODE clock placeholder.
   const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
-  const code = data.code ?? REGISTRY_MAP[data.kind]?.code ?? '';
-  const content = <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} refreshKey={data.id} />;
+  const isCustomKind = data.kind === 'custom';
+  const code = data.code ?? (isCustomKind ? null : REGISTRY_MAP[data.kind]?.code ?? '');
+  const content = code == null
+    ? <div className="canvas-widget-loading" />
+    : <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} refreshKey={data.id} />;
 
   return (
     <div ref={elRef} className="canvas-widget" style={{ left: data.x, top: data.y, width: data.w, height: data.h }}>
@@ -1267,6 +1338,7 @@ function CanvasWidget({
 
       <div className="canvas-widget-header" onMouseDown={handleDragMouseDown}>
         <span className="canvas-widget-title">{data.title}</span>
+        <span className="canvas-widget-id">{data.id}</span>
 
         <button type="button" className="canvas-widget-code-btn"
           onClick={e => { e.stopPropagation(); onShowCode(data.title, code); }}
@@ -1309,7 +1381,7 @@ const AGENT_HTTP_BASE =
 // Canvas persistence — one .bzcanvas.json per working directory
 type CanvasEntry = {
   canvasId: string;   // unique ID on this canvas instance
-  widgetId: string;   // ID in the widget registry
+  widgetId: string;   // ID in the widget registry (kind for built-ins, canvasId for custom)
   kind:     string;
   title:    string;
   x: number; y: number; w: number; h: number;
@@ -1325,6 +1397,27 @@ const canvasApi = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: 1, widgets }),
     }).then(r => r.json()),
+};
+
+// Per-instance custom code — stored in server_data/custom_widgets/{canvasId}.js
+// Separate from the toolbar widget templates so canvas edits don't pollute the library.
+const customWidgetApi = {
+  load: (canvasId: string): Promise<string | null> =>
+    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`)
+      .then(r => r.ok ? r.json() as Promise<{ code: string }> : null)
+      .then(d => d?.code ?? null)
+      .catch(() => null),
+
+  save: (canvasId: string, code: string): Promise<void> =>
+    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    }).then(() => undefined).catch(() => undefined),
+
+  remove: (canvasId: string): Promise<void> =>
+    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`, {
+      method: 'DELETE',
+    }).then(() => undefined).catch(() => undefined),
 };
 
 const widgetApi = {
@@ -1581,7 +1674,7 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
 
 // ── Canvas panel ──────────────────────────────────────────────────────────────
 
-function CanvasPanel({ cwd }: { cwd?: string }) {
+function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: number }) {
   const [canvasWidgets, setCanvasWidgets] = useState<WidgetData[]>([]);
   const [dragging,      setDragging]      = useState(false);
   const [apiWidgets,    setApiWidgets]    = useState<WidgetRecord[]>([]);
@@ -1609,21 +1702,42 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
         const minY = Math.min(...entries.map(e => e.y));
         const dx   = PAD - minX;
         const dy   = PAD - minY;
-        setCanvasWidgets(entries.map(e => ({
+        // For widgets where widgetId !== kind the code was edited via </>
+        // and saved to server_data/custom_widgets/{canvasId}.js — fetch it.
+        const baseWidgets = entries.map(e => ({
           id:    e.canvasId,
           kind:  e.kind as WidgetKind,
           title: e.title,
           x: e.x + dx, y: e.y + dy, w: e.w, h: e.h,
-        })));
+        }));
+        setCanvasWidgets(baseWidgets);
+
+        // Async: load custom code for any widget that has it saved
+        const customEntries = entries.filter(e => e.widgetId !== e.kind);
+        if (customEntries.length > 0) {
+          Promise.all(
+            customEntries.map(e =>
+              customWidgetApi.load(e.canvasId).then(code => ({ canvasId: e.canvasId, code }))
+            )
+          ).then(results => {
+            setCanvasWidgets(prev => prev.map(w => {
+              const hit = results.find(r => r.canvasId === w.id);
+              return hit?.code ? { ...w, code: hit.code } : w;
+            }));
+          }).catch(() => null);
+        }
       })
       .catch(() => { /* canvas file missing or server offline — start blank */ });
-  }, [cwd]);
+  // refreshKey increments after each agent turn so newly deployed widgets appear
+  }, [cwd, refreshKey]);
 
   // Scroll to origin on the first render that has widgets, then hold that
   // position for 900 ms — long enough for all widget iframes to finish
   // loading their CDN scripts (Chart.js etc.), which can otherwise trigger
   // the browser to scroll the canvas-area to bring them into view.
   const initScrolledRef = useRef(false);
+  // Reset scroll lock when refreshKey changes (agent deployed a new widget)
+  useEffect(() => { initScrolledRef.current = false; }, [refreshKey]);
   useLayoutEffect(() => {
     if (canvasWidgets.length === 0 || initScrolledRef.current) return;
     initScrolledRef.current = true;
@@ -1647,7 +1761,9 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
     saveTimerRef.current = setTimeout(() => {
       const entries: CanvasEntry[] = canvasWidgets.map(w => ({
         canvasId: w.id,
-        widgetId: w.code ? w.id : w.kind,  // custom widgets use their unique id
+        // kind==='custom' widgets always use canvasId as widgetId so the frontend knows to fetch their code,
+        // even before the async code load completes (avoids race-condition corruption on the debounce save).
+        widgetId: (w.kind === 'custom' || w.code) ? w.id : w.kind,
         kind:     w.kind,
         title:    w.title,
         x: w.x, y: w.y, w: w.w, h: w.h,
@@ -1761,8 +1877,11 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
           title={codeDrawer.title}
           initialCode={codeDrawer.code}
           onApply={newCode => {
+            // Update in-memory state immediately
             setCanvasWidgets(prev => prev.map(w => w.id === codeDrawer.id ? { ...w, code: newCode } : w));
             setCodeDrawer(d => d ? { ...d, code: newCode } : null);
+            // Persist to server_data/custom_widgets/{canvasId}.js so it survives refresh
+            void customWidgetApi.save(codeDrawer.id, newCode);
           }}
           onClose={() => setCodeDrawer(null)}
         />
@@ -1862,7 +1981,14 @@ function CanvasPanel({ cwd }: { cwd?: string }) {
           <CanvasWidget key={w.id} data={w}
             onDragStart={() => setDragging(true)}
             onDrop={handleDrop} onResize={handleResize}
-            onClose={id => setCanvasWidgets(prev => prev.filter(ww => ww.id !== id))}
+            onClose={id => {
+              setCanvasWidgets(prev => {
+                const removed = prev.find(ww => ww.id === id);
+                // Clean up custom code file if one was saved for this instance
+                if (removed?.code) void customWidgetApi.remove(id);
+                return prev.filter(ww => ww.id !== id);
+              });
+            }}
             onShowCode={(title, code) => setCodeDrawer({ id: w.id, title, code })}
           />
         ))}
@@ -1885,7 +2011,199 @@ type SessionInfo = {
   lastModified: number;
   created: string;
   isDefault?: boolean;
+  mode?: string;
 };
+
+// ── Directory picker ──────────────────────────────────────────────────────────
+
+type FsEntry = { name: string; path: string; isDir: boolean };
+
+function DirPickerPanel({ value, onChange }: { value: string; onChange: (path: string) => void }) {
+  const [browsePath,   setBrowsePath]   = useState('');
+  const [entries,      setEntries]      = useState<FsEntry[]>([]);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [mkdirErr,     setMkdirErr]     = useState('');
+
+  function loadPath(path: string) {
+    fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(path)}`)
+      .then(r => r.json())
+      .then((d: { path?: string; entries?: FsEntry[] }) => {
+        const resolved = d.path ?? path;
+        setBrowsePath(resolved);
+        onChange(resolved);
+        setShowNewFolder(false);
+        setNewFolderName('');
+        setMkdirErr('');
+        const dirs = (d.entries ?? [])
+          .filter(e => e.isDir && !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__');
+        setEntries(dirs);
+      })
+      .catch(() => null);
+  }
+
+  function createFolder() {
+    const name = newFolderName.trim();
+    if (!name || !browsePath) return;
+    fetch(`${HTTP_BASE}/files/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent: browsePath, name }),
+    })
+      .then(r => r.json())
+      .then((d: { path?: string; error?: string }) => {
+        if (d.error) { setMkdirErr(d.error); return; }
+        loadPath(d.path ?? browsePath);
+      })
+      .catch(() => setMkdirErr('Failed to create folder'));
+  }
+
+  useEffect(() => { loadPath(value || ''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const parts = browsePath.split('/').filter(Boolean);
+  const parentPath = parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '/';
+
+  return (
+    <div className="dir-picker">
+      {/* Breadcrumb */}
+      <div className="dir-picker-crumb">
+        <button type="button" onClick={() => loadPath('/')}>/</button>
+        {parts.map((seg, i) => (
+          <span key={i} className="dir-picker-crumb-seg">
+            <span className="dir-picker-crumb-sep">/</span>
+            <button type="button" onClick={() => loadPath('/' + parts.slice(0, i + 1).join('/'))}>{seg}</button>
+          </span>
+        ))}
+      </div>
+      {/* Entries */}
+      <div className="dir-picker-list">
+        {parts.length > 0 && (
+          <button type="button" className="dir-picker-entry dir-picker-entry--up" onClick={() => loadPath(parentPath)}>
+            <FolderIcon size={13} /> ..
+          </button>
+        )}
+        {entries.length === 0 && <span className="dir-picker-empty">No subdirectories</span>}
+        {entries.map(e => (
+          <button key={e.path} type="button" className="dir-picker-entry" onClick={() => loadPath(e.path)}>
+            <FolderIcon size={13} />
+            {e.name}
+          </button>
+        ))}
+      </div>
+      {/* New folder row */}
+      {showNewFolder ? (
+        <div className="dir-picker-newfolder">
+          <input
+            className="dir-picker-newfolder-input"
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={e => { setNewFolderName(e.target.value); setMkdirErr(''); }}
+            onKeyDown={e => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
+            autoFocus
+          />
+          <button type="button" className="dir-picker-newfolder-ok" onClick={createFolder} disabled={!newFolderName.trim()}>Create</button>
+          <button type="button" className="dir-picker-newfolder-cancel" onClick={() => setShowNewFolder(false)}>✕</button>
+          {mkdirErr && <span className="dir-picker-newfolder-err">{mkdirErr}</span>}
+        </div>
+      ) : (
+        <button type="button" className="dir-picker-new-btn" onClick={() => setShowNewFolder(true)}>
+          + New folder
+        </button>
+      )}
+      {/* Selected path display */}
+      <div className="dir-picker-selected">
+        <span className="dir-picker-selected-label">Selected:</span>
+        <code className="dir-picker-selected-path">{browsePath || '…'}</code>
+      </div>
+    </div>
+  );
+}
+
+// ── Session list page ─────────────────────────────────────────────────────────
+
+type SortKey = 'recent' | 'alpha' | 'messages';
+const MODE_FILTER_ALL = 'all';
+
+function relativeTime(ts: number) {
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 60)    return 'just now';
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function absoluteTime(ts: number) {
+  return new Date(ts * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function SessionCard({
+  s, onSelect, onDelete,
+}: { s: SessionInfo; onSelect: () => void; onDelete: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const modeKey = s.mode === 'widget' ? 'canvas' : s.mode === 'worker' ? 'document' : s.mode === 'coder' ? 'code' : 'chat';
+  const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
+
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirming) { setConfirming(true); return; }
+    onDelete();
+    setMenuOpen(false);
+    setConfirming(false);
+  }
+
+  return (
+    <div
+      className="agent-session-card animate-slide-in"
+      style={{ '--session-accent': accentColor } as React.CSSProperties}
+      onClick={onSelect}
+    >
+      <div className="agent-session-card-top">
+        <span className="agent-session-dirname">{s.dirName}</span>
+        <div className="agent-session-card-actions" onClick={e => e.stopPropagation()}>
+          <span className="agent-session-time" title={absoluteTime(s.lastModified)}>
+            {relativeTime(s.lastModified)}
+          </span>
+          <span className="agent-session-mode-icon">
+            <ModeIconSvg iconKey={modeKey} size={14} />
+          </span>
+          <div className="agent-session-menu-wrap">
+            <button
+              type="button"
+              className="agent-session-menu-btn"
+              title="Options"
+              onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); setConfirming(false); }}
+            >
+              ···
+            </button>
+            {menuOpen && (
+              <div className="agent-session-menu">
+                <button
+                  type="button"
+                  className={`agent-session-menu-item agent-session-menu-item--danger${confirming ? ' confirming' : ''}`}
+                  onClick={handleDelete}
+                >
+                  {confirming ? 'Click again to confirm' : 'Delete project'}
+                </button>
+                <button type="button" className="agent-session-menu-item" onClick={e => { e.stopPropagation(); setMenuOpen(false); onSelect(); }}>
+                  Open project
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <CopyPathInline path={s.workingDir} />
+      {s.lastMessage && (
+        <div className="agent-session-preview">{s.lastMessage}</div>
+      )}
+      <div className="agent-session-meta">
+        {s.messageCount} message{s.messageCount !== 1 ? 's' : ''}
+      </div>
+    </div>
+  );
+}
 
 function SessionListPage({
   onSelect,
@@ -1894,76 +2212,179 @@ function SessionListPage({
   onSelect: (sessionId: string, cwd: string) => void;
   onNew: (cwd: string) => void;
 }) {
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [fetchErr, setFetchErr] = useState<string | null>(null);
-  const [showNew,  setShowNew]  = useState(false);
-  const [newCwd,   setNewCwd]   = useState('');
+  const [sessions,    setSessions]    = useState<SessionInfo[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [fetchErr,    setFetchErr]    = useState<string | null>(null);
+  const [showNew,     setShowNew]     = useState(false);
+  const [newCwd,      setNewCwd]      = useState('');
+  const [search,      setSearch]      = useState('');
+  const [sortKey,     setSortKey]     = useState<SortKey>('recent');
+  const [modeFilter,  setModeFilter]  = useState(MODE_FILTER_ALL);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  function load() {
     fetch(`${HTTP_BASE}/sessions`)
       .then(r => r.json())
       .then((d: { sessions: SessionInfo[] }) => { setSessions(d.sessions ?? []); setLoading(false); })
       .catch(e => { setFetchErr(e.message); setLoading(false); });
+  }
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Keyboard shortcut: / focuses search
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   function handleNew() {
     const cwd = newCwd.trim();
     if (!cwd) return;
-    // If a session already exists for this directory, resume it
     const existing = sessions.find(s => s.workingDir === cwd);
     if (existing) onSelect(existing.sessionId, cwd);
     else onNew(cwd);
   }
 
-  function relativeTime(ts: number) {
-    const diff = Date.now() / 1000 - ts;
-    if (diff < 60)   return 'just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return new Date(ts * 1000).toLocaleDateString();
+  function handleDelete(sessionId: string) {
+    fetch(`${HTTP_BASE}/sessions/${sessionId}`, { method: 'DELETE' })
+      .then(() => setSessions(prev => prev.filter(s => s.sessionId !== sessionId)))
+      .catch(() => null);
   }
+
+  // Unique modes present in sessions
+  const presentModes = Array.from(new Set(sessions.map(s => s.mode ?? 'general')));
+
+  // Filter + sort
+  const filtered = sessions
+    .filter(s => {
+      if (modeFilter !== MODE_FILTER_ALL && (s.mode ?? 'general') !== modeFilter) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return s.dirName.toLowerCase().includes(q) ||
+             s.workingDir.toLowerCase().includes(q) ||
+             s.lastMessage.toLowerCase().includes(q) ||
+             s.title.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (sortKey === 'recent')   return b.lastModified - a.lastModified;
+      if (sortKey === 'alpha')    return a.dirName.localeCompare(b.dirName);
+      if (sortKey === 'messages') return b.messageCount - a.messageCount;
+      return 0;
+    });
+
+  const modePillLabel: Record<string, string> = { general: 'General', widget: 'Widget', worker: 'Worker', coder: 'Coder' };
+  const modeIconKey: Record<string, string>   = { general: 'chat', widget: 'canvas', worker: 'document', coder: 'code' };
 
   return (
     <div className="agent-session-page">
+      {/* Header */}
       <div className="agent-session-topbar">
         <div>
-          <h2 className="agent-session-title">bzcode Agent</h2>
-          <p className="agent-session-subtitle">One conversation per working directory</p>
+          <h2 className="agent-session-title">
+            Agent Projects
+            {!loading && <span className="agent-session-count">{sessions.length}</span>}
+          </h2>
+          <p className="agent-session-subtitle">4 modes · multiple conversations per project</p>
         </div>
-        <button type="button" className="agent-session-new-btn" onClick={() => setShowNew(v => !v)}>
-          + New chat
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button type="button" className="agent-session-refresh-btn" title="Refresh" onClick={load}>
+            <ArrowCounterClockwiseIcon size={13} />
+          </button>
+          <button type="button" className="agent-session-new-btn" onClick={() => { setShowNew(v => !v); }}>
+            + New project
+          </button>
+        </div>
       </div>
 
-      {/* New chat form */}
+      {/* New project form */}
       {showNew && (
         <div className="agent-session-new-form animate-slide-in">
-          <label className="agent-session-new-label">Working directory</label>
-          <div className="wgt-search-bar" style={{ gap: 6 }}>
-            <input
-              className="wgt-search-input"
-              placeholder="/Users/you/your-project"
-              value={newCwd}
-              onChange={e => setNewCwd(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleNew()}
-              autoFocus
-            />
-            <button type="button" className="wgt-search-btn" onClick={handleNew} disabled={!newCwd.trim()}>→</button>
+          <div className="agent-session-new-form-header">
+            <label className="agent-session-new-label">Select project folder</label>
+            <button type="button" className="agent-session-new-close" onClick={() => setShowNew(false)}>
+              <XIcon size={13} />
+            </button>
           </div>
-          <p className="agent-session-new-hint">
-            If a session already exists for this directory it will be resumed.
-          </p>
+          <DirPickerPanel value={newCwd} onChange={setNewCwd} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button type="button" className="dir-picker-open-btn" onClick={handleNew} disabled={!newCwd.trim()}>
+              Open project →
+            </button>
+            <button type="button" className="agent-session-new-cancel" onClick={() => setShowNew(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search + filter bar */}
+      {!loading && sessions.length > 0 && (
+        <div className="agent-session-toolbar">
+          <div className="agent-session-search-wrap">
+            <MagnifyingGlassIcon size={13} className="agent-session-search-icon" />
+            <input
+              ref={searchRef}
+              className="agent-session-search"
+              placeholder="Search projects… (/)"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button type="button" className="agent-session-search-clear" onClick={() => setSearch('')}>
+                <XIcon size={11} />
+              </button>
+            )}
+          </div>
+          <select
+            className="agent-session-sort"
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value as SortKey)}
+          >
+            <option value="recent">Recent</option>
+            <option value="alpha">A → Z</option>
+            <option value="messages">Most messages</option>
+          </select>
+        </div>
+      )}
+
+      {/* Mode filter pills */}
+      {!loading && presentModes.length > 1 && (
+        <div className="agent-session-mode-filter">
+          <button
+            type="button"
+            className={`agent-session-mode-pill${modeFilter === MODE_FILTER_ALL ? ' active' : ''}`}
+            onClick={() => setModeFilter(MODE_FILTER_ALL)}
+          >All</button>
+          {presentModes.map(m => (
+            <button
+              key={m}
+              type="button"
+              className={`agent-session-mode-pill${modeFilter === m ? ' active' : ''}`}
+              onClick={() => setModeFilter(modeFilter === m ? MODE_FILTER_ALL : m)}
+            >
+              <ModeIconSvg iconKey={modeIconKey[m] ?? 'chat'} size={12} />
+              {modePillLabel[m] ?? m}
+            </button>
+          ))}
         </div>
       )}
 
       {/* Session cards */}
       <div className="agent-session-list">
         {loading && (
-          <div className="agent-session-empty">
-            <BoltzbitLogo size={20} className="boltzbit-logo-animate" />
-            <span>Loading sessions…</span>
-          </div>
+          <>
+            {[1,2,3].map(i => <div key={i} className="agent-session-skeleton" />)}
+          </>
         )}
         {fetchErr && (
           <div className="agent-session-empty">
@@ -1974,26 +2395,25 @@ function SessionListPage({
         {!loading && !fetchErr && sessions.length === 0 && (
           <div className="agent-session-empty">
             <TerminalIcon size={32} color="var(--text-tertiary)" weight="duotone" />
-            <p>No previous sessions — click <strong>+ New chat</strong> to start one.</p>
+            <p>No projects yet — click <strong>+ New project</strong> to start one.</p>
           </div>
         )}
-        {sessions.map(s => (
-          <button
+        {!loading && !fetchErr && sessions.length > 0 && filtered.length === 0 && (
+          <div className="agent-session-empty">
+            <p>No projects match <strong>{search || modeFilter}</strong></p>
+            <button type="button" className="agent-session-refresh-btn" style={{ marginTop: 8 }}
+              onClick={() => { setSearch(''); setModeFilter(MODE_FILTER_ALL); }}>
+              Clear filters
+            </button>
+          </div>
+        )}
+        {filtered.map(s => (
+          <SessionCard
             key={s.sessionId}
-            type="button"
-            className="agent-session-card animate-slide-in"
-            onClick={() => onSelect(s.sessionId, s.workingDir)}
-          >
-            <div className="agent-session-card-top">
-              <span className="agent-session-dirname">{s.dirName}</span>
-              <span className="agent-session-time">{relativeTime(s.lastModified)}</span>
-            </div>
-            <div className="agent-session-path" title={s.workingDir}>{s.workingDir}</div>
-            {s.lastMessage && (
-              <div className="agent-session-preview">{s.lastMessage}</div>
-            )}
-            <div className="agent-session-meta">{s.messageCount} message{s.messageCount !== 1 ? 's' : ''}</div>
-          </button>
+            s={s}
+            onSelect={() => onSelect(s.sessionId, s.workingDir)}
+            onDelete={() => handleDelete(s.sessionId)}
+          />
         ))}
       </div>
     </div>
@@ -2200,7 +2620,8 @@ function AgentPage() {
     if (searchSessionId) return (localStorage.getItem(modeLSKey(searchSessionId)) as AgentMode | null) ?? 'general';
     return 'general';
   });
-  const [editorRefreshKey, setEditorRefreshKey] = useState(0);
+  const [editorRefreshKey,  setEditorRefreshKey]  = useState(0);
+  const [canvasRefreshKey,  setCanvasRefreshKey]  = useState(0);
   // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
   const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
 
@@ -2274,11 +2695,11 @@ function AgentPage() {
   const [isEditingTitle,    setIsEditingTitle]    = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [canvasMode,   setCanvasMode]   = useState(() => {
-    // Canvas mode is per-session, not per-project
+  const [canvasMode,      setCanvasMode]      = useState(() => {
     if (!searchSessionId) return false;
     return localStorage.getItem(`bz-canvas:${searchSessionId}`) === '1';
   });
+  const [showWidgetChat,  setShowWidgetChat]  = useState(true);
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
@@ -2498,23 +2919,56 @@ function AgentPage() {
         if (Array.isArray(msg['commands'])) setAvailableCommands(msg['commands'] as Array<{name:string;description:string;aliases?:string[]}>);
         const history = msg['messages'] as Array<{ role: string; content: unknown }> | undefined;
         if (history?.length) {
+          // Pre-pass: build toolUseId → output map from user toolResult messages
+          // bzcode protocol uses camelCase: toolResult, toolUseId, isError
+          const toolResultMap = new Map<string, { content: string; isError: boolean }>();
+          for (const m of history) {
+            if (m.role !== 'user' || !Array.isArray(m.content)) continue;
+            for (const block of m.content as Array<Record<string, unknown>>) {
+              if (block['type'] === 'toolResult' && typeof block['toolUseId'] === 'string') {
+                const raw = block['content'];
+                const content = typeof raw === 'string'
+                  ? raw
+                  : Array.isArray(raw)
+                    ? (raw as Array<Record<string, unknown>>)
+                        .filter(b => b['type'] === 'text')
+                        .map(b => String(b['text'] ?? ''))
+                        .join('\n')
+                    : '';
+                toolResultMap.set(block['toolUseId'] as string, { content, isError: !!block['isError'] });
+              }
+            }
+          }
+
           const restored: DisplayItem[] = [];
           for (const m of history) {
             if (m.role === 'user') {
-              const text = typeof m.content === 'string' ? m.content : '';
-              if (!text) continue; // skip tool-result messages (content is array)
+              if (typeof m.content !== 'string') continue; // toolResult batches already mapped above
+              const text = m.content;
               const trimmed = text.trimStart();
-              // Skip internal bzcode injections (date reminders etc.)
               if (trimmed.startsWith('<system-reminder>')) continue;
-              // Compact summary — render in-place at the position bzcode stored it
               if (trimmed.startsWith('<context-summary>')) {
                 restored.push({ id: uid(), kind: 'compact-summary' as const, text });
                 continue;
               }
               restored.push({ id: uid(), kind: 'user', text });
             } else {
-              const blocks = Array.isArray(m.content) ? bzBlocksToAssistantBlocks(m.content as unknown[]) : [];
-              if (blocks.length) restored.push({ id: uid(), kind: 'assistant', blocks });
+              const content = Array.isArray(m.content) ? m.content as Array<Record<string, unknown>> : [];
+              // Text / thinking blocks
+              const textBlocks = bzBlocksToAssistantBlocks(content as unknown[]);
+              if (textBlocks.length) restored.push({ id: uid(), kind: 'assistant', blocks: textBlocks });
+              // Tool use blocks → restore as completed tool cards (camelCase: toolUse, id, name, input)
+              for (const b of content) {
+                if (b['type'] === 'toolUse' && typeof b['id'] === 'string' && typeof b['name'] === 'string') {
+                  const result = toolResultMap.get(b['id']);
+                  restored.push({
+                    id: uid(), kind: 'tool',
+                    toolUseId: b['id'], name: b['name'],
+                    status: 'done', input: b['input'],
+                    output: result?.content, isError: result?.isError,
+                  } as DisplayItem);
+                }
+              }
             }
           }
           setItems(restored);
@@ -2623,7 +3077,10 @@ function AgentPage() {
           setItems(prev => [...prev, { id: uid(), kind: 'assistant', blocks: [{ type: 'text', text: msg['output'] as string }] }]);
         }
         // Reload editor file in case the agent modified it
-        if (msg['status'] === 'success') setEditorRefreshKey(k => k + 1);
+        if (msg['status'] === 'success') {
+          setEditorRefreshKey(k => k + 1);
+          setCanvasRefreshKey(k => k + 1);  // reload canvas — agent may have deployed a widget
+        }
       }
     };
 
@@ -2905,9 +3362,7 @@ function AgentPage() {
             Agent
           </button>
           <span className="agent-breadcrumb-sep">/</span>
-          <span className="agent-breadcrumb-page" title={activeCwd}>
-            {activeDirName || '—'}
-          </span>
+          <CopyPathButton path={activeCwd} label={activeDirName || '—'} />
           {sessionTitle && !isEditingTitle && (
             <>
               <span className="agent-breadcrumb-sep">·</span>
@@ -2942,27 +3397,6 @@ function AgentPage() {
           onSwitch={m => openSession(activeCwd, null, m)}
         />
 
-        {/* Canvas/Chat toggle — only relevant in widget mode */}
-        {agentMode === 'widget' && (
-        <div className="agent-view-toggle">
-          <button
-            type="button"
-            className={`agent-view-btn${!canvasMode ? ' agent-view-btn--active' : ''}`}
-            onClick={() => { setCanvasMode(false); const k = currentSessionId ?? activeSessionId; if (k) localStorage.setItem(`bz-canvas:${k}`, '0'); }}
-          >
-            <ChatCircleDotsIcon size={13} />
-            Chat
-          </button>
-          <button
-            type="button"
-            className={`agent-view-btn${canvasMode ? ' agent-view-btn--active' : ''}`}
-            onClick={() => { setCanvasMode(true);  const k = currentSessionId ?? activeSessionId; if (k) localStorage.setItem(`bz-canvas:${k}`, '1'); }}
-          >
-            <SquaresFourIcon size={13} />
-            Canvas
-          </button>
-        </div>
-        )}
 
         <div className={`agent-connection agent-connection--${connStatus}`}>
           <span className="agent-connection-dot" />
@@ -2994,11 +3428,25 @@ function AgentPage() {
 
       {/* Body — layout depends on mode */}
       <div className={
-        (agentMode === 'widget' && canvasMode) || agentMode === 'worker' || agentMode === 'coder'
+        agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder'
           ? 'agent-canvas-layout'
           : 'agent-chat-col'
       }>
-      <div className="agent-chat-col">
+      <div className={`agent-chat-col${agentMode === 'widget' && !showWidgetChat ? ' agent-chat-col--float-prompt' : ''}`}>
+
+      {/* Collapse strip — widget mode only */}
+      {agentMode === 'widget' && (
+        <div className="agent-widget-chat-strip">
+          <button
+            type="button"
+            className="agent-widget-chat-strip-btn"
+            title="Hide chat"
+            onClick={() => setShowWidgetChat(false)}
+          >
+            <ChatCircleDotsIcon size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Messages wrapper — position:relative so the sticky overlay anchors here, not inside the scrollable area */}
       <div className="agent-messages-wrapper">
@@ -3114,7 +3562,11 @@ function AgentPage() {
                 );
               }
 
-              if (item.kind === 'tool')             return <ToolCard key={item.id} item={item} />;
+              if (item.kind === 'tool') {
+                if (agentMode !== 'widget') return <ToolCard key={item.id} item={item} />;
+                if (item.name === 'Skill') return <WidgetSkillBadge key={item.id} item={item} />;
+                return null;
+              }
               if (item.kind === 'push-progress')   return <PushProgressCard key={item.id} item={item} />;
               if (item.kind === 'sync-progress')   return <SyncProgressCard key={item.id} item={item} />;
               if (item.kind === 'compact-summary') return <CompactSummaryCard key={item.id} text={item.text} />;
@@ -3132,6 +3584,8 @@ function AgentPage() {
         )}
         </div>
       </div>
+
+      <div className="agent-prompt-section">
 
       {/* Sticky prompt cards — rendered above input bar */}
       {(pendingPermission || pendingInput) && (
@@ -3196,6 +3650,19 @@ function AgentPage() {
       )}
 
       <div className="agent-input-bar">
+        {/* Show-chat button — floats above input box, visible only when prompt is floating */}
+        {agentMode === 'widget' && !showWidgetChat && (
+          <button
+            type="button"
+            className="agent-widget-showchat-btn"
+            title="Show chat"
+            onClick={() => setShowWidgetChat(true)}
+          >
+            <ChatCircleDotsIcon size={14} />
+            Chat
+          </button>
+        )}
+
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -3315,9 +3782,15 @@ function AgentPage() {
         </div>
       </div>
 
-      </div>
+      </div>{/* end agent-prompt-section */}
 
-      {agentMode === 'widget' && canvasMode && <CanvasPanel cwd={activeCwd} />}
+      </div>{/* end agent-chat-col */}
+
+      {agentMode === 'widget' && (
+        <div className="agent-widget-canvas-wrap">
+          <CanvasPanel cwd={activeCwd} refreshKey={canvasRefreshKey} />
+        </div>
+      )}
       {(agentMode === 'worker' || agentMode === 'coder') && (
         <EditorPanel
           cwd={activeCwd}

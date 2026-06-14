@@ -36,7 +36,7 @@
       "widgetId": "bar",
       "kind": "bar",
       "title": "Bar Chart",
-      "x": 736,
+      "x": 784,
       "y": 251,
       "w": 476,
       "h": 216
@@ -46,8 +46,8 @@
       "widgetId": "whiteboard",
       "kind": "whiteboard",
       "title": "Whiteboard",
-      "x": 381,
-      "y": 565,
+      "x": 384,
+      "y": 859,
       "w": 692,
       "h": 254
     },
@@ -77,7 +77,7 @@
       "kind": "calendar",
       "title": "Calendar",
       "x": 372,
-      "y": 833,
+      "y": 1127,
       "w": 280,
       "h": 290
     },
@@ -87,7 +87,7 @@
       "kind": "bar",
       "title": "Bar Chart",
       "x": 666,
-      "y": 833,
+      "y": 1127,
       "w": 380,
       "h": 280
     },
@@ -96,10 +96,30 @@
       "widgetId": "news",
       "kind": "news",
       "title": "News",
-      "x": 400,
+      "x": 416,
       "y": 251,
       "w": 320,
       "h": 300
+    },
+    {
+      "canvasId": "cw-bcc77cf9a35e",
+      "widgetId": "cw-bcc77cf9a35e",
+      "kind": "custom",
+      "title": "Pie Chart",
+      "x": 384,
+      "y": 565,
+      "w": 380,
+      "h": 280
+    },
+    {
+      "canvasId": "cw-65d57350af30",
+      "widgetId": "cw-65d57350af30",
+      "kind": "custom",
+      "title": "Clock",
+      "x": 24,
+      "y": 1431,
+      "w": 380,
+      "h": 280
     }
   ]
 }

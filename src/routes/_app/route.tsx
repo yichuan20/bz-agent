@@ -12,8 +12,8 @@
  *   • 2px hover zone at left edge → hoveredOpen=true → sidebar slides in as overlay
  *   • Mouse leaves sidebar → hoveredOpen=false → sidebar slides out
  */
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
-import { useState } from 'react';
+import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
+import { useState, useEffect } from 'react';
 import Sidebar from '#/components/Sidebar';
 import TopBar  from '#/components/TopBar';
 import { isLoggedIn, useIsLoggedIn } from '#/auth-store';
@@ -26,9 +26,18 @@ export const Route = createFileRoute('/_app')({
 });
 
 function AppLayout() {
-  const loggedIn     = useIsLoggedIn();
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const loggedIn  = useIsLoggedIn();
+  const pathname  = useRouterState({ select: s => s.location.pathname });
+  const onAgent   = pathname === '/agent';
+
+  const [sidebarOpen,  setSidebarOpen]  = useState(!onAgent);
   const [hoveredOpen,  setHoveredOpen]  = useState(false);
+
+  // Auto-collapse when entering agent, restore when leaving
+  useEffect(() => {
+    setSidebarOpen(!onAgent);
+    setHoveredOpen(false);
+  }, [onAgent]);
 
   if (!loggedIn) return null;
 

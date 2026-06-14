@@ -51,14 +51,48 @@ def _mode_entry(mode: str) -> dict:
     modes = cfg.get("modes", {})
     return modes.get(mode) or modes.get(cfg.get("default", "general"), {}) or {}
 
+def _build_widget_template_table() -> str:
+    """Build a markdown table of widget templates from server_data/widgets/index.json.
+    Used to inject an up-to-date alias table into the new-widget skill at session-write time."""
+    try:
+        index_path = SERVER_DATA_DIR / "widgets" / "index.json"
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        widgets = [w for w in data.get("widgets", []) if not w.get("archived")]
+    except Exception:
+        return "(template index unavailable)"
+
+    lines = ["| Template | Matches requests like… | Default size |",
+             "|---|---|---|"]
+    for w in widgets:
+        name     = w.get("id", "")
+        label    = w.get("label", name)
+        keywords = ", ".join(w.get("keywords", [])[:6])
+        dw, dh   = w.get("defaultW", 380), w.get("defaultH", 280)
+        lines.append(f"| `{name}` | {label}: {keywords} | {dw}×{dh} |")
+    return "\n".join(lines)
+
+
 def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> None:
     """Write IDENTITY.md, SOUL.md, settings.json, and meta.json into the session
     config directory before spawning bzcode.  bzcode picks these up at startup and
     on every --resume, so they are re-applied on reconnect too.
     meta.json is our own metadata (not read by bzcode) used by _read_session_file."""
+    import shutil as _shutil
+
     entry = _mode_entry(mode)
     cfg_dir = SESSIONS_DIR / session_id
     cfg_dir.mkdir(parents=True, exist_ok=True)
+
+    # Purge sub-agent session files/dirs that bzcode's Agent tool leaves inside
+    # the config dir (e.g. cozy-hopping-comet.jsonl, tool-results/).  They are
+    # not part of our config and prevent bzcode from resuming cleanly.
+    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills"}
+    for item in list(cfg_dir.iterdir()):
+        if item.name not in _OWNED_NAMES:
+            if item.is_dir():
+                _shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink(missing_ok=True)
 
     # Our own metadata — used by _read_session_file since new bzcode no longer
     # writes a session header line into the .jsonl
@@ -80,12 +114,39 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     else:
         (cfg_dir / "SOUL.md").unlink(missing_ok=True)
 
+    # AGENTS.md — workflow instructions; session-level replaces project/user AGENTS.md entirely.
+    # Used to tell the agent to invoke skills proactively rather than waiting for the user.
+    agents_md = entry.get("agents_md")
+    if agents_md:
+        (cfg_dir / "AGENTS.md").write_text(agents_md, encoding="utf-8")
+    else:
+        (cfg_dir / "AGENTS.md").unlink(missing_ok=True)
+
     # settings.json — tools, model, permissions, etc.
     settings = entry.get("settings")
     if settings:
         (cfg_dir / "settings.json").write_text(json.dumps(settings, indent=2), encoding="utf-8")
     else:
         (cfg_dir / "settings.json").unlink(missing_ok=True)
+
+    # skills/{name}/SKILL.md — session-specific skills (only available to this mode)
+    skills_dir = cfg_dir / "skills"
+    # Remove any stale skills from a previous mode first
+    if skills_dir.exists():
+        _shutil.rmtree(skills_dir)
+    skills = entry.get("skills", {})
+    for skill_name, skill_content in skills.items():
+        # Resolve placeholders so skills can reference local paths
+        scripts_dir = Path(__file__).resolve().parent / "bzcode" / "scripts"
+        resolved = (skill_content
+            .replace("{server_data_path}", str(SERVER_DATA_DIR))
+            .replace("{scripts_path}",     str(scripts_dir))
+            .replace("{working_dir}",      working_dir)
+            .replace("{widget_template_table}", _build_widget_template_table())
+        )
+        skill_path = skills_dir / skill_name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True, exist_ok=True)
+        skill_path.write_text(resolved, encoding="utf-8")
 
 
 # ── Database configuration ────────────────────────────────────────────────────
@@ -154,7 +215,50 @@ def _clear_default(cwd: str) -> None:
     _DEFAULTS_FILE.write_text(json.dumps(defaults, indent=2))
 
 # Server-local data — lives alongside server.py so it travels with the project
-SERVER_DATA_DIR = Path(__file__).parent / "server_data"
+SERVER_DATA_DIR = (Path(__file__).resolve().parent / "server_data")
+
+# ── Custom widget code store ──────────────────────────────────────────────────
+# Canvas-edited widget code lives here, keyed by canvasId.
+# Separate from server_data/widgets/ (toolbar templates) so edited instances
+# don't pollute the template list.
+CUSTOM_WIDGETS_DIR = SERVER_DATA_DIR / "custom_widgets"
+
+
+async def handle_get_custom_widget(request: web.Request) -> web.Response:
+    """GET /custom-widgets/{canvasId} — read saved code for a canvas widget instance."""
+    canvas_id = request.match_info.get("canvasId", "")
+    p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
+    if not p.exists():
+        return web.json_response({"error": "not found"}, status=404, headers=CORS_HEADERS)
+    return web.json_response({"canvasId": canvas_id, "code": p.read_text(encoding="utf-8")},
+                             headers=CORS_HEADERS)
+
+
+async def handle_put_custom_widget(request: web.Request) -> web.Response:
+    """PUT /custom-widgets/{canvasId} { code } — save edited code for a canvas widget instance."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    canvas_id = request.match_info.get("canvasId", "")
+    if not canvas_id:
+        return web.json_response({"error": "canvasId required"}, status=400, headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+        code = str(body.get("code", ""))
+        CUSTOM_WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
+        (CUSTOM_WIDGETS_DIR / f"{canvas_id}.js").write_text(code, encoding="utf-8")
+        return web.json_response({"ok": True, "canvasId": canvas_id}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_delete_custom_widget(request: web.Request) -> web.Response:
+    """DELETE /custom-widgets/{canvasId} — remove saved custom code."""
+    canvas_id = request.match_info.get("canvasId", "")
+    p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
+    if p.exists():
+        p.unlink()
+    return web.json_response({"ok": True}, headers=CORS_HEADERS)
+
 
 # ── Session reader ────────────────────────────────────────────────────────────
 
@@ -226,6 +330,15 @@ def _read_session_file(path: Path) -> Optional[dict]:
             except json.JSONDecodeError:
                 pass
 
+        # Read agent mode from our meta.json
+        agent_mode = "general"
+        meta_file = SESSIONS_DIR / session_id / "meta.json"
+        if meta_file.exists():
+            try:
+                agent_mode = json.loads(meta_file.read_text()).get("mode", "general")
+            except Exception:
+                pass
+
         stat          = path.stat()
         custom_titles = _load_titles()
         return {
@@ -237,6 +350,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
             "lastMessage":  last_preview,
             "lastModified": stat.st_mtime,
             "created":      created,
+            "mode":         agent_mode,
         }
     except Exception:
         return None
@@ -557,6 +671,29 @@ async def handle_files(request: web.Request) -> web.Response:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
+async def handle_mkdir(request: web.Request) -> web.Response:
+    """POST /files/mkdir { parent, name } — create a new directory."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    parent = body.get("parent", "").strip()
+    name   = body.get("name",   "").strip()
+    if not parent or not name:
+        return web.json_response({"error": "parent and name required"}, status=400, headers=CORS_HEADERS)
+    # Sanitise: no path separators in name
+    if "/" in name or "\\" in name or name in (".", ".."):
+        return web.json_response({"error": "invalid folder name"}, status=400, headers=CORS_HEADERS)
+    new_dir = Path(parent) / name
+    try:
+        new_dir.mkdir(parents=False, exist_ok=False)
+        return web.json_response({"path": str(new_dir)}, headers=CORS_HEADERS)
+    except FileExistsError:
+        return web.json_response({"error": "folder already exists"}, status=409, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
 async def handle_get_canvas(request: web.Request) -> web.Response:
     """Load canvas layout for a working directory."""
     cwd = request.rel_url.query.get("cwd", "").strip()
@@ -588,6 +725,120 @@ async def handle_post_canvas(request: web.Request) -> web.Response:
     with open(canvas_file, "w", encoding="utf-8") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)
     return web.json_response({"ok": True, "file": str(canvas_file)}, headers=CORS_HEADERS)
+
+
+async def handle_deploy_widget(request: web.Request) -> web.Response:
+    """
+    POST /canvas/deploy-widget
+    Deploy a complete widget in one call — the agent uses this to place a
+    widget directly onto the user's canvas without manual UI steps.
+
+    Body:
+    {
+      "cwd":         "/path/to/project",   -- required: project directory
+      "title":       "My Widget",           -- required: widget display name
+      "code":        "// JS code...",       -- required: self-contained widget JS
+      "w":           380,                   -- width  (default 380)
+      "h":           280,                   -- height (default 280)
+      "x":           null,                  -- x position (auto-placed if null)
+      "y":           null,                  -- y position (auto-placed if null)
+      "initialData": [{"label":"A","value":1}]  -- optional: seed rows for db
+    }
+
+    Returns: { canvasId, widgetId, title, x, y, w, h, canvasFile }
+    """
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+
+    cwd   = str(body.get("cwd", "")).strip()
+    title = str(body.get("title", "Widget")).strip()
+    code  = str(body.get("code", "")).strip()
+    w     = int(body.get("w", 380))
+    h     = int(body.get("h", 280))
+    x     = body.get("x")
+    y     = body.get("y")
+    initial_data = body.get("initialData") or []
+
+    if not cwd or not os.path.isdir(cwd):
+        return web.json_response({"error": "invalid cwd"}, status=400, headers=CORS_HEADERS)
+    if not code:
+        return web.json_response({"error": "code is required"}, status=400, headers=CORS_HEADERS)
+
+    # ── 1. Generate a stable canvas ID ───────────────────────────────────────
+    import secrets as _sec
+    canvas_id = _sec.token_hex(5)   # 10-char hex, same length as uid() in the frontend
+
+    # ── 2. Save widget code to server_data/custom_widgets/{canvasId}.js ──────
+    CUSTOM_WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
+    (CUSTOM_WIDGETS_DIR / f"{canvas_id}.js").write_text(code, encoding="utf-8")
+
+    # ── 3. Seed initial data rows if provided ─────────────────────────────────
+    if initial_data:
+        import datetime as _dt
+        widget_data_dir = SERVER_DATA_DIR / "widget_data"
+        widget_data_dir.mkdir(parents=True, exist_ok=True)
+        data_file = widget_data_dir / f"{canvas_id}.json"
+        records   = []
+        next_id   = 1
+        for row in initial_data:
+            row = {k: v for k, v in row.items() if k not in ("id", "created_at")}
+            row["id"]         = next_id
+            row["created_at"] = _dt.datetime.utcnow().isoformat() + "Z"
+            records.append(row)
+            next_id += 1
+        data_file.write_text(
+            json.dumps({"_next_id": next_id, "records": records}, indent=2),
+            encoding="utf-8",
+        )
+
+    # ── 4. Update .bzcanvas.json — append widget with auto-placement ──────────
+    canvas_file = Path(cwd) / ".bzcanvas.json"
+    canvas_data: dict = {"version": 1, "widgets": []}
+    if canvas_file.exists():
+        try:
+            canvas_data = json.loads(canvas_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    existing = canvas_data.get("widgets", [])
+
+    # Auto-place: find the first free slot below existing widgets
+    if x is None or y is None:
+        pad  = 24
+        if existing:
+            max_y  = max((e.get("y", 0) + e.get("h", 0)) for e in existing)
+            place_x = pad
+            place_y = max_y + pad
+        else:
+            place_x = pad
+            place_y = pad
+        x = x if x is not None else place_x
+        y = y if y is not None else place_y
+
+    new_entry = {
+        "canvasId": canvas_id,
+        "widgetId": canvas_id,   # custom instance — points to custom_widgets/{id}.js
+        "kind":     "custom",
+        "title":    title,
+        "x": x, "y": y, "w": w, "h": h,
+    }
+    existing.append(new_entry)
+    canvas_data["widgets"] = existing
+    canvas_file.write_text(json.dumps(canvas_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    return web.json_response({
+        "ok":        True,
+        "canvasId":  canvas_id,
+        "widgetId":  canvas_id,
+        "title":     title,
+        "x": x, "y": y, "w": w, "h": h,
+        "canvasFile": str(canvas_file),
+        "codePath":  str(CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"),
+    }, headers=CORS_HEADERS)
 
 
 async def handle_get_widgets(request: web.Request) -> web.Response:
@@ -750,15 +1001,42 @@ async def handle_sessions(request: web.Request) -> web.Response:
                 sessions.append(meta)
         sessions.sort(key=lambda s: s["lastModified"], reverse=True)
     else:
+        # Two passes per working directory:
+        #   1. Most-recently-MODIFIED session → drives title/preview/lastModified shown on the card
+        #   2. Most-recently-CONNECTED session → drives the mode badge
+        #      (meta.json mtime updated on every WS connect, so it reflects the last mode opened)
         by_dir: dict[str, dict] = {}
+        by_dir_mode: dict[str, tuple[float, str]] = {}  # wd → (meta_mtime, mode)
+
         for path in SESSIONS_DIR.glob("*.jsonl"):
             meta = _read_session_file(path)
             if meta is None:
                 continue
             wd = meta["workingDir"]
+            sid = meta["sessionId"]
+
+            # Track representative session (highest JSONL mtime)
             existing = by_dir.get(wd)
             if existing is None or meta["lastModified"] > existing["lastModified"]:
                 by_dir[wd] = meta
+
+            # Track most-recently-connected mode via meta.json mtime
+            meta_file = SESSIONS_DIR / sid / "meta.json"
+            if meta_file.exists():
+                try:
+                    meta_mtime = meta_file.stat().st_mtime
+                    prev_mtime, _ = by_dir_mode.get(wd, (0.0, "general"))
+                    if meta_mtime > prev_mtime:
+                        session_mode = json.loads(meta_file.read_text()).get("mode", "general")
+                        by_dir_mode[wd] = (meta_mtime, session_mode)
+                except Exception:
+                    pass
+
+        # Inject the latest-connected mode into each representative session
+        for wd, session in by_dir.items():
+            if wd in by_dir_mode:
+                session["mode"] = by_dir_mode[wd][1]
+
         sessions = sorted(by_dir.values(), key=lambda s: s["lastModified"], reverse=True)
 
     # Annotate with live connection, running status, and default session
@@ -902,6 +1180,7 @@ class _WASess:
             stderr=asyncio.subprocess.PIPE,
             cwd=self.cwd,
             env={**os.environ},
+            limit=16 * 1024 * 1024,
         )
         asyncio.create_task(self._read_loop())
         # Drain the session message and switch to yolo so tools auto-approve
@@ -1440,6 +1719,7 @@ class _BatchItem:
                 stderr=asyncio.subprocess.DEVNULL,
                 cwd=self.cwd,
                 env={**os.environ},
+                limit=16 * 1024 * 1024,
             )
             asyncio.create_task(self._read_loop())
             # Allow bzcode to send its session/ready message
@@ -1603,7 +1883,7 @@ async def handle_db_health(request: web.Request) -> web.Response:
 import re as _re
 import threading as _threading
 
-_CANVAS_ID_RE = _re.compile(r'^[a-z0-9]{4,32}$')
+_CANVAS_ID_RE = _re.compile(r'^[a-z0-9][a-z0-9-]{3,63}$')
 WIDGET_DATA_DIR = SERVER_DATA_DIR / "widget_data"
 _widget_locks: dict = {}   # per-canvasId write locks
 _widget_locks_meta = _threading.Lock()
@@ -1917,7 +2197,9 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
     app.router.add_get( "/shell",                  handle_shell)
     app.router.add_route("OPTIONS", "/shell",         handle_options)
     app.router.add_get( "/files",                  handle_files)
+    app.router.add_post("/files/mkdir",            handle_mkdir)
     app.router.add_route("OPTIONS", "/files",         handle_options)
+    app.router.add_route("OPTIONS", "/files/mkdir",   handle_options)
     # File read / write (for worker + coder editor panel)
     app.router.add_get( "/api/file",               handle_read_file)
     app.router.add_put( "/api/file",               handle_write_file)
@@ -1925,7 +2207,14 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
     # Canvas
     app.router.add_get( "/canvas",                 handle_get_canvas)
     app.router.add_post("/canvas",                 handle_post_canvas)
-    app.router.add_route("OPTIONS", "/canvas",      handle_options)
+    app.router.add_post("/canvas/deploy-widget",   handle_deploy_widget)
+    app.router.add_route("OPTIONS", "/canvas",             handle_options)
+    app.router.add_route("OPTIONS", "/canvas/deploy-widget", handle_options)
+    # Per-instance custom widget code (edited via the </>  button on the canvas)
+    app.router.add_get(   "/custom-widgets/{canvasId}", handle_get_custom_widget)
+    app.router.add_put(   "/custom-widgets/{canvasId}", handle_put_custom_widget)
+    app.router.add_delete("/custom-widgets/{canvasId}", handle_delete_custom_widget)
+    app.router.add_route("OPTIONS", "/custom-widgets/{canvasId}", handle_options)
     # Database
     app.router.add_get(   "/db/health",                      handle_db_health)
     app.router.add_route("OPTIONS", "/db/health",             handle_options)
@@ -2154,6 +2443,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
             stderr=asyncio.subprocess.PIPE,
             cwd=effective_cwd,
             env={**os.environ},
+            limit=16 * 1024 * 1024,  # 16 MB — large sessions can emit long lines
         )
     except FileNotFoundError:
         await ws.send_str(json.dumps({
