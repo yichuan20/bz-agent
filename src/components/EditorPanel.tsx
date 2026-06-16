@@ -7,8 +7,20 @@
  *   - both share identical font/padding so they stay pixel-aligned
  *   - the outer div scrolls; both layers follow
  */
-import { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { parseMarkdownToHTML } from '@boltzbit/md-utils';
 import { FileIcon, FolderIcon, FolderOpenIcon, XIcon } from '@phosphor-icons/react';
+import { WordDocEditor, type Block } from '#/office';
+import { ExcelEditor } from '#/excel';
+import { PptEditor } from '#/ppt';
+
+const DOC_EXTS    = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx']);
+const EXCEL_EXTS  = new Set(['xls','xlsx']);
+const PPT_EXTS    = new Set(['ppt','pptx']);
+function isDocExt(name: string)   { return DOC_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isExcelExt(name: string) { return EXCEL_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isPptExt(name: string)   { return PPT_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+const DOC_ICONS: Record<string, string> = { pdf:'📄', docx:'📝', doc:'📝', xlsx:'📊', xls:'📊', pptx:'📑' };
 
 const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
@@ -123,46 +135,66 @@ function HighlightLayer({ content, filename }: { content: string; filename: stri
 // ── File tree ─────────────────────────────────────────────────────────────────
 type FsEntry = { name: string; path: string; isDir: boolean };
 
-function TreeNode({ entry, depth, selected, onSelect }: {
-  entry: FsEntry; depth: number; selected: string | null; onSelect: (p: string) => void;
+interface CtxMenu { x: number; y: number; entry: FsEntry }
+
+function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renamingPath, onRenameCommit, onRefresh }: {
+  entry: FsEntry; depth: number; selected: string | null;
+  onSelect: (p: string) => void;
+  ctxMenu: CtxMenu | null;
+  onCtxMenu: (e: React.MouseEvent, entry: FsEntry) => void;
+  renamingPath: string | null;
+  onRenameCommit: (entry: FsEntry, newName: string) => void;
+  onRefresh: () => void;
 }) {
-  const [open, setOpen]     = useState(depth === 0);
-  const [kids, setKids]     = useState<FsEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const isActive = entry.path === selected && !entry.isDir;
+  const [open,    setOpen]    = useState(depth === 0);
+  const [kids,    setKids]    = useState<FsEntry[]>([]);
+  const [loaded,  setLoaded]  = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [renameVal, setRenameVal] = useState('');
+  const renameRef = useRef<HTMLInputElement>(null);
+  const isActive    = entry.path === selected && !entry.isDir;
+  const isRenaming  = renamingPath === entry.path;
 
   function load() {
-    if (loaded) return;
+    if (loaded || loading) return;
+    setLoading(true);
     const HIDDEN = new Set(['.git','node_modules','__pycache__','.venv','.bzhub','dist','.next','.turbo']);
     fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(entry.path)}`)
       .then(r => r.json())
       .then((d: { entries?: FsEntry[] }) => {
         setKids((d.entries ?? []).filter(e => !e.name.startsWith('.') && !HIDDEN.has(e.name)));
-        setLoaded(true);
+        setLoaded(true); setLoading(false);
       })
-      .catch(() => setLoaded(true));
+      .catch(() => { setLoaded(true); setLoading(false); });
   }
 
-  const toggle = () => { if (!loaded) load(); setOpen(v => !v); };
+  useEffect(() => { if (open && !loaded) load(); }, [open]); // eslint-disable-line
+
+  // Focus rename input when it appears
+  useEffect(() => {
+    if (isRenaming) {
+      setRenameVal(entry.name);
+      setTimeout(() => { renameRef.current?.select(); }, 50);
+    }
+  }, [isRenaming, entry.name]);
+
+  const toggle = () => { setOpen(v => !v); };
   const name   = entry.name || entry.path.split('/').filter(Boolean).pop() || entry.path;
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => entry.isDir ? toggle() : onSelect(entry.path)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          width: '100%', textAlign: 'left',
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           padding: `3px 8px 3px ${8 + depth * 14}px`,
-          border: 'none', cursor: 'pointer', borderRadius: 3,
+          borderRadius: 3, cursor: 'pointer',
           background: isActive ? 'rgba(86,156,214,0.18)' : 'transparent',
           color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
           fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-          transition: 'background 80ms',
         }}
-        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+        onClick={() => { if (!isRenaming) { entry.isDir ? toggle() : onSelect(entry.path); } }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onCtxMenu(e, entry); }}
+        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
+        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
       >
         {entry.isDir
           ? open
@@ -170,52 +202,173 @@ function TreeNode({ entry, depth, selected, onSelect }: {
             : <FolderIcon     size={13} style={{ color: FOLDER_COLOR, flexShrink: 0 }} weight="duotone" />
           : <FileIcon         size={13} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
         }
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-      </button>
-      {entry.isDir && open && kids.map(k => (
-        <TreeNode key={k.path} entry={k} depth={depth + 1} selected={selected} onSelect={onSelect} />
+        {isRenaming ? (
+          <input
+            ref={renameRef}
+            value={renameVal}
+            onChange={e => setRenameVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); onRenameCommit(entry, renameVal); }
+              if (e.key === 'Escape') onRenameCommit(entry, entry.name); // cancel
+            }}
+            onBlur={() => onRenameCommit(entry, renameVal)}
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--accent-blue)', borderRadius: 3, padding: '1px 4px', outline: 'none' }}
+          />
+        ) : (
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{name}</span>
+        )}
+      </div>
+      {entry.isDir && open && loading && (
+        <div style={{ padding: `2px 8px 2px ${8 + (depth + 1) * 14}px`, fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
+          Loading…
+        </div>
+      )}
+      {entry.isDir && open && !loading && kids.map(k => (
+        <TreeNode key={k.path} entry={k} depth={depth + 1} selected={selected} onSelect={onSelect}
+          ctxMenu={ctxMenu} onCtxMenu={onCtxMenu} renamingPath={renamingPath}
+          onRenameCommit={onRenameCommit} onRefresh={onRefresh} />
       ))}
     </div>
   );
 }
 
 // ── Editor panel ──────────────────────────────────────────────────────────────
-interface Tab { path: string; name: string; content: string; dirty: boolean }
+interface Tab {
+  path: string; name: string; content: string; dirty: boolean;
+  // Set for all document files (pdf/pptx) — markdown text
+  docType?: string; docPages?: number; docWordCount?: number; docTruncated?: boolean;
+  // Set for Word files (docx/doc) — bz-office Block[] format
+  blocks?: Block[];
+  // Set for Excel files — handled by ExcelEditor directly (data loaded from server)
+  isExcel?: boolean;
+  // Set for PPT files — handled by PptEditor directly
+  isPpt?: boolean;
+}
 
 interface Props { cwd: string; codeMode: boolean; refreshKey?: number }
 
 export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
-  const [tabs,      setTabs]      = useState<Tab[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [saving,    setSaving]    = useState(false);
-  const [error,     setError]     = useState('');
-  const [dragTab,   setDragTab]   = useState<string | null>(null);
-  const [dragOver,  setDragOver]  = useState<string | null>(null);
+  const [tabs,         setTabs]         = useState<Tab[]>([]);
+  const [activeTab,    setActiveTab]    = useState<string | null>(null);
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState('');
+  const [dragTab,      setDragTab]      = useState<string | null>(null);
+  const [dragOver,     setDragOver]     = useState<string | null>(null);
+  const [ctxMenu,      setCtxMenu]      = useState<CtxMenu | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [treeVersion,  setTreeVersion]  = useState(0);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) setCtxMenu(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleCtxMenu = useCallback((e: React.MouseEvent, entry: FsEntry) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, entry });
+  }, []);
+
+  const handleRenameCommit = useCallback(async (entry: FsEntry, newName: string) => {
+    setRenamingPath(null);
+    if (!newName || newName === entry.name) return;
+    await fetch(`${HTTP_BASE}/api/file/rename`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: entry.path, newName }),
+    }).catch(() => null);
+    setTreeVersion(v => v + 1);
+    // Update any open tab for this file
+    const newPath = entry.path.replace(/[^/]+$/, newName);
+    setTabs(prev => prev.map(t => t.path === entry.path ? { ...t, path: newPath, name: newName } : t));
+    if (activeTab === entry.path) setActiveTab(newPath);
+  }, [activeTab]);
+
+  const doCtxAction = useCallback(async (action: string, entry: FsEntry) => {
+    setCtxMenu(null);
+    if (action === 'open') { if (!entry.isDir) openFile(entry.path); }
+    else if (action === 'rename') { setRenamingPath(entry.path); }
+    else if (action === 'duplicate') {
+      await fetch(`${HTTP_BASE}/api/file/duplicate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: entry.path }),
+      }).catch(() => null);
+      setTreeVersion(v => v + 1);
+    } else if (action === 'download') {
+      const a = document.createElement('a');
+      a.href = `${HTTP_BASE}/api/file/download?path=${encodeURIComponent(entry.path)}`;
+      a.download = entry.name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The outer scrollable div — both highlight and textarea scroll with it
   const scrollRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const rootEntry: FsEntry = { name: cwd.split('/').filter(Boolean).pop() ?? cwd, path: cwd, isDir: true };
+
+  // Listen for open-file events dispatched from chat "Open" buttons
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<{ path: string }>).detail?.path;
+      if (path) openFile(path);
+    };
+    window.addEventListener('open-file', handler);
+    return () => window.removeEventListener('open-file', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const currentTab = tabs.find(t => t.path === activeTab) ?? null;
 
   // Open a file: fetch content and add a tab
   async function openFile(filePath: string) {
     if (tabs.find(t => t.path === filePath)) { setActiveTab(filePath); return; }
     setError('');
+    const name = filePath.split('/').pop() ?? filePath;
     try {
-      const r = await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(filePath)}`);
-      const d = await r.json() as { content?: string; error?: string };
-      if (d.error) { setError(d.error); return; }
-      const name = filePath.split('/').pop() ?? filePath;
-      setTabs(prev => [...prev, { path: filePath, name, content: d.content ?? '', dirty: false }]);
+      // Excel files: ExcelEditor loads data internally — just open a tab with the path
+      if (isExcelExt(name)) {
+        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, isExcel: true }]);
+        setActiveTab(filePath);
+        return;
+      }
+      // PPT files: PptEditor loads data internally
+      if (isPptExt(name)) {
+        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, isPpt: true }]);
+        setActiveTab(filePath);
+        return;
+      }
+      if (isDocExt(name)) {
+        const r = await fetch(`${HTTP_BASE}/api/doc/parse`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: filePath }),
+        });
+        const d = await r.json() as { content?: string; blocks?: Block[]; type?: string; pages?: number; wordCount?: number; truncated?: boolean; error?: string };
+        if (d.error) { setError(d.error); return; }
+        setTabs(prev => [...prev, {
+          path: filePath, name, content: d.content ?? '', dirty: false,
+          docType: d.type, docPages: d.pages, docWordCount: d.wordCount, docTruncated: d.truncated,
+          blocks: d.blocks,
+        }]);
+      } else {
+        const r = await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(filePath)}`);
+        const d = await r.json() as { content?: string; error?: string };
+        if (d.error) { setError(d.error); return; }
+        setTabs(prev => [...prev, { path: filePath, name, content: d.content ?? '', dirty: false }]);
+      }
       setActiveTab(filePath);
     } catch (e) { setError(String(e)); }
   }
 
   // Reload active file when agent finishes a turn (increments refreshKey)
+  // Skip document files — they use /api/doc/parse and raw bytes would overwrite parsed content
   useEffect(() => {
     if (!activeTab) return;
+    const currentTabData = tabs.find(t => t.path === activeTab);
+    if (currentTabData?.docType) return; // document — don't reload raw bytes
     fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(activeTab)}`)
       .then(r => r.json())
       .then((d: { content?: string }) => {
@@ -245,11 +398,25 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
   async function save() {
     if (!currentTab?.dirty) return;
     setSaving(true);
+    setError('');
     try {
-      await fetch(`${HTTP_BASE}/api/file`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: currentTab.path, content: currentTab.content }),
-      });
+      if (currentTab.docType) {
+        // Word file: send Block[] to regenerate DOCX; other docs: send markdown
+        const body = currentTab.blocks
+          ? { path: currentTab.path, blocks: currentTab.blocks }
+          : { path: currentTab.path, content: currentTab.content };
+        const r = await fetch(`${HTTP_BASE}/api/doc/save`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json() as { ok?: boolean; error?: string };
+        if (d.error) { setError(d.error); return; }
+      } else {
+        await fetch(`${HTTP_BASE}/api/file`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: currentTab.path, content: currentTab.content }),
+        });
+      }
       setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, dirty: false } : t));
     } catch (e) { setError(String(e)); }
     finally { setSaving(false); }
@@ -263,7 +430,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
   };
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden', borderRight: `1px solid var(--border-primary)` }}>
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'visible', borderRight: `1px solid var(--border-primary)` }}>
 
       {/* ── File tree ────────────────────────────────────────────────────── */}
       <div style={{
@@ -277,12 +444,52 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
           </span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 4px 8px' }}>
-          <TreeNode entry={rootEntry} depth={0} selected={activeTab} onSelect={openFile} />
+          <TreeNode
+            key={treeVersion}
+            entry={rootEntry} depth={0} selected={activeTab} onSelect={openFile}
+            ctxMenu={ctxMenu} onCtxMenu={handleCtxMenu}
+            renamingPath={renamingPath} onRenameCommit={handleRenameCommit}
+            onRefresh={() => setTreeVersion(v => v + 1)}
+          />
         </div>
       </div>
 
+      {/* ── Context menu (fixed-position, escapes overflow) ── */}
+      {ctxMenu && (
+        <div
+          ref={ctxMenuRef}
+          style={{
+            position: 'fixed', top: ctxMenu.y, left: ctxMenu.x, zIndex: 9999,
+            background: 'var(--bg-elevated, var(--bg-primary))',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 6, padding: '4px 0',
+            minWidth: 160,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          {[
+            ...(!ctxMenu.entry.isDir ? [{ id: 'open',      label: 'Open' }] : []),
+            { id: 'rename',    label: 'Rename' },
+            ...(!ctxMenu.entry.isDir ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+            ...(!ctxMenu.entry.isDir ? [{ id: 'download',  label: 'Download' }] : []),
+          ].map(item => (
+            <div
+              key={item.id}
+              onClick={() => doCtxAction(item.id, ctxMenu.entry)}
+              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+            >
+              {item.label}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Editor ──────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', overflow: 'visible' }}>
 
         {/* Tab bar — tabs are draggable to reorder */}
         <div style={{
@@ -336,7 +543,10 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
                     transition: 'opacity 80ms, border-color 80ms',
                   }}
                 >
-                  <FileIcon size={12} style={{ color: active ? 'var(--text-primary)' : 'var(--text-tertiary)', flexShrink: 0 }} />
+                  {tab.docType
+                    ? <span style={{ fontSize: 12, lineHeight: 1, flexShrink: 0 }}>{DOC_ICONS[tab.docType] ?? '📄'}</span>
+                    : <FileIcon size={12} style={{ color: active ? 'var(--text-primary)' : 'var(--text-tertiary)', flexShrink: 0 }} />
+                  }
                   <span>{tab.name}</span>
                   {tab.dirty && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />}
                   <span
@@ -359,8 +569,8 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
             })}
         </div>
 
-        {/* Path + save toolbar */}
-        {currentTab && (
+        {/* Path + save toolbar — hidden for doc files which have their own toolbar */}
+        {currentTab && !currentTab.docType && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '4px 14px', background: 'var(--bg-tertiary)',
@@ -387,62 +597,100 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
           </div>
         )}
 
-        {/* ── Syntax-highlighted editor area ──────────────────────────── */}
+        {/* ── Document viewer or syntax-highlighted editor ─────────── */}
         {currentTab ? (
-          /* Outer scroll container — BOTH layers scroll together */
-          <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 0 }}>
-            {/* Inner sizing wrapper */}
-            <div style={{ position: 'relative', minWidth: '100%', minHeight: '100%' }}>
+          currentTab.isExcel ? (
+            /* ── Excel spreadsheet — ExcelEditor handles data loading internally ── */
+            <React.Suspense fallback={<div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-tertiary)',fontSize:13 }}>Loading spreadsheet…</div>}>
+              <ExcelEditor filePath={currentTab.path} style={{ flex: 1, minHeight: 0 }} />
+            </React.Suspense>
+          ) : currentTab.isPpt ? (
+            /* ── PowerPoint — PptEditor handles data loading internally ── */
+            <React.Suspense fallback={<div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-tertiary)',fontSize:13 }}>Loading presentation…</div>}>
+              <PptEditor filePath={currentTab.path} style={{ flex: 1, minHeight: 0 }} />
+            </React.Suspense>
+          ) : currentTab.docType ? (
+            /* ── Document viewer / editor ── */
+            <div className="doc-word-shell">
+              {/* Toolbar — meta info + save button only */}
+              <div className="doc-word-toolbar">
+                <span className="doc-word-toolbar-icon">{DOC_ICONS[currentTab.docType] ?? '📄'}</span>
+                <span className="doc-word-toolbar-name">{currentTab.name}</span>
+                <span className="doc-word-toolbar-sep">·</span>
+                <span>{currentTab.docType.toUpperCase()}</span>
+                <span className="doc-word-toolbar-sep">·</span>
+                <span>{currentTab.docPages} page{currentTab.docPages !== 1 ? 's' : ''}</span>
+                <span className="doc-word-toolbar-sep">·</span>
+                <span>{currentTab.docWordCount?.toLocaleString()} words</span>
+                {currentTab.docTruncated && <span className="doc-word-toolbar-truncated">⚠ truncated</span>}
+                <span style={{ flex: 1 }} />
+                {currentTab.dirty && (
+                  <button type="button" className="doc-word-save-btn" onClick={() => void save()} disabled={saving}>
+                    {saving ? 'Saving…' : 'Save  ⌘S'}
+                  </button>
+                )}
+              </div>
 
-              {/* Highlight layer (bottom, non-interactive) */}
-              <HighlightLayer content={currentTab.content} filename={currentTab.name} />
-
-              {/* Transparent textarea on top — captures all input, shows cursor only */}
-              <textarea
-                ref={textareaRef}
-                value={currentTab.content}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-                style={{
-                  ...editorFont,
-                  position: 'relative',         // flows in document, pushes height
-                  display: 'block',
-                  width: '100%',
-                  minHeight: '100%',
-                  // Padding MUST match HighlightLayer pixel-for-pixel
-                  paddingTop:    PAD.top,
-                  paddingRight:  PAD.right,
-                  paddingBottom: PAD.bottom,
-                  paddingLeft:   LN_WIDTH,  // = fixed line-number column width
-                  border: 'none', outline: 'none', resize: 'none',
-                  background: 'transparent',
-                  color: 'transparent',           // hide text — highlight layer shows colours
-                  caretColor: 'var(--accent-blue)',           // but show the cursor
-                  overflow: 'hidden',             // outer div scrolls, not this element
-                  whiteSpace: 'pre',
-                  wordBreak: 'normal',
-                  overflowWrap: 'normal',
-                }}
-                onChange={e => {
-                  const val = e.target.value;
-                  setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: val, dirty: true } : t));
-                }}
-                onKeyDown={e => {
-                  if (e.key === 's' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); }
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const ta = e.currentTarget;
-                    const s = ta.selectionStart, end = ta.selectionEnd;
-                    const spaces = codeMode ? '  ' : '    ';
-                    const next = currentTab.content.slice(0, s) + spaces + currentTab.content.slice(end);
-                    setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: next, dirty: true } : t));
-                    requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + spaces.length; });
-                  }
-                }}
-              />
+              {/* Content */}
+              {currentTab.blocks ? (
+                /* Word (DOCX): flex: 1 so it fills remaining height in doc-word-shell column */
+                <WordDocEditor
+                  blocks={currentTab.blocks}
+                  onChange={(blocks: Block[]) => setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, blocks, dirty: true } : t))}
+                  style={{ flex: 1, minHeight: 0 }}
+                />
+              ) : (
+                /* Other docs (PDF/XLSX/PPTX): markdown rendered on a white page */
+                <div className="doc-word-canvas">
+                  <div className="doc-word-page">
+                    <div className="doc-word-view" dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(currentTab.content) }} />
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            /* ── Syntax-highlighted editor ── */
+            <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 0 }}>
+              <div style={{ position: 'relative', minWidth: '100%', minHeight: '100%' }}>
+                <HighlightLayer content={currentTab.content} filename={currentTab.name} />
+                <textarea
+                  ref={textareaRef}
+                  value={currentTab.content}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  style={{
+                    ...editorFont,
+                    position: 'relative', display: 'block',
+                    width: '100%', minHeight: '100%',
+                    paddingTop: PAD.top, paddingRight: PAD.right,
+                    paddingBottom: PAD.bottom, paddingLeft: LN_WIDTH,
+                    border: 'none', outline: 'none', resize: 'none',
+                    background: 'transparent', color: 'transparent',
+                    caretColor: 'var(--accent-blue)',
+                    overflow: 'hidden', whiteSpace: 'pre',
+                    wordBreak: 'normal', overflowWrap: 'normal',
+                  }}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: val, dirty: true } : t));
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 's' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      const ta = e.currentTarget;
+                      const s = ta.selectionStart, end = ta.selectionEnd;
+                      const spaces = codeMode ? '  ' : '    ';
+                      const next = currentTab.content.slice(0, s) + spaces + currentTab.content.slice(end);
+                      setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: next, dirty: true } : t));
+                      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + spaces.length; });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
             Select a file from the tree to open it

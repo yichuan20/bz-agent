@@ -9,6 +9,7 @@
  *   • scroll area fills remaining height; footer is shrink-0 with border-top
  */
 import {
+  BrainIcon,
   ChatCircleDotsIcon,
   GearIcon,
   HouseSimpleIcon,
@@ -21,9 +22,10 @@ import { clearAccessToken } from '#/auth-store';
 const SIDEBAR_WIDTH = 220;   // px — matches bz-codespace --spacing-bl-sidebar
 
 const NAV_ITEMS = [
-  { to: '/',      label: 'Home',  Icon: HouseSimpleIcon,    exact: true  },
-  { to: '/chat',  label: 'Chat',  Icon: ChatCircleDotsIcon, exact: false },
-  { to: '/agent', label: 'Agent', Icon: TerminalIcon,       exact: false },
+  { to: '/',          label: 'Home',     Icon: HouseSimpleIcon,    exact: true  },
+  { to: '/chat',      label: 'Chat',     Icon: ChatCircleDotsIcon, exact: false },
+  { to: '/agent',     label: 'Agent',    Icon: TerminalIcon,       exact: false },
+  { to: '/learning',  label: 'Learning', Icon: BrainIcon,          exact: false },
 ] as const;
 
 interface SidebarProps {
@@ -198,12 +200,9 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
           <span style={{
             flexShrink: 0, width: 24, height: 24,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 6,
-            background: isActive('/settings', false) ? 'rgba(255,255,255,0.18)' : 'var(--bg-tertiary)',
-            border: isActive('/settings', false) ? '1px solid rgba(255,255,255,0.12)' : '1px solid var(--border-primary)',
             color: isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
           }}>
-            <GearIcon size={14} weight={isActive('/settings', false) ? 'fill' : 'duotone'} />
+            <GearIcon size={16} weight={isActive('/settings', false) ? 'fill' : 'regular'} />
           </span>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>Settings</span>
         </Link>

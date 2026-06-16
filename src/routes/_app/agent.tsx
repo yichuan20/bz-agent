@@ -51,13 +51,19 @@ export const Route = createFileRoute('/_app/agent')({
 
 type SessionMode = 'default' | 'plan' | 'yolo';
 type AssistantBlock = { type: 'text' | 'thinking'; text: string };
-type Attachment = { name: string; mediaType: string; data: string };
+type Attachment   = { name: string; mediaType: string; data: string };
+type DocAttachment = { kind: 'doc'; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean; loading?: boolean };
+type AnyAttachment = Attachment | DocAttachment;
+
+const DOC_EXTS = new Set(['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']);
+function isDocFile(name: string) { return DOC_EXTS.has(name.slice(name.lastIndexOf('.')).toLowerCase()); }
+function isDocAttachment(a: AnyAttachment): a is DocAttachment { return (a as DocAttachment).kind === 'doc'; }
 
 type PushStep = 'build' | 'archive' | 'upload' | 'deploy' | 'publish' | 'done' | 'error';
 type SyncStep = 'download' | 'extract' | 'install' | 'done' | 'error';
 
 type DisplayItem =
-  | { id: string; kind: 'user'; text: string; attachments?: Attachment[] }
+  | { id: string; kind: 'user'; text: string; attachments?: AnyAttachment[] }
   | { id: string; kind: 'assistant'; blocks: AssistantBlock[] }
   | { id: string; kind: 'tool'; toolUseId: string; name: string; status: 'running' | 'done' | 'error'; input: unknown; output?: string; isError?: boolean }
   | { id: string; kind: 'push-progress'; step: PushStep; message: string; serviceUrl?: string; appId?: string }
@@ -174,6 +180,181 @@ function TriangleCubes({ className }: { className?: string }) {
       <rect x="0" y="5" width="4" height="4" rx="0.8" fill="currentColor" />
       <rect x="5" y="2.5" width="4" height="4" rx="0.8" fill="currentColor" />
     </svg>
+  );
+}
+
+// ── Live Learning components ─────────────────────────────────────────────────
+
+function LlBrainIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+    </svg>
+  );
+}
+
+const LL_METRICS = [
+  { label: 'accuracy',    value: (g: { accuracy: number; quality: number }) => `+${g.accuracy}%` },
+  { label: 'quality',     value: (g: { accuracy: number; quality: number }) => `${g.quality}%` },
+  { label: 'efficiency',  value: (_g: { accuracy: number; quality: number }) => '+18.2%' },
+  { label: 'adaptation',  value: (_g: { accuracy: number; quality: number }) => '+11.5%' },
+  { label: 'latency',     value: (_g: { accuracy: number; quality: number }) => '−0.3s' },
+];
+
+function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) {
+  const [idx,     setIdx]     = useState(0);
+  const [open,    setOpen]    = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Rotate metric every 2.5s
+  useEffect(() => {
+    const id = setInterval(() => setIdx(i => (i + 1) % LL_METRICS.length), 2500);
+    return () => clearInterval(id);
+  }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const metric = LL_METRICS[idx]!;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        className="ll-eval-badge"
+        onClick={() => setOpen(o => !o)}
+        title="Live Learning results"
+      >
+        <LlBrainIcon size={11} />
+        <span key={idx} className="ll-eval-metric-val">{metric.value(gain)}</span>
+        <span className="ll-eval-badge-sep">{metric.label}</span>
+        <svg viewBox="0 0 24 24" width="9" height="9" stroke="currentColor" strokeWidth="2.5" fill="none" style={{ opacity: 0.6 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="ll-eval-dropdown">
+          <div className="ll-eval-dropdown-header">Live Learning · latest job</div>
+          {LL_METRICS.map((m, i) => (
+            <a key={i} href="/learning" className="ll-eval-dropdown-item" onClick={() => setOpen(false)}>
+              <span className="ll-eval-dropdown-label">{m.label}</span>
+              <span className="ll-eval-dropdown-val">{m.value(gain)}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const LL_TRAINING_SAMPLES = [
+  { role: 'user', text: 'Refactor this Python function to use async/await' },
+  { role: 'agent', text: 'Here\'s the refactored version with aiohttp and proper error handling…' },
+  { role: 'user', text: 'Create a bar chart widget showing monthly revenue' },
+  { role: 'agent', text: 'Widget created at canvas position (200, 120) with Chart.js…' },
+];
+
+const LL_EVAL = { baseline: 71.2, newAcc: 84.6, quality: 91.3, rounds: 10 };
+
+function LiveLearningNotification({
+  stage,
+  gain,
+  onDismiss,
+  onViewPage,
+}: {
+  stage: 'collecting' | 'training' | 'done';
+  gain: { accuracy: number; quality: number };
+  onDismiss: () => void;
+  onViewPage: () => void;
+}) {
+  // Start collapsed; auto-collapse 2s after opening so it doesn't block the UI
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setExpanded(false), 2000);
+    return () => clearTimeout(t);
+  }, []);
+  // Re-expand briefly when stage changes so user notices the update
+  useEffect(() => {
+    setExpanded(true);
+    const t = setTimeout(() => setExpanded(false), 2000);
+    return () => clearTimeout(t);
+  }, [stage]);
+
+  const barWidth = stage === 'collecting' ? '35%' : stage === 'training' ? '75%' : '100%';
+  const statusText =
+    stage === 'collecting' ? 'Collecting training data…' :
+    stage === 'training'   ? 'Fine-tuning · est. 1–2 min…' :
+                             'Job complete ✓';
+
+  return (
+    <div className={`ll-notif${expanded ? '' : ' ll-notif--mini'}`}>
+      {/* Always-visible collapsed strip — click to expand */}
+      <div className="ll-notif-strip" onClick={() => setExpanded(v => !v)}>
+        <LlBrainIcon size={12} />
+        <span className="ll-notif-title">{statusText}</span>
+        <div className="ll-notif-bar-wrap ll-notif-bar-wrap--inline">
+          <div className={`ll-notif-bar${stage === 'done' ? ' ll-notif-bar--done' : ''}`} style={{ width: barWidth }} />
+        </div>
+        <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" strokeWidth="2.5" fill="none"
+          style={{ flexShrink: 0, opacity: 0.5, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <button type="button" className="ll-notif-close" onClick={e => { e.stopPropagation(); onDismiss(); }}>✕</button>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="ll-notif-detail">
+          {stage === 'collecting' && (
+            <>
+              <p className="ll-notif-caption">Saving the last 10 conversation rounds as training data…</p>
+              <div className="ll-notif-samples">
+                {LL_TRAINING_SAMPLES.map((s, i) => (
+                  <div key={i} className={`ll-notif-sample ll-notif-sample--${s.role}`}>
+                    <span className="ll-notif-sample-role">{s.role}</span>
+                    <span className="ll-notif-sample-text">{s.text}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {stage === 'training' && (
+            <>
+              <p className="ll-notif-caption">Fine-tuning on {LL_EVAL.rounds} rounds · estimating 1–2 min…</p>
+              <div className="ll-notif-training-stats">
+                <span>Baseline accuracy <strong>{LL_EVAL.baseline}%</strong></span>
+                <span className="ll-notif-pulse">⟳ adjusting weights…</span>
+              </div>
+            </>
+          )}
+
+          {stage === 'done' && (
+            <>
+              <div className="ll-notif-results">
+                {LL_METRICS.map((m, i) => (
+                  <div key={i} className="ll-notif-result-item ll-notif-result-item--good">
+                    <span className="ll-notif-result-val">{m.value(gain)}</span>
+                    <span className="ll-notif-result-lbl">{m.label}</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="ll-notif-view-btn" onClick={onViewPage}>
+                View training data →
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -835,6 +1016,16 @@ function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
       </div>
     </div>
   );
+}
+
+// Extract document file paths from agent message text
+const DOC_PATH_RE = /(?:^|[\s`"'(])((\/[^\s`"'()]+|[a-zA-Z0-9._\-]+)\.(?:docx?|xlsx?|pptx?|pdf))(?:[\s`"'().,]|$)/gm;
+function extractDocPaths(text: string): string[] {
+  const found = new Set<string>();
+  let m: RegExpExecArray | null;
+  DOC_PATH_RE.lastIndex = 0;
+  while ((m = DOC_PATH_RE.exec(text)) !== null) found.add(m[1]);
+  return Array.from(found);
 }
 
 function CopyPathButton({ path, label }: { path: string; label: string }) {
@@ -2622,6 +2813,8 @@ function AgentPage() {
   });
   const [editorRefreshKey,  setEditorRefreshKey]  = useState(0);
   const [canvasRefreshKey,  setCanvasRefreshKey]  = useState(0);
+  const [docViewer, setDocViewer] = useState<{ path: string; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean } | null>(null);
+  const [docViewerLoading, setDocViewerLoading] = useState(false);
   // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
   const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
 
@@ -2684,7 +2877,7 @@ function AgentPage() {
   const [pendingPermission, setPendingPermission] = useState<PermissionPrompt | null>(null);
   const [pendingInput, setPendingInput] = useState<InputPromptData | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<AnyAttachment[]>([]);
   const [bzHubModal,        setBzHubModal]        = useState<BzHubModal | null>(null);
   const [showConversations, setShowConversations] = useState(false);
   const [isCompacting,      setIsCompacting]      = useState(false);
@@ -2700,6 +2893,12 @@ function AgentPage() {
     return localStorage.getItem(`bz-canvas:${searchSessionId}`) === '1';
   });
   const [showWidgetChat,  setShowWidgetChat]  = useState(true);
+  const [liveLearningOn,  setLiveLearningOn]  = useState(() => localStorage.getItem('bz:live-learning') === '1');
+  const [llJob,           setLlJob]           = useState<'idle'|'collecting'|'training'|'done'>('idle');
+  const [llJobDismissed,  setLlJobDismissed]  = useState(false);
+  const [llGain,          setLlGain]          = useState<{ accuracy: number; quality: number }>(() => {
+    try { return JSON.parse(localStorage.getItem('bz:ll-gain') ?? 'null') ?? { accuracy: 13.4, quality: 91.3 }; } catch { return { accuracy: 13.4, quality: 91.3 }; }
+  });
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
@@ -3120,26 +3319,64 @@ function AgentPage() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    // Reset so the same file can be re-selected
     e.target.value = '';
     files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        // dataUrl = "data:<mediaType>;base64,<data>"
-        const commaIdx = dataUrl.indexOf(',');
-        const meta = dataUrl.slice(0, commaIdx);
-        const data = dataUrl.slice(commaIdx + 1);
-        const mediaType = meta.replace('data:', '').replace(';base64', '');
-        setAttachments(prev => [...prev, { name: file.name, mediaType, data }]);
-      };
-      reader.readAsDataURL(file);
+      if (isDocFile(file.name)) {
+        // Document: upload to server for parsing
+        const placeholder: DocAttachment = { kind: 'doc', name: file.name, docType: '', pages: 0, wordCount: 0, content: '', truncated: false, loading: true };
+        const placeholderId = file.name + Date.now();
+        setAttachments(prev => [...prev, { ...placeholder, name: placeholderId } as DocAttachment]);
+        const form = new FormData();
+        form.append('file', file);
+        fetch(`${HTTP_BASE}/api/doc/parse`, { method: 'POST', body: form })
+          .then(r => r.json())
+          .then((d: { filename?: string; type?: string; pages?: number; wordCount?: number; content?: string; truncated?: boolean; error?: string }) => {
+            if (d.error) {
+              setAttachments(prev => prev.filter(a => (a as DocAttachment).name !== placeholderId));
+              return;
+            }
+            setAttachments(prev => prev.map(a =>
+              (a as DocAttachment).name === placeholderId
+                ? { kind: 'doc', name: file.name, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated, loading: false } as DocAttachment
+                : a
+            ));
+          })
+          .catch(() => setAttachments(prev => prev.filter(a => (a as DocAttachment).name !== placeholderId)));
+      } else {
+        // Image: read as base64
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const commaIdx = dataUrl.indexOf(',');
+          const meta = dataUrl.slice(0, commaIdx);
+          const data = dataUrl.slice(commaIdx + 1);
+          const mediaType = meta.replace('data:', '').replace(';base64', '');
+          setAttachments(prev => [...prev, { name: file.name, mediaType, data }]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
   }, []);
+
+  // Live learning: trigger a mock training job every 10 user messages
+  const llRoundCountRef = useRef(0);
+  const triggerLiveLearnJob = useCallback(() => {
+    if (!liveLearningOn) return;
+    setLlJob('collecting');
+    setLlJobDismissed(false);
+    setTimeout(() => setLlJob('training'), 3000);
+    setTimeout(() => {
+      setLlJob('done');
+      const gain = { accuracy: 13.4, quality: 91.3 };
+      setLlGain(gain);
+      localStorage.setItem('bz:ll-gain', JSON.stringify(gain));
+    }, 7000);
+  }, [liveLearningOn]);
 
   const handleSubmit = useCallback(() => {
     const text = inputValue.trim();
     if ((!text && attachments.length === 0) || isStreaming) return;
+    triggerLiveLearnJob();
     setInputValue('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     // Auto-set title from first user message (matches VS Code plugin behaviour)
@@ -3153,12 +3390,23 @@ function AgentPage() {
 
     setItems(prev => [...prev, { id: uid(), kind: 'user', text: text || '(image)', attachments: snapshotAttachments }]);
 
-    if (snapshotAttachments.length === 0) {
+    // Build content blocks — images as base64, docs as inline text blocks
+    const imgAtts  = snapshotAttachments.filter(a => !isDocAttachment(a)) as Attachment[];
+    const docAtts  = snapshotAttachments.filter(isDocAttachment);
+
+    if (imgAtts.length === 0 && docAtts.length === 0) {
       sendRaw({ type: 'user', content: text });
     } else {
       const blocks: unknown[] = [];
-      if (text) blocks.push({ type: 'text', text });
-      for (const att of snapshotAttachments) {
+      // User text first
+      let fullText = text;
+      // Append parsed document content as text so the model can reason over it
+      for (const doc of docAtts) {
+        if (doc.loading || !doc.content) continue;
+        fullText += `\n\n---\n📄 **${doc.name}** (${doc.docType.toUpperCase()}, ${doc.pages} page${doc.pages !== 1 ? 's' : ''}, ${doc.wordCount.toLocaleString()} words${doc.truncated ? ', truncated' : ''})\n\n${doc.content}`;
+      }
+      if (fullText) blocks.push({ type: 'text', text: fullText });
+      for (const att of imgAtts) {
         blocks.push({ type: 'image', source: { type: 'base64', mediaType: att.mediaType, data: att.data } });
       }
       sendRaw({ type: 'user', content: blocks });
@@ -3391,12 +3639,14 @@ function AgentPage() {
           )}
         </div>
 
+        {/* Live Learning eval result */}
+        <LlEvalBadge gain={llGain} />
+
         {/* Mode badge */}
         <ModeBadge
           mode={agentMode}
           onSwitch={m => openSession(activeCwd, null, m)}
         />
-
 
         <div className={`agent-connection agent-connection--${connStatus}`}>
           <span className="agent-connection-dot" />
@@ -3432,10 +3682,10 @@ function AgentPage() {
           ? 'agent-canvas-layout'
           : 'agent-chat-col'
       }>
-      <div className={`agent-chat-col${agentMode === 'widget' && !showWidgetChat ? ' agent-chat-col--float-prompt' : ''}`}>
+      <div className={`agent-chat-col${(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat ? ' agent-chat-col--float-prompt' : ''}`}>
 
-      {/* Collapse strip — widget mode only */}
-      {agentMode === 'widget' && (
+      {/* Collapse strip — widget / worker / coder modes */}
+      {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && (
         <div className="agent-widget-chat-strip">
           <button
             type="button"
@@ -3534,13 +3784,51 @@ function AgentPage() {
                       if (block.type === 'text') {
                         const cmdList = parseCommandListOutput(block.text);
                         if (cmdList) return <CommandListDisplay key={j} result={cmdList} />;
+                        const docPaths = agentMode === 'worker' ? extractDocPaths(block.text) : [];
                         return (
                           <div key={j} className="agent-msg-row">
                             <span className="agent-block-icon"><BlockDot size={10} /></span>
-                            <div
-                              className="chat-bubble-assistant"
-                              dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
-                            />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                className="chat-bubble-assistant"
+                                dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
+                              />
+                              {docPaths.length > 0 && (
+                                <div className="agent-doc-open-chips">
+                                  {docPaths.map(p => (
+                                    <button
+                                      key={p}
+                                      type="button"
+                                      className="agent-doc-open-btn"
+                                      onClick={() => {
+                                        const ext = p.split('.').pop()?.toLowerCase() ?? '';
+                                        // Office files: open in EditorPanel (Excel, PPT, Word)
+                                        if (['xlsx','xls','pptx','ppt','docx','doc'].includes(ext)) {
+                                          setEditorRefreshKey(k => k + 1);
+                                          window.dispatchEvent(new CustomEvent('open-file', { detail: { path: p } }));
+                                          return;
+                                        }
+                                        setDocViewerLoading(true);
+                                        setDocViewer(null);
+                                        fetch(`${HTTP_BASE}/api/doc/parse`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ path: p }),
+                                        })
+                                          .then(r => r.json())
+                                          .then((d: { filename?: string; type?: string; pages?: number; wordCount?: number; content?: string; truncated?: boolean; error?: string }) => {
+                                            if (d.error) return;
+                                            setDocViewer({ path: p, name: d.filename ?? p.split('/').pop() ?? p, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated });
+                                          })
+                                          .finally(() => setDocViewerLoading(false));
+                                      }}
+                                    >
+                                      {(p.split('.').pop()?.toLowerCase() === 'xlsx' || p.split('.').pop()?.toLowerCase() === 'xls') ? '📊' : '📄'} Open {p.split('/').pop()}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       }
@@ -3651,7 +3939,7 @@ function AgentPage() {
 
       <div className="agent-input-bar">
         {/* Show-chat button — floats above input box, visible only when prompt is floating */}
-        {agentMode === 'widget' && !showWidgetChat && (
+        {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat && (
           <button
             type="button"
             className="agent-widget-showchat-btn"
@@ -3663,11 +3951,11 @@ function AgentPage() {
           </button>
         )}
 
-        {/* Hidden file input */}
+        {/* Hidden file input — accepts images always, documents in worker mode */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={agentMode === 'worker' ? 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx' : 'image/*'}
           multiple
           style={{ display: 'none' }}
           onChange={handleFileSelect}
@@ -3677,13 +3965,36 @@ function AgentPage() {
           className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}`}
           style={{ '--mode-color': modeColor } as React.CSSProperties}
         >
+          {/* Live Learning notification — inside the input box so it's one unified card */}
+          {liveLearningOn && llJob !== 'idle' && !llJobDismissed && (
+            <LiveLearningNotification
+              stage={llJob}
+              gain={llGain}
+              onDismiss={() => setLlJobDismissed(true)}
+              onViewPage={() => { setLlJobDismissed(true); window.location.href = '/learning'; }}
+            />
+          )}
           {/* Attachment chips preview */}
           {attachments.length > 0 && (
             <div className="agent-attach-chips agent-attach-chips--input">
               {attachments.map((att, i) => (
-                <span key={i} className="agent-attach-chip">
-                  <img src={`data:${att.mediaType};base64,${att.data}`} alt={att.name} className="agent-attach-thumb" />
-                  <span className="agent-attach-name">{att.name}</span>
+                <span key={i} className={`agent-attach-chip${isDocAttachment(att) ? ' agent-attach-chip--doc' : ''}`}>
+                  {isDocAttachment(att) ? (
+                    <>
+                      <span className="agent-attach-doc-icon">📄</span>
+                      <span className="agent-attach-name">
+                        {att.loading
+                          ? `Parsing ${att.name}…`
+                          : `${att.name} · ${att.pages} page${att.pages !== 1 ? 's' : ''} · ${att.wordCount.toLocaleString()} words${att.truncated ? ' (truncated)' : ''}`
+                        }
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <img src={`data:${(att as Attachment).mediaType};base64,${(att as Attachment).data}`} alt={att.name} className="agent-attach-thumb" />
+                      <span className="agent-attach-name">{att.name}</span>
+                    </>
+                  )}
                   <button
                     type="button"
                     className="agent-attach-remove"
@@ -3709,14 +4020,30 @@ function AgentPage() {
 
           {/* Control row */}
           <div className="agent-input-controls">
-            {/* Attach image */}
+            {/* Attach file */}
             <button
               type="button"
               className="agent-ctrl-btn"
-              title="Attach image"
+              title={agentMode === 'worker' ? 'Attach image or document (PDF, DOCX, XLSX, PPTX)' : 'Attach image'}
               onClick={() => fileInputRef.current?.click()}
             >
               <PaperclipIcon size={15} />
+            </button>
+            <span className="agent-ctrl-divider" />
+
+            {/* Live Learning toggle */}
+            <button
+              type="button"
+              className={`agent-ctrl-btn agent-ll-toggle${liveLearningOn ? ' agent-ll-toggle--on' : ''}`}
+              title={liveLearningOn ? 'Live Learning: ON — click to disable' : 'Live Learning: OFF — click to enable'}
+              onClick={() => {
+                const next = !liveLearningOn;
+                setLiveLearningOn(next);
+                localStorage.setItem('bz:live-learning', next ? '1' : '0');
+              }}
+            >
+              <LlBrainIcon size={14} />
+              <span className="agent-ll-label">Live Learning</span>
             </button>
             <span className="agent-ctrl-divider" />
 
@@ -3799,6 +4126,49 @@ function AgentPage() {
         />
       )}
     </div>
+
+    {/* Document viewer — slides over canvas/editor when a doc path is opened */}
+    {(docViewer || docViewerLoading) && (
+      <>
+        <div className="code-drawer-backdrop" onClick={() => { setDocViewer(null); setDocViewerLoading(false); }} />
+        <div className="code-drawer doc-viewer-drawer">
+          <div className="code-drawer-header">
+            <span className="code-drawer-title">
+              📄 {docViewerLoading ? 'Loading…' : docViewer?.name}
+            </span>
+            {docViewer && !docViewerLoading && (
+              <span className="doc-viewer-meta">
+                {docViewer.docType.toUpperCase()} · {docViewer.pages} page{docViewer.pages !== 1 ? 's' : ''} · {docViewer.wordCount.toLocaleString()} words
+                {docViewer.truncated && <span className="doc-viewer-truncated"> · truncated</span>}
+              </span>
+            )}
+            <button
+              type="button"
+              className="code-drawer-apply-btn"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => { setDocViewer(null); setDocViewerLoading(false); }}
+              title="Close"
+            >
+              <XIcon size={13} />
+            </button>
+          </div>
+          <div className="doc-viewer-body">
+            {docViewerLoading && (
+              <div className="doc-viewer-loading">
+                <BoltzbitLogo size={28} className="boltzbit-logo-animate" />
+                <span>Parsing document…</span>
+              </div>
+            )}
+            {docViewer && !docViewerLoading && (
+              <div
+                className="doc-viewer-content"
+                dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(docViewer.content) }}
+              />
+            )}
+          </div>
+        </div>
+      </>
+    )}
 
     {/* Mode selector — shown when user clicks "+" to create a new session */}
     {pendingNewCwd && (

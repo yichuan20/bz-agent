@@ -1,0 +1,1472 @@
+{
+  "version": "1.0",
+  "description": "Worker agent document template search index. Match user request to template ID then read the template file.",
+  "usage": "Search keywords, profiles, and use_cases fields. Use the id to read bzcode/templates/{id}.md",
+  "templates": [
+    {
+      "id": "report",
+      "title": "Report",
+      "file": "bzcode/templates/report.md",
+      "profiles": [
+        "business-analyst",
+        "researcher",
+        "operations",
+        "hr"
+      ],
+      "keywords": [
+        "report",
+        "analysis",
+        "findings",
+        "research",
+        "study",
+        "summary",
+        "review",
+        "audit"
+      ],
+      "use_cases": [
+        "Write a market analysis",
+        "Create a findings report",
+        "Draft a research summary"
+      ]
+    },
+    {
+      "id": "meeting-minutes",
+      "title": "Meeting Minutes",
+      "file": "bzcode/templates/meeting-minutes.md",
+      "profiles": [
+        "project-manager",
+        "business-analyst",
+        "hr",
+        "operations"
+      ],
+      "keywords": [
+        "meeting",
+        "minutes",
+        "notes",
+        "mom",
+        "recap",
+        "action items",
+        "attendees"
+      ],
+      "use_cases": [
+        "Write meeting notes",
+        "Record action items from a call",
+        "Summarise a workshop"
+      ]
+    },
+    {
+      "id": "proposal",
+      "title": "Proposal",
+      "file": "bzcode/templates/proposal.md",
+      "profiles": [
+        "sales",
+        "business-analyst",
+        "startup",
+        "researcher"
+      ],
+      "keywords": [
+        "proposal",
+        "pitch",
+        "offer",
+        "bid",
+        "scope",
+        "quote",
+        "rfp"
+      ],
+      "use_cases": [
+        "Write a project proposal",
+        "Draft a business proposal",
+        "Respond to an RFP"
+      ]
+    },
+    {
+      "id": "invoice",
+      "title": "Invoice",
+      "file": "bzcode/templates/invoice.md",
+      "profiles": [
+        "finance",
+        "sales",
+        "startup"
+      ],
+      "keywords": [
+        "invoice",
+        "bill",
+        "payment",
+        "charge",
+        "receipt",
+        "billing"
+      ],
+      "use_cases": [
+        "Create an invoice",
+        "Bill a client",
+        "Request payment"
+      ]
+    },
+    {
+      "id": "contract",
+      "title": "Contract / Agreement",
+      "file": "bzcode/templates/contract.md",
+      "profiles": [
+        "legal",
+        "sales",
+        "hr",
+        "startup"
+      ],
+      "keywords": [
+        "contract",
+        "agreement",
+        "terms",
+        "legal",
+        "sign",
+        "nda",
+        "mou"
+      ],
+      "use_cases": [
+        "Draft a service agreement",
+        "Write a contractor contract",
+        "Create an MOU"
+      ]
+    },
+    {
+      "id": "brief",
+      "title": "Brief",
+      "file": "bzcode/templates/brief.md",
+      "profiles": [
+        "marketing",
+        "project-manager",
+        "business-analyst"
+      ],
+      "keywords": [
+        "brief",
+        "spec",
+        "creative brief",
+        "project brief",
+        "scope",
+        "requirements"
+      ],
+      "use_cases": [
+        "Write a creative brief",
+        "Draft a project brief",
+        "Create a design spec"
+      ]
+    },
+    {
+      "id": "weekly-update",
+      "title": "Weekly Update / Status Report",
+      "file": "bzcode/templates/weekly-update.md",
+      "profiles": [
+        "project-manager",
+        "operations",
+        "startup",
+        "hr"
+      ],
+      "keywords": [
+        "weekly",
+        "update",
+        "status",
+        "progress",
+        "standup",
+        "report",
+        "team"
+      ],
+      "use_cases": [
+        "Write a weekly status update",
+        "Send a team progress report",
+        "Create a standup summary"
+      ]
+    },
+    {
+      "id": "business-case",
+      "title": "Business Case",
+      "file": "bzcode/templates/business-case.md",
+      "profiles": [
+        "business-analyst",
+        "startup",
+        "project-manager"
+      ],
+      "keywords": [
+        "business case",
+        "justification",
+        "roi",
+        "cost benefit",
+        "investment",
+        "approval"
+      ],
+      "use_cases": [
+        "Build a business case for a new system",
+        "Justify a budget request",
+        "Make the case for a new initiative"
+      ]
+    },
+    {
+      "id": "requirements-spec",
+      "title": "Requirements Specification",
+      "file": "bzcode/templates/requirements-spec.md",
+      "profiles": [
+        "business-analyst",
+        "project-manager"
+      ],
+      "keywords": [
+        "requirements",
+        "spec",
+        "brs",
+        "frs",
+        "functional",
+        "user story",
+        "system",
+        "technical"
+      ],
+      "use_cases": [
+        "Write functional requirements",
+        "Create a system spec",
+        "Document user stories"
+      ]
+    },
+    {
+      "id": "gap-analysis",
+      "title": "Gap Analysis",
+      "file": "bzcode/templates/gap-analysis.md",
+      "profiles": [
+        "business-analyst",
+        "operations"
+      ],
+      "keywords": [
+        "gap analysis",
+        "current state",
+        "future state",
+        "as-is",
+        "to-be",
+        "improvement",
+        "delta"
+      ],
+      "use_cases": [
+        "Analyse capability gaps",
+        "Compare current vs target state",
+        "Identify process improvements"
+      ]
+    },
+    {
+      "id": "swot-analysis",
+      "title": "SWOT / Competitive Analysis",
+      "file": "bzcode/templates/swot-analysis.md",
+      "profiles": [
+        "business-analyst",
+        "marketing",
+        "startup"
+      ],
+      "keywords": [
+        "swot",
+        "strengths",
+        "weaknesses",
+        "opportunities",
+        "threats",
+        "competitive",
+        "landscape"
+      ],
+      "use_cases": [
+        "Conduct a SWOT analysis",
+        "Analyse competitors",
+        "Assess market position"
+      ]
+    },
+    {
+      "id": "stakeholder-analysis",
+      "title": "Stakeholder Analysis",
+      "file": "bzcode/templates/stakeholder-analysis.md",
+      "profiles": [
+        "business-analyst",
+        "project-manager"
+      ],
+      "keywords": [
+        "stakeholder",
+        "influence",
+        "interest",
+        "comms",
+        "engagement",
+        "mapping"
+      ],
+      "use_cases": [
+        "Map project stakeholders",
+        "Plan stakeholder engagement",
+        "Identify key decision makers"
+      ]
+    },
+    {
+      "id": "project-charter",
+      "title": "Project Charter",
+      "file": "bzcode/templates/project-charter.md",
+      "profiles": [
+        "project-manager",
+        "business-analyst"
+      ],
+      "keywords": [
+        "project charter",
+        "kick-off",
+        "mandate",
+        "scope",
+        "objectives",
+        "sponsor",
+        "deliverables"
+      ],
+      "use_cases": [
+        "Create a project charter",
+        "Kick off a new project",
+        "Define project mandate"
+      ]
+    },
+    {
+      "id": "executive-summary",
+      "title": "Executive Summary",
+      "file": "bzcode/templates/executive-summary.md",
+      "profiles": [
+        "business-analyst",
+        "startup",
+        "sales"
+      ],
+      "keywords": [
+        "executive summary",
+        "overview",
+        "highlights",
+        "brief",
+        "one page",
+        "tldr",
+        "summary"
+      ],
+      "use_cases": [
+        "Write an executive summary",
+        "Summarise a long report",
+        "Create a management overview"
+      ]
+    },
+    {
+      "id": "kpi-report",
+      "title": "KPI / Performance Dashboard Report",
+      "file": "bzcode/templates/kpi-report.md",
+      "profiles": [
+        "business-analyst",
+        "operations",
+        "finance",
+        "marketing"
+      ],
+      "keywords": [
+        "kpi",
+        "metrics",
+        "performance",
+        "dashboard",
+        "scorecard",
+        "targets",
+        "results"
+      ],
+      "use_cases": [
+        "Write a monthly KPI report",
+        "Create a performance scorecard",
+        "Report on metrics"
+      ]
+    },
+    {
+      "id": "change-management-plan",
+      "title": "Change Management Plan",
+      "file": "bzcode/templates/change-management-plan.md",
+      "profiles": [
+        "business-analyst",
+        "hr",
+        "project-manager",
+        "operations"
+      ],
+      "keywords": [
+        "change management",
+        "adoption",
+        "communication",
+        "training",
+        "resistance",
+        "transition"
+      ],
+      "use_cases": [
+        "Write a change management plan",
+        "Plan an organisational change",
+        "Create a change comms strategy"
+      ]
+    },
+    {
+      "id": "campaign-brief",
+      "title": "Campaign Brief",
+      "file": "bzcode/templates/campaign-brief.md",
+      "profiles": [
+        "marketing"
+      ],
+      "keywords": [
+        "campaign",
+        "marketing",
+        "launch",
+        "promotion",
+        "ads",
+        "creative",
+        "campaign brief"
+      ],
+      "use_cases": [
+        "Write a campaign brief",
+        "Plan a marketing campaign",
+        "Brief an agency"
+      ]
+    },
+    {
+      "id": "content-calendar",
+      "title": "Content Calendar",
+      "file": "bzcode/templates/content-calendar.md",
+      "profiles": [
+        "marketing"
+      ],
+      "keywords": [
+        "content calendar",
+        "editorial calendar",
+        "social media",
+        "schedule",
+        "posts",
+        "publishing"
+      ],
+      "use_cases": [
+        "Create a content calendar",
+        "Plan social media posts",
+        "Schedule editorial content"
+      ]
+    },
+    {
+      "id": "press-release",
+      "title": "Press Release",
+      "file": "bzcode/templates/press-release.md",
+      "profiles": [
+        "marketing",
+        "startup"
+      ],
+      "keywords": [
+        "press release",
+        "announcement",
+        "media",
+        "news",
+        "launch",
+        "PR",
+        "journalist"
+      ],
+      "use_cases": [
+        "Write a press release",
+        "Announce a product launch",
+        "Create a media statement"
+      ]
+    },
+    {
+      "id": "blog-post",
+      "title": "Blog Post / Article",
+      "file": "bzcode/templates/blog-post.md",
+      "profiles": [
+        "marketing",
+        "researcher"
+      ],
+      "keywords": [
+        "blog",
+        "article",
+        "post",
+        "content",
+        "write",
+        "draft",
+        "seo",
+        "editorial"
+      ],
+      "use_cases": [
+        "Write a blog post",
+        "Draft an article",
+        "Create web content"
+      ]
+    },
+    {
+      "id": "social-media-pack",
+      "title": "Social Media Copy Pack",
+      "file": "bzcode/templates/social-media-pack.md",
+      "profiles": [
+        "marketing"
+      ],
+      "keywords": [
+        "social media",
+        "twitter",
+        "linkedin",
+        "instagram",
+        "copy",
+        "posts",
+        "captions"
+      ],
+      "use_cases": [
+        "Write social media posts",
+        "Create a copy pack",
+        "Draft captions for a campaign"
+      ]
+    },
+    {
+      "id": "brand-messaging",
+      "title": "Brand Messaging Guide",
+      "file": "bzcode/templates/brand-messaging.md",
+      "profiles": [
+        "marketing",
+        "startup"
+      ],
+      "keywords": [
+        "brand",
+        "messaging",
+        "tone of voice",
+        "positioning",
+        "tagline",
+        "value proposition",
+        "story"
+      ],
+      "use_cases": [
+        "Write brand messaging",
+        "Define tone of voice",
+        "Create a positioning guide"
+      ]
+    },
+    {
+      "id": "email-sequence",
+      "title": "Email Sequence (Drip Campaign)",
+      "file": "bzcode/templates/email-sequence.md",
+      "profiles": [
+        "marketing",
+        "sales"
+      ],
+      "keywords": [
+        "email",
+        "drip",
+        "sequence",
+        "nurture",
+        "onboarding",
+        "automation",
+        "newsletter"
+      ],
+      "use_cases": [
+        "Write an email sequence",
+        "Create a nurture campaign",
+        "Draft onboarding emails"
+      ]
+    },
+    {
+      "id": "case-study",
+      "title": "Case Study / Customer Story",
+      "file": "bzcode/templates/case-study.md",
+      "profiles": [
+        "marketing",
+        "sales"
+      ],
+      "keywords": [
+        "case study",
+        "customer story",
+        "success story",
+        "testimonial",
+        "results",
+        "client"
+      ],
+      "use_cases": [
+        "Write a customer case study",
+        "Create a success story",
+        "Document client results"
+      ]
+    },
+    {
+      "id": "product-launch-plan",
+      "title": "Product Launch Plan",
+      "file": "bzcode/templates/product-launch-plan.md",
+      "profiles": [
+        "marketing",
+        "startup",
+        "project-manager"
+      ],
+      "keywords": [
+        "product launch",
+        "go-live",
+        "release",
+        "launch plan",
+        "product",
+        "gtm",
+        "rollout"
+      ],
+      "use_cases": [
+        "Plan a product launch",
+        "Create a launch checklist",
+        "Write a go-live plan"
+      ]
+    },
+    {
+      "id": "seo-brief",
+      "title": "SEO Content Brief",
+      "file": "bzcode/templates/seo-brief.md",
+      "profiles": [
+        "marketing"
+      ],
+      "keywords": [
+        "seo",
+        "content brief",
+        "keywords",
+        "search",
+        "ranking",
+        "organic",
+        "blog",
+        "article"
+      ],
+      "use_cases": [
+        "Create an SEO brief",
+        "Plan keyword-optimised content",
+        "Brief a writer for search"
+      ]
+    },
+    {
+      "id": "nda",
+      "title": "Non-Disclosure Agreement (NDA)",
+      "file": "bzcode/templates/nda.md",
+      "profiles": [
+        "legal",
+        "startup",
+        "sales"
+      ],
+      "keywords": [
+        "nda",
+        "non-disclosure",
+        "confidential",
+        "confidentiality",
+        "secret",
+        "ip",
+        "proprietary"
+      ],
+      "use_cases": [
+        "Create an NDA",
+        "Draft a confidentiality agreement",
+        "Write a non-disclosure agreement"
+      ]
+    },
+    {
+      "id": "privacy-policy",
+      "title": "Privacy Policy",
+      "file": "bzcode/templates/privacy-policy.md",
+      "profiles": [
+        "legal",
+        "startup"
+      ],
+      "keywords": [
+        "privacy policy",
+        "gdpr",
+        "data",
+        "personal data",
+        "cookies",
+        "privacy",
+        "compliance"
+      ],
+      "use_cases": [
+        "Write a privacy policy",
+        "Draft GDPR-compliant policy",
+        "Create a data protection notice"
+      ]
+    },
+    {
+      "id": "compliance-audit",
+      "title": "Compliance Audit Report",
+      "file": "bzcode/templates/compliance-audit.md",
+      "profiles": [
+        "legal",
+        "operations",
+        "finance"
+      ],
+      "keywords": [
+        "compliance",
+        "audit",
+        "regulatory",
+        "findings",
+        "controls",
+        "remediation",
+        "assessment"
+      ],
+      "use_cases": [
+        "Write a compliance audit report",
+        "Document audit findings",
+        "Assess regulatory compliance"
+      ]
+    },
+    {
+      "id": "risk-assessment",
+      "title": "Risk Assessment",
+      "file": "bzcode/templates/risk-assessment.md",
+      "profiles": [
+        "legal",
+        "business-analyst",
+        "project-manager",
+        "operations"
+      ],
+      "keywords": [
+        "risk",
+        "risk assessment",
+        "risk register",
+        "mitigation",
+        "probability",
+        "impact",
+        "control"
+      ],
+      "use_cases": [
+        "Write a risk assessment",
+        "Create a risk register",
+        "Assess project risks"
+      ]
+    },
+    {
+      "id": "legal-memo",
+      "title": "Legal Memorandum",
+      "file": "bzcode/templates/legal-memo.md",
+      "profiles": [
+        "legal"
+      ],
+      "keywords": [
+        "legal memo",
+        "memorandum",
+        "legal opinion",
+        "advice",
+        "counsel",
+        "law",
+        "analysis"
+      ],
+      "use_cases": [
+        "Write a legal memo",
+        "Draft a legal opinion",
+        "Provide legal analysis"
+      ]
+    },
+    {
+      "id": "incident-report",
+      "title": "Incident Report",
+      "file": "bzcode/templates/incident-report.md",
+      "profiles": [
+        "legal",
+        "operations",
+        "hr"
+      ],
+      "keywords": [
+        "incident",
+        "accident",
+        "breach",
+        "security",
+        "report",
+        "investigation",
+        "event"
+      ],
+      "use_cases": [
+        "Write an incident report",
+        "Document a security breach",
+        "Report a workplace incident"
+      ]
+    },
+    {
+      "id": "job-description",
+      "title": "Job Description",
+      "file": "bzcode/templates/job-description.md",
+      "profiles": [
+        "hr"
+      ],
+      "keywords": [
+        "job description",
+        "jd",
+        "role",
+        "hiring",
+        "vacancy",
+        "position",
+        "recruitment",
+        "job posting"
+      ],
+      "use_cases": [
+        "Write a job description",
+        "Create a job posting",
+        "Define a new role"
+      ]
+    },
+    {
+      "id": "offer-letter",
+      "title": "Offer Letter",
+      "file": "bzcode/templates/offer-letter.md",
+      "profiles": [
+        "hr"
+      ],
+      "keywords": [
+        "offer letter",
+        "employment offer",
+        "job offer",
+        "salary",
+        "start date",
+        "hire"
+      ],
+      "use_cases": [
+        "Write an offer letter",
+        "Send a job offer",
+        "Draft employment offer"
+      ]
+    },
+    {
+      "id": "performance-review",
+      "title": "Performance Review",
+      "file": "bzcode/templates/performance-review.md",
+      "profiles": [
+        "hr",
+        "project-manager"
+      ],
+      "keywords": [
+        "performance review",
+        "appraisal",
+        "evaluation",
+        "feedback",
+        "goals",
+        "rating",
+        "360"
+      ],
+      "use_cases": [
+        "Write a performance review",
+        "Complete an appraisal",
+        "Give structured feedback"
+      ]
+    },
+    {
+      "id": "onboarding-plan",
+      "title": "Onboarding Plan",
+      "file": "bzcode/templates/onboarding-plan.md",
+      "profiles": [
+        "hr"
+      ],
+      "keywords": [
+        "onboarding",
+        "new hire",
+        "induction",
+        "first day",
+        "welcome",
+        "orientation",
+        "training"
+      ],
+      "use_cases": [
+        "Create an onboarding plan",
+        "Write a new hire welcome pack",
+        "Design an induction programme"
+      ]
+    },
+    {
+      "id": "hr-policy",
+      "title": "HR Policy Document",
+      "file": "bzcode/templates/hr-policy.md",
+      "profiles": [
+        "hr"
+      ],
+      "keywords": [
+        "hr policy",
+        "policy",
+        "procedure",
+        "handbook",
+        "rules",
+        "guidelines",
+        "workplace"
+      ],
+      "use_cases": [
+        "Write an HR policy",
+        "Create a workplace policy",
+        "Draft company procedures"
+      ]
+    },
+    {
+      "id": "training-plan",
+      "title": "Training Plan",
+      "file": "bzcode/templates/training-plan.md",
+      "profiles": [
+        "hr",
+        "project-manager",
+        "operations"
+      ],
+      "keywords": [
+        "training",
+        "learning",
+        "development",
+        "course",
+        "upskill",
+        "programme",
+        "L&D"
+      ],
+      "use_cases": [
+        "Create a training plan",
+        "Design a learning programme",
+        "Write an L&D plan"
+      ]
+    },
+    {
+      "id": "pitch-deck-outline",
+      "title": "Pitch Deck Outline",
+      "file": "bzcode/templates/pitch-deck-outline.md",
+      "profiles": [
+        "sales",
+        "startup"
+      ],
+      "keywords": [
+        "pitch deck",
+        "slides",
+        "investor",
+        "presentation",
+        "funding",
+        "demo",
+        "pitch"
+      ],
+      "use_cases": [
+        "Create a pitch deck",
+        "Write investor slides",
+        "Draft a sales presentation"
+      ]
+    },
+    {
+      "id": "rfp-response",
+      "title": "RFP Response",
+      "file": "bzcode/templates/rfp-response.md",
+      "profiles": [
+        "sales",
+        "business-analyst"
+      ],
+      "keywords": [
+        "rfp",
+        "rfq",
+        "rfi",
+        "tender",
+        "bid",
+        "response",
+        "proposal",
+        "government",
+        "procurement"
+      ],
+      "use_cases": [
+        "Respond to an RFP",
+        "Write a tender response",
+        "Answer an RFQ"
+      ]
+    },
+    {
+      "id": "account-plan",
+      "title": "Account Plan",
+      "file": "bzcode/templates/account-plan.md",
+      "profiles": [
+        "sales"
+      ],
+      "keywords": [
+        "account plan",
+        "client",
+        "customer",
+        "relationship",
+        "growth",
+        "expansion",
+        "upsell"
+      ],
+      "use_cases": [
+        "Create an account plan",
+        "Plan client growth",
+        "Write a key account strategy"
+      ]
+    },
+    {
+      "id": "win-loss-analysis",
+      "title": "Win / Loss Analysis",
+      "file": "bzcode/templates/win-loss-analysis.md",
+      "profiles": [
+        "sales",
+        "business-analyst"
+      ],
+      "keywords": [
+        "win loss",
+        "deal",
+        "competitive",
+        "why won",
+        "why lost",
+        "post-mortem",
+        "deal review"
+      ],
+      "use_cases": [
+        "Write a win/loss analysis",
+        "Review a lost deal",
+        "Analyse competitive losses"
+      ]
+    },
+    {
+      "id": "project-plan",
+      "title": "Project Plan",
+      "file": "bzcode/templates/project-plan.md",
+      "profiles": [
+        "project-manager"
+      ],
+      "keywords": [
+        "project plan",
+        "schedule",
+        "timeline",
+        "milestones",
+        "gantt",
+        "wbs",
+        "tasks",
+        "phases"
+      ],
+      "use_cases": [
+        "Create a project plan",
+        "Write a project schedule",
+        "Plan project phases"
+      ]
+    },
+    {
+      "id": "risk-register",
+      "title": "Risk Register",
+      "file": "bzcode/templates/risk-register.md",
+      "profiles": [
+        "project-manager",
+        "business-analyst",
+        "operations"
+      ],
+      "keywords": [
+        "risk register",
+        "risks",
+        "issues",
+        "mitigation",
+        "log",
+        "tracker",
+        "project risk"
+      ],
+      "use_cases": [
+        "Create a risk register",
+        "Maintain a risk log",
+        "Track project risks"
+      ]
+    },
+    {
+      "id": "retrospective",
+      "title": "Retrospective Report",
+      "file": "bzcode/templates/retrospective.md",
+      "profiles": [
+        "project-manager"
+      ],
+      "keywords": [
+        "retrospective",
+        "retro",
+        "lessons learned",
+        "sprint",
+        "agile",
+        "review",
+        "what went well"
+      ],
+      "use_cases": [
+        "Write a project retrospective",
+        "Run a sprint retro",
+        "Document lessons learned"
+      ]
+    },
+    {
+      "id": "project-closure",
+      "title": "Project Closure Report",
+      "file": "bzcode/templates/project-closure.md",
+      "profiles": [
+        "project-manager"
+      ],
+      "keywords": [
+        "project closure",
+        "close out",
+        "completion",
+        "handover",
+        "lessons learned",
+        "final report"
+      ],
+      "use_cases": [
+        "Write a project closure report",
+        "Close out a project",
+        "Document project completion"
+      ]
+    },
+    {
+      "id": "financial-summary",
+      "title": "Financial Summary Report",
+      "file": "bzcode/templates/financial-summary.md",
+      "profiles": [
+        "finance"
+      ],
+      "keywords": [
+        "financial summary",
+        "finance report",
+        "quarterly",
+        "monthly",
+        "results",
+        "revenue",
+        "profit"
+      ],
+      "use_cases": [
+        "Write a financial summary",
+        "Create a monthly finance report",
+        "Summarise quarterly results"
+      ]
+    },
+    {
+      "id": "expense-report",
+      "title": "Expense Report",
+      "file": "bzcode/templates/expense-report.md",
+      "profiles": [
+        "finance",
+        "hr"
+      ],
+      "keywords": [
+        "expense report",
+        "expenses",
+        "reimbursement",
+        "travel",
+        "receipts",
+        "claims"
+      ],
+      "use_cases": [
+        "Submit an expense report",
+        "Claim business expenses",
+        "Create expense summary"
+      ]
+    },
+    {
+      "id": "board-financial-report",
+      "title": "Board Financial Report",
+      "file": "bzcode/templates/board-financial-report.md",
+      "profiles": [
+        "finance",
+        "startup"
+      ],
+      "keywords": [
+        "board report",
+        "board pack",
+        "directors",
+        "governance",
+        "financial update",
+        "investor update"
+      ],
+      "use_cases": [
+        "Write a board financial report",
+        "Create a board pack",
+        "Prepare investor financials"
+      ]
+    },
+    {
+      "id": "literature-review",
+      "title": "Literature Review",
+      "file": "bzcode/templates/literature-review.md",
+      "profiles": [
+        "researcher"
+      ],
+      "keywords": [
+        "literature review",
+        "research",
+        "academic",
+        "papers",
+        "sources",
+        "bibliography",
+        "systematic review"
+      ],
+      "use_cases": [
+        "Write a literature review",
+        "Summarise research papers",
+        "Create a systematic review"
+      ]
+    },
+    {
+      "id": "abstract",
+      "title": "Abstract",
+      "file": "bzcode/templates/abstract.md",
+      "profiles": [
+        "researcher"
+      ],
+      "keywords": [
+        "abstract",
+        "summary",
+        "paper",
+        "research",
+        "academic",
+        "journal",
+        "conference"
+      ],
+      "use_cases": [
+        "Write an abstract",
+        "Summarise a paper",
+        "Create a research abstract"
+      ]
+    },
+    {
+      "id": "grant-application",
+      "title": "Grant Application",
+      "file": "bzcode/templates/grant-application.md",
+      "profiles": [
+        "researcher"
+      ],
+      "keywords": [
+        "grant",
+        "funding",
+        "research grant",
+        "application",
+        "proposal",
+        "award",
+        "funder"
+      ],
+      "use_cases": [
+        "Write a grant application",
+        "Apply for research funding",
+        "Submit a grant proposal"
+      ]
+    },
+    {
+      "id": "data-analysis-summary",
+      "title": "Data Analysis Summary",
+      "file": "bzcode/templates/data-analysis-summary.md",
+      "profiles": [
+        "researcher",
+        "business-analyst",
+        "finance"
+      ],
+      "keywords": [
+        "data analysis",
+        "statistics",
+        "findings",
+        "dataset",
+        "insights",
+        "methodology",
+        "results"
+      ],
+      "use_cases": [
+        "Write a data analysis summary",
+        "Document statistical findings",
+        "Present data insights"
+      ]
+    },
+    {
+      "id": "one-pager",
+      "title": "One-Pager / Company Overview",
+      "file": "bzcode/templates/one-pager.md",
+      "profiles": [
+        "startup",
+        "sales",
+        "marketing"
+      ],
+      "keywords": [
+        "one pager",
+        "overview",
+        "company overview",
+        "fact sheet",
+        "teaser",
+        "summary",
+        "investor"
+      ],
+      "use_cases": [
+        "Create a one-pager",
+        "Write a company overview",
+        "Draft an investor teaser"
+      ]
+    },
+    {
+      "id": "business-plan",
+      "title": "Business Plan",
+      "file": "bzcode/templates/business-plan.md",
+      "profiles": [
+        "startup",
+        "business-analyst"
+      ],
+      "keywords": [
+        "business plan",
+        "strategy",
+        "model",
+        "financials",
+        "market",
+        "operations",
+        "planning"
+      ],
+      "use_cases": [
+        "Write a business plan",
+        "Create a company strategy",
+        "Draft a business model"
+      ]
+    },
+    {
+      "id": "product-roadmap",
+      "title": "Product Roadmap",
+      "file": "bzcode/templates/product-roadmap.md",
+      "profiles": [
+        "startup",
+        "project-manager",
+        "business-analyst"
+      ],
+      "keywords": [
+        "roadmap",
+        "product",
+        "features",
+        "timeline",
+        "release",
+        "sprint",
+        "backlog",
+        "milestones"
+      ],
+      "use_cases": [
+        "Write a product roadmap",
+        "Plan feature releases",
+        "Create a development roadmap"
+      ]
+    },
+    {
+      "id": "okr-document",
+      "title": "OKR Document",
+      "file": "bzcode/templates/okr-document.md",
+      "profiles": [
+        "startup",
+        "operations",
+        "project-manager"
+      ],
+      "keywords": [
+        "okr",
+        "objectives",
+        "key results",
+        "goals",
+        "quarterly",
+        "planning",
+        "strategy"
+      ],
+      "use_cases": [
+        "Write OKRs",
+        "Set quarterly goals",
+        "Create an OKR document"
+      ]
+    },
+    {
+      "id": "investor-update",
+      "title": "Investor Update",
+      "file": "bzcode/templates/investor-update.md",
+      "profiles": [
+        "startup",
+        "finance"
+      ],
+      "keywords": [
+        "investor update",
+        "investor letter",
+        "startup update",
+        "board update",
+        "fundraising",
+        "progress"
+      ],
+      "use_cases": [
+        "Write an investor update",
+        "Send a monthly investor letter",
+        "Create a board update"
+      ]
+    },
+    {
+      "id": "sop",
+      "title": "Standard Operating Procedure (SOP)",
+      "file": "bzcode/templates/sop.md",
+      "profiles": [
+        "operations",
+        "hr",
+        "legal"
+      ],
+      "keywords": [
+        "sop",
+        "standard operating procedure",
+        "process",
+        "procedure",
+        "operations",
+        "workflow",
+        "instructions"
+      ],
+      "use_cases": [
+        "Write an SOP",
+        "Document a process",
+        "Create operating procedures"
+      ]
+    },
+    {
+      "id": "post-mortem",
+      "title": "Post-Mortem / Incident Analysis",
+      "file": "bzcode/templates/post-mortem.md",
+      "profiles": [
+        "operations",
+        "project-manager"
+      ],
+      "keywords": [
+        "post mortem",
+        "incident",
+        "outage",
+        "failure",
+        "root cause",
+        "RCA",
+        "five whys",
+        "blameless"
+      ],
+      "use_cases": [
+        "Write a post-mortem",
+        "Analyse a system outage",
+        "Document a production incident"
+      ]
+    },
+    {
+      "id": "sla",
+      "title": "Service Level Agreement (SLA)",
+      "file": "bzcode/templates/sla.md",
+      "profiles": [
+        "operations",
+        "legal",
+        "sales"
+      ],
+      "keywords": [
+        "sla",
+        "service level",
+        "uptime",
+        "response time",
+        "support",
+        "availability",
+        "agreement"
+      ],
+      "use_cases": [
+        "Write an SLA",
+        "Define service levels",
+        "Create a support agreement"
+      ]
+    },
+    {
+      "id": "vendor-evaluation",
+      "title": "Vendor / Supplier Evaluation",
+      "file": "bzcode/templates/vendor-evaluation.md",
+      "profiles": [
+        "operations",
+        "procurement",
+        "finance"
+      ],
+      "keywords": [
+        "vendor",
+        "supplier",
+        "evaluation",
+        "procurement",
+        "rfq",
+        "selection",
+        "comparison",
+        "due diligence"
+      ],
+      "use_cases": [
+        "Evaluate vendors",
+        "Compare suppliers",
+        "Select a procurement partner"
+      ]
+    },
+    {
+      "id": "process-improvement",
+      "title": "Process Improvement Proposal",
+      "file": "bzcode/templates/process-improvement.md",
+      "profiles": [
+        "operations",
+        "business-analyst"
+      ],
+      "keywords": [
+        "process improvement",
+        "lean",
+        "efficiency",
+        "optimisation",
+        "kaizen",
+        "bottleneck",
+        "waste"
+      ],
+      "use_cases": [
+        "Write a process improvement proposal",
+        "Optimise a workflow",
+        "Document a process change"
+      ]
+    }
+  ]
+}

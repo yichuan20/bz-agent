@@ -15,6 +15,7 @@ import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppProductsRouteImport } from './routes/_app/products'
+import { Route as AppLearningRouteImport } from './routes/_app/learning'
 import { Route as AppFilesRouteImport } from './routes/_app/files'
 import { Route as AppChatRouteImport } from './routes/_app/chat'
 import { Route as AppAgentRouteImport } from './routes/_app/agent'
@@ -48,6 +49,11 @@ const AppProductsRoute = AppProductsRouteImport.update({
   path: '/products',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppLearningRoute = AppLearningRouteImport.update({
+  id: '/learning',
+  path: '/learning',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppFilesRoute = AppFilesRouteImport.update({
   id: '/files',
   path: '/files',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/agent': typeof AppAgentRoute
   '/chat': typeof AppChatRoute
   '/files': typeof AppFilesRoute
+  '/learning': typeof AppLearningRoute
   '/products': typeof AppProductsRoute
   '/settings': typeof AppSettingsRoute
 }
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/agent': typeof AppAgentRoute
   '/chat': typeof AppChatRoute
   '/files': typeof AppFilesRoute
+  '/learning': typeof AppLearningRoute
   '/products': typeof AppProductsRoute
   '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/_app/agent': typeof AppAgentRoute
   '/_app/chat': typeof AppChatRoute
   '/_app/files': typeof AppFilesRoute
+  '/_app/learning': typeof AppLearningRoute
   '/_app/products': typeof AppProductsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/chat'
     | '/files'
+    | '/learning'
     | '/products'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/chat'
     | '/files'
+    | '/learning'
     | '/products'
     | '/settings'
     | '/'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/_app/agent'
     | '/_app/chat'
     | '/_app/files'
+    | '/_app/learning'
     | '/_app/products'
     | '/_app/settings'
     | '/_app/'
@@ -180,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProductsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/learning': {
+      id: '/_app/learning'
+      path: '/learning'
+      fullPath: '/learning'
+      preLoaderRoute: typeof AppLearningRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/files': {
       id: '/_app/files'
       path: '/files'
@@ -208,6 +227,7 @@ interface AppRouteRouteChildren {
   AppAgentRoute: typeof AppAgentRoute
   AppChatRoute: typeof AppChatRoute
   AppFilesRoute: typeof AppFilesRoute
+  AppLearningRoute: typeof AppLearningRoute
   AppProductsRoute: typeof AppProductsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -217,6 +237,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppAgentRoute: AppAgentRoute,
   AppChatRoute: AppChatRoute,
   AppFilesRoute: AppFilesRoute,
+  AppLearningRoute: AppLearningRoute,
   AppProductsRoute: AppProductsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,

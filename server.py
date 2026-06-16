@@ -86,7 +86,7 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     # Purge sub-agent session files/dirs that bzcode's Agent tool leaves inside
     # the config dir (e.g. cozy-hopping-comet.jsonl, tool-results/).  They are
     # not part of our config and prevent bzcode from resuming cleanly.
-    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills"}
+    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills", "scripts"}
     for item in list(cfg_dir.iterdir()):
         if item.name not in _OWNED_NAMES:
             if item.is_dir():
@@ -114,11 +114,36 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     else:
         (cfg_dir / "SOUL.md").unlink(missing_ok=True)
 
-    # AGENTS.md — workflow instructions; session-level replaces project/user AGENTS.md entirely.
-    # Used to tell the agent to invoke skills proactively rather than waiting for the user.
+    # Copy agent scripts into the session config dir so the agent can reference
+    # them by a stable, deployment-agnostic path rather than an absolute one.
+    # The session config dir is always at ~/.boltzbit/sessions/{id}/ regardless
+    # of where bz-agent is installed.
+    src_scripts = Path(__file__).resolve().parent / "bzcode" / "scripts"
+    dst_scripts = cfg_dir / "scripts"
+    dst_scripts.mkdir(exist_ok=True)
+    for script in src_scripts.glob("*.py"):
+        dest = dst_scripts / script.name
+        # Only overwrite if source is newer (avoids redundant I/O on every reconnect)
+        if not dest.exists() or script.stat().st_mtime > dest.stat().st_mtime:
+            import shutil as _sh
+            _sh.copy2(script, dest)
+
+    # {scripts_path} resolves to the session-local scripts directory.
+    # Using the session config dir means no absolute paths leak into templates.
+    _session_scripts = str(dst_scripts)
+
+    def _resolve(text: str) -> str:
+        return (text
+            .replace("{server_data_path}", str(SERVER_DATA_DIR))
+            .replace("{scripts_path}",     _session_scripts)
+            .replace("{working_dir}",      working_dir)
+            .replace("{widget_template_table}", _build_widget_template_table())
+        )
+
+    # AGENTS.md — workflow instructions with all placeholders resolved.
     agents_md = entry.get("agents_md")
     if agents_md:
-        (cfg_dir / "AGENTS.md").write_text(agents_md, encoding="utf-8")
+        (cfg_dir / "AGENTS.md").write_text(_resolve(agents_md), encoding="utf-8")
     else:
         (cfg_dir / "AGENTS.md").unlink(missing_ok=True)
 
@@ -136,17 +161,9 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
         _shutil.rmtree(skills_dir)
     skills = entry.get("skills", {})
     for skill_name, skill_content in skills.items():
-        # Resolve placeholders so skills can reference local paths
-        scripts_dir = Path(__file__).resolve().parent / "bzcode" / "scripts"
-        resolved = (skill_content
-            .replace("{server_data_path}", str(SERVER_DATA_DIR))
-            .replace("{scripts_path}",     str(scripts_dir))
-            .replace("{working_dir}",      working_dir)
-            .replace("{widget_template_table}", _build_widget_template_table())
-        )
         skill_path = skills_dir / skill_name / "SKILL.md"
         skill_path.parent.mkdir(parents=True, exist_ok=True)
-        skill_path.write_text(resolved, encoding="utf-8")
+        skill_path.write_text(_resolve(skill_content), encoding="utf-8")
 
 
 # ── Database configuration ────────────────────────────────────────────────────
@@ -1006,7 +1023,7 @@ async def handle_sessions(request: web.Request) -> web.Response:
         #   2. Most-recently-CONNECTED session → drives the mode badge
         #      (meta.json mtime updated on every WS connect, so it reflects the last mode opened)
         by_dir: dict[str, dict] = {}
-        by_dir_mode: dict[str, tuple[float, str]] = {}  # wd → (meta_mtime, mode)
+        by_dir_mode: dict = {}  # wd → (meta_mtime, mode)
 
         for path in SESSIONS_DIR.glob("*.jsonl"):
             meta = _read_session_file(path)
@@ -1179,7 +1196,7 @@ class _WASess:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=self.cwd,
-            env={**os.environ},
+            env={**os.environ, "BZ_PYTHON": sys.executable},
             limit=16 * 1024 * 1024,
         )
         asyncio.create_task(self._read_loop())
@@ -1718,7 +1735,7 @@ class _BatchItem:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
                 cwd=self.cwd,
-                env={**os.environ},
+                env={**os.environ, "BZ_PYTHON": sys.executable},
                 limit=16 * 1024 * 1024,
             )
             asyncio.create_task(self._read_loop())
@@ -2074,6 +2091,949 @@ async def handle_read_file(request: web.Request) -> web.Response:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
+# ── Document parsing ─────────────────────────────────────────────────────────
+
+_MAX_DOC_CHARS = 80_000
+_MAX_DOC_BYTES = 50 * 1024 * 1024  # 50 MB
+
+# ── DOCX ↔ Block JSON conversion (bz-office format) ─────────────────────────
+
+def _docx_to_blocks(data: bytes) -> list:
+    """Convert DOCX binary → Block[] in bz-office JSON format."""
+    import docx as _docx
+    import io, secrets
+    from docx.oxml.ns import qn
+
+    doc = _docx.Document(io.BytesIO(data))
+    blocks = []
+
+    def _run_styles(para) -> list:
+        styles, pos = [], 0
+        for run in para.runs:
+            n = len(run.text)
+            if not n:
+                pos += n; continue
+            sr = {"start": pos, "end": pos + n}
+            if run.bold:        sr["isBold"] = True
+            if run.italic:      sr["isItalic"] = True
+            if run.underline:   sr["isUnderlined"] = True
+            if getattr(run.font, "strike", None): sr["isStrikethrough"] = True
+            if run.font.size:   sr["fontSize"] = int(run.font.size.pt)
+            if run.font.color and run.font.color.type is not None:
+                try: sr["textColor"] = f"#{run.font.color.rgb}"
+                except Exception: pass
+            if len(sr) > 2: styles.append(sr)
+            pos += n
+        return styles
+
+    def _heading_size(style_name: str):
+        for level, size in (("1", 24), ("2", 20), ("3", 18), ("4", 16)):
+            if style_name == f"Heading {level}":
+                return size
+        return None
+
+    def _para_to_block(para) -> dict:
+        text   = para.text
+        styles = _run_styles(para)
+        block  = {"text": text, "styles": styles}
+
+        # Heading → override styles with bold + large font
+        sname = para.style.name if para.style else ""
+        size  = _heading_size(sname)
+        if size:
+            block["styles"] = [{"start": 0, "end": len(text), "fontSize": size, "isBold": True}]
+
+        # Bullet / numbered list
+        try:
+            numPr = para._p.pPr.numPr if para._p.pPr is not None else None
+            if numPr is not None:
+                block["prefix"] = "•"
+                ilvl = numPr.ilvl
+                block["indent"] = int(ilvl.val) + 1 if ilvl is not None else 1
+        except Exception:
+            pass
+
+        return block
+
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.split("}")[-1]
+
+        if tag == "p":
+            try:
+                from docx.text.paragraph import Paragraph
+                para  = Paragraph(child, doc)
+                block = _para_to_block(para)
+                if block["text"].strip() or not blocks:
+                    blocks.append(block)
+            except Exception:
+                pass
+
+        elif tag == "tbl":
+            try:
+                from docx.table import Table
+                table  = Table(child, doc)
+                tid    = secrets.token_hex(8)
+                n_rows = len(table.rows)
+                n_cols = max((len(r.cells) for r in table.rows), default=0)
+                for r_idx, row in enumerate(table.rows):
+                    for c_idx, cell in enumerate(row.cells):
+                        blocks.append({
+                            "text":            cell.text,
+                            "styles":          [],
+                            "isTableCell":     True,
+                            "tableId":         tid,
+                            "rowIndex":        r_idx,
+                            "columnIndex":     c_idx,
+                            "numberOfRows":    n_rows,
+                            "numberOfColumns": n_cols,
+                        })
+            except Exception:
+                pass
+
+    return blocks
+
+
+def _blocks_to_docx(blocks: list) -> bytes:
+    """Convert Block[] (bz-office format) → DOCX binary."""
+    import docx as _docx
+    import io
+    from docx.shared import Pt, RGBColor
+
+    doc = _docx.Document()
+
+    # Group consecutive table cells by tableId
+    i = 0
+    while i < len(blocks):
+        b = blocks[i]
+
+        if b.get("isTableCell"):
+            tid = b.get("tableId")
+            cells = [c for c in blocks if c.get("tableId") == tid]
+            n_rows = b.get("numberOfRows", 1)
+            n_cols = b.get("numberOfColumns", 1)
+            tbl = doc.add_table(rows=n_rows, cols=n_cols)
+            tbl.style = "Table Grid"
+            for cell in cells:
+                r, c = cell.get("rowIndex", 0), cell.get("columnIndex", 0)
+                try:
+                    tbl.rows[r].cells[c].text = cell.get("text", "")
+                    if r == 0:
+                        for run in tbl.rows[r].cells[c].paragraphs[0].runs:
+                            run.bold = True
+                except Exception:
+                    pass
+            # Skip all cells belonging to this table
+            while i < len(blocks) and blocks[i].get("tableId") == tid:
+                i += 1
+            continue
+
+        # Regular paragraph
+        text   = b.get("text", "")
+        styles = b.get("styles", [])
+        prefix = b.get("prefix", "")
+        indent = b.get("indent", 0)
+
+        # Detect heading via fontSize
+        heading_size = None
+        for sr in styles:
+            if sr.get("isBold") and sr.get("start", 0) == 0 and sr.get("end", 0) == len(text):
+                fs = sr.get("fontSize", 0)
+                if fs >= 24: heading_size = 1
+                elif fs >= 20: heading_size = 2
+                elif fs >= 18: heading_size = 3
+
+        if heading_size:
+            para = doc.add_heading(text, level=heading_size)
+        elif prefix == "•":
+            para = doc.add_paragraph(style="List Bullet")
+            para.add_run(text)
+        else:
+            para = doc.add_paragraph()
+            if not styles:
+                para.add_run(text)
+            else:
+                # Apply style ranges
+                cursor = 0
+                for sr in sorted(styles, key=lambda s: s.get("start", 0)):
+                    s, e = sr.get("start", 0), sr.get("end", len(text))
+                    if cursor < s:
+                        para.add_run(text[cursor:s])
+                    run = para.add_run(text[s:e])
+                    run.bold        = sr.get("isBold", False)
+                    run.italic      = sr.get("isItalic", False)
+                    run.underline   = sr.get("isUnderlined", False)
+                    if sr.get("fontSize"):
+                        run.font.size = Pt(sr["fontSize"])
+                    if sr.get("textColor"):
+                        try:
+                            hex_c = sr["textColor"].lstrip("#")
+                            run.font.color.rgb = RGBColor(
+                                int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
+                            )
+                        except Exception:
+                            pass
+                    cursor = e
+                if cursor < len(text):
+                    para.add_run(text[cursor:])
+
+        if indent and not heading_size:
+            from docx.shared import Inches
+            para.paragraph_format.left_indent = Inches(indent * 0.25)
+
+        i += 1
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _parse_pdf(data: bytes) :
+    import pypdf
+    import io
+    reader = pypdf.PdfReader(io.BytesIO(data))
+    pages = len(reader.pages)
+    parts = []
+    for i, page in enumerate(reader.pages, 1):
+        text = page.extract_text() or ""
+        if text.strip():
+            parts.append(f"# Page {i}\n\n{text.strip()}")
+    return pages, "\n\n".join(parts)
+
+def _parse_docx(data: bytes) :
+    import docx
+    import io
+    doc = docx.Document(io.BytesIO(data))
+    parts = []
+    heading_map = {1: "#", 2: "##", 3: "###", 4: "####"}
+    for para in doc.paragraphs:
+        style = para.style.name if para.style else ""
+        text  = para.text.strip()
+        if not text:
+            continue
+        level = next((int(s) for s in ("1","2","3","4") if style == f"Heading {s}"), None)
+        if level:
+            parts.append(f"{heading_map[level]} {text}")
+        else:
+            parts.append(text)
+    for table in doc.tables:
+        rows = []
+        for i, row in enumerate(table.rows):
+            cells = [c.text.strip() for c in row.cells]
+            rows.append("| " + " | ".join(cells) + " |")
+            if i == 0:
+                rows.append("| " + " | ".join(["---"] * len(cells)) + " |")
+        parts.append("\n".join(rows))
+    page_count = max(1, len(parts) // 10)  # approximate
+    return page_count, "\n\n".join(parts)
+
+def _parse_xlsx(data: bytes) :
+    import openpyxl
+    import io
+    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
+    parts = []
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        rows = list(ws.iter_rows(values_only=True))
+        # Drop fully-empty rows
+        rows = [r for r in rows if any(c is not None for c in r)]
+        if not rows:
+            continue
+        rows = rows[:1000]  # cap at 1000 rows
+        parts.append(f"## Sheet: {sheet_name}")
+        header = rows[0]
+        parts.append("| " + " | ".join(str(c) if c is not None else "" for c in header) + " |")
+        parts.append("| " + " | ".join(["---"] * len(header)) + " |")
+        for row in rows[1:]:
+            parts.append("| " + " | ".join(str(c) if c is not None else "" for c in row) + " |")
+    return len(wb.sheetnames), "\n\n".join(parts)
+
+def _parse_pptx(data: bytes) :
+    from pptx import Presentation
+    import io
+    prs = Presentation(io.BytesIO(data))
+    parts = []
+    for i, slide in enumerate(prs.slides, 1):
+        title_text = ""
+        body_lines = []
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            text = shape.text_frame.text.strip()
+            if not text:
+                continue
+            if shape.shape_type == 13:  # picture
+                continue
+            if not title_text and hasattr(shape, "placeholder_format") and shape.placeholder_format:
+                title_text = text
+            else:
+                for para in shape.text_frame.paragraphs:
+                    pt = para.text.strip()
+                    if pt:
+                        body_lines.append(f"- {pt}")
+        header = f"## Slide {i}: {title_text}" if title_text else f"## Slide {i}"
+        parts.append(header + ("\n" + "\n".join(body_lines) if body_lines else ""))
+    return len(prs.slides), "\n\n".join(parts)
+
+_DOCX_EXTS = {".docx", ".doc"}
+
+def _detect_and_parse(filename: str, data: bytes) -> dict:
+    ext = Path(filename).suffix.lower()
+    fmt = ext.lstrip(".")
+    if fmt in ("doc", "xls", "ppt"):
+        fmt = {"doc": "docx", "xls": "xlsx", "ppt": "pptx"}[fmt]
+
+    # DOCX/DOC → return Block[] (bz-office format); other formats → markdown text
+    if ext in _DOCX_EXTS:
+        blocks     = _docx_to_blocks(data)
+        word_count = sum(len(b.get("text", "").split()) for b in blocks)
+        return {
+            "filename":  filename,
+            "type":      fmt,
+            "pages":     max(1, len([b for b in blocks if not b.get("isTableCell")]) // 30),
+            "wordCount": word_count,
+            "truncated": False,
+            "blocks":    blocks,
+        }
+
+    parsers = {
+        ".pdf":  _parse_pdf,
+        ".xlsx": _parse_xlsx,
+        ".xls":  _parse_xlsx,
+        ".pptx": _parse_pptx,
+        ".ppt":  _parse_pptx,
+    }
+    if ext not in parsers:
+        raise ValueError(f"unsupported format: {ext or '(no extension)'}")
+    pages, content = parsers[ext](data)
+    truncated = len(content) > _MAX_DOC_CHARS
+    if truncated:
+        content = content[:_MAX_DOC_CHARS]
+    return {
+        "filename":  filename,
+        "type":      fmt,
+        "pages":     pages,
+        "wordCount": len(content.split()),
+        "truncated": truncated,
+        "content":   content,
+    }
+
+async def handle_parse_doc(request: web.Request) -> web.Response:
+    """POST /api/doc/parse — parse PDF/DOCX/XLSX/PPTX.
+    Accepts JSON { path } for files on disk, or multipart form with a 'file' field."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        ct = request.content_type or ""
+        if "multipart" in ct:
+            reader = await request.multipart()
+            field  = await reader.next()
+            if field is None or field.name != "file":
+                return web.json_response({"error": "expected field 'file'"}, status=400, headers=CORS_HEADERS)
+            filename = field.filename or "upload"
+            data = await field.read()
+        else:
+            body = await request.json()
+            path_str = str(body.get("path", "")).strip()
+            if not path_str:
+                return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+            p = Path(path_str)
+            if not p.exists():
+                return web.json_response({"error": "file not found"}, status=404, headers=CORS_HEADERS)
+            if p.stat().st_size > _MAX_DOC_BYTES:
+                return web.json_response({"error": "file too large (max 50 MB)"}, status=413, headers=CORS_HEADERS)
+            data     = p.read_bytes()
+            filename = p.name
+        result = _detect_and_parse(filename, data)
+        return web.json_response(result, headers=CORS_HEADERS)
+    except ValueError as exc:
+        return web.json_response({"error": str(exc)}, status=400, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": f"could not parse: {exc}"}, status=422, headers=CORS_HEADERS)
+
+
+async def handle_save_doc(request: web.Request) -> web.Response:
+    """PUT /api/doc/save { path, blocks } — convert Block[] (bz-office format) → DOCX and save."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+
+    path_str = str(body.get("path", "")).strip()
+    blocks   = body.get("blocks")
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    if not isinstance(blocks, list):
+        return web.json_response({"error": "blocks (array) required"}, status=400, headers=CORS_HEADERS)
+
+    p = Path(path_str)
+    if p.suffix.lower() not in (".docx", ".doc"):
+        return web.json_response({"error": "only DOCX files can be saved"}, status=400, headers=CORS_HEADERS)
+
+    try:
+        docx_bytes = _blocks_to_docx(blocks)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(docx_bytes)
+        word_count = sum(len(b.get("text", "").split()) for b in blocks)
+        return web.json_response({"ok": True, "path": str(p), "wordCount": word_count}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": f"could not save: {exc}"}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_excel_load(request: web.Request) -> web.Response:
+    """GET /api/excel/load?path=<abs> — parse XLSX → bz-office cell JSON format."""
+    path_str = request.rel_url.query.get("path", "").strip()
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists():
+        return web.json_response({"error": "file not found"}, status=404, headers=CORS_HEADERS)
+    try:
+        import openpyxl
+
+        wb_vals  = openpyxl.load_workbook(p, data_only=True)   # cached computed values
+        wb_forms = openpyxl.load_workbook(p, data_only=False)  # raw formula strings
+
+        # ── Step 1: extract every formula string keyed by (sheet_title, cell_id) ──
+        formula_strs: dict = {}  # {sheet_title: {cell_id: "=..."}}
+        for ws in wb_forms.worksheets:
+            fm = {}
+            for row in ws.iter_rows():
+                for cell in row:
+                    v = cell.value
+                    if isinstance(v, str) and v.startswith('='):
+                        col_letter = openpyxl.utils.get_column_letter(cell.column)
+                        fm[f"{col_letter}{cell.row}"] = v
+            formula_strs[ws.title] = fm
+
+        # ── Step 2: evaluate all formulas with the `formulas` library ──
+        # Result: {sheet_title: {cell_id: numeric_or_string_value}}
+        formula_vals: dict = {}
+        try:
+            import formulas
+            xl_model = formulas.ExcelModel().loads(str(p)).finish()
+            xl_inputs = xl_model.calculate()
+            for ref, result in xl_inputs.items():
+                try:
+                    val = result.value
+                    # Unwrap numpy arrays / nested iterables up to 4 levels
+                    for _ in range(4):
+                        if hasattr(val, '__iter__') and not isinstance(val, str):
+                            inner = list(val)
+                            val = inner[0] if len(inner) == 1 else inner
+                        else:
+                            break
+                    if val is None or str(val) in ('nan', 'None', '', 'ERROR'):
+                        continue
+                    stored = float(val) if isinstance(val, (int, float)) else str(val)
+                    # ref is like "Sheet1!B12" or "'Sheet 1'!B12"
+                    ref_str = str(ref)
+                    if '!' in ref_str:
+                        sheet_part, cell_part = ref_str.split('!', 1)
+                        sheet_part = sheet_part.strip("'")
+                    else:
+                        sheet_part = wb_forms.worksheets[0].title
+                        cell_part = ref_str
+                    cell_part = cell_part.upper()
+                    # match sheet name case-insensitively
+                    for ws in wb_forms.worksheets:
+                        if ws.title.upper() == sheet_part.upper():
+                            formula_vals.setdefault(ws.title, {})[cell_part] = stored
+                            break
+                except Exception:
+                    pass
+        except Exception:
+            pass  # formulas lib unavailable — fall back to openpyxl cached values
+
+        # ── Step 3: build cell data ──
+        sheets = []
+        for ws in wb_vals.worksheets:
+            cells = {}
+            col_widths, row_heights = {}, {}
+            sheet_fmstrs = formula_strs.get(ws.title, {})
+            sheet_fmvals = formula_vals.get(ws.title, {})
+            max_row = max(ws.max_row or 0, 1)
+            max_col = max(ws.max_column or 0, 1)
+
+            for row in ws.iter_rows(max_row=min(max_row, 1000), max_col=min(max_col, 702)):
+                for cell in row:
+                    col_letter = openpyxl.utils.get_column_letter(cell.column)
+                    cell_id = f"{col_letter}{cell.row}"
+                    formula = sheet_fmstrs.get(cell_id)
+
+                    if formula:
+                        # Formula cell: prefer evaluated value, then openpyxl cached value
+                        v = sheet_fmvals.get(cell_id.upper()) or sheet_fmvals.get(cell_id)
+                        if v is None:
+                            v = cell.value  # cached by Excel (None if saved by openpyxl)
+                    else:
+                        v = cell.value
+
+                    # Skip entirely empty, unstyled, non-formula cells
+                    if v is None and not cell.has_style and not formula:
+                        continue
+
+                    cd: dict = {}
+                    if formula:
+                        cd["formula"] = formula
+                    if v is not None:
+                        cd["value"] = v if isinstance(v, (int, float)) else str(v)
+
+                    # ── Formatting ──
+                    try:
+                        if cell.font:
+                            if cell.font.bold:   cd["fontBold"] = True
+                            if cell.font.italic: cd["fontItalic"] = True
+                            if cell.font.name:   cd["fontFamily"] = cell.font.name
+                            if cell.font.size:   cd["fontSize"] = int(cell.font.size * 20)
+                            if cell.font.color:
+                                try:
+                                    rgb = cell.font.color.rgb
+                                    if rgb: cd["fontColor"] = str(rgb)
+                                except Exception:
+                                    pass
+                        if cell.fill and cell.fill.fgColor:
+                            try:
+                                rgb = cell.fill.fgColor.rgb
+                                if rgb and str(rgb) not in ("00000000", ""):
+                                    cd["bgColor"] = str(rgb)
+                            except Exception:
+                                pass
+                        if cell.alignment:
+                            h  = (cell.alignment.horizontal or "").upper()
+                            v2 = (cell.alignment.vertical   or "").upper()
+                            if h or v2:
+                                cd["align"] = f"{h};{v2}"
+                    except Exception:
+                        pass
+
+                    if cd:
+                        cells[cell_id] = cd
+
+            for col_letter, dim in (ws.column_dimensions or {}).items():
+                if dim.width:
+                    idx = openpyxl.utils.column_index_from_string(col_letter) - 1
+                    col_widths[str(idx)] = max(30, int(dim.width * 7.5))
+            for row_idx, dim in (ws.row_dimensions or {}).items():
+                if dim.height:
+                    row_heights[str(row_idx - 1)] = max(16, int(dim.height * 1.2))
+
+            sheets.append({
+                "sheetName": ws.title,
+                "cells": cells,
+                "images": [],
+                "columnIndexToWidth": col_widths,
+                "rowIndexToHeight": row_heights,
+                "hiddenColIndices": [],
+                "hiddenRowIndices": [],
+                "mergedCellIndices": [],
+            })
+
+        result = {"id": p.stem, "name": p.stem, "sheets": sheets, "sources": []}
+        return web.Response(
+            text=json.dumps(result, default=str),
+            content_type="application/json",
+            headers=CORS_HEADERS,
+        )
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+def _eval_excel_formula(formula: str, cells: dict) -> object:
+    """Evaluate common Excel formulas against a cell dict {cell_id: {value: ...}}."""
+    import re as _re
+    if not formula.startswith('='):
+        return None
+    expr = formula[1:].strip()
+
+    def cell_val(cid):
+        cid = cid.upper()
+        cd = cells.get(cid, {})
+        v = cd.get("value")
+        if v is None: return 0
+        try: return float(v)
+        except: return 0
+
+    def expand_range(r):
+        """Expand A1:A10 to list of cell ids."""
+        m = _re.match(r'^([A-Z]+)(\d+):([A-Z]+)(\d+)$', r.upper())
+        if not m: return [r.upper()]
+        import openpyxl.utils as _ou
+        c1 = _ou.column_index_from_string(m.group(1))
+        r1 = int(m.group(2))
+        c2 = _ou.column_index_from_string(m.group(3))
+        r2 = int(m.group(4))
+        return [f"{_ou.get_column_letter(c)}{r}" for r in range(r1, r2+1) for c in range(c1, c2+1)]
+
+    try:
+        # Handle SUM(range)
+        m = _re.fullmatch(r'SUM\(([^)]+)\)', expr, _re.I)
+        if m:
+            vals = [cell_val(cid) for cid in expand_range(m.group(1).strip())]
+            return sum(vals)
+
+        # Handle AVERAGE(range)
+        m = _re.fullmatch(r'AVERAGE\(([^)]+)\)', expr, _re.I)
+        if m:
+            vals = [cell_val(cid) for cid in expand_range(m.group(1).strip())]
+            return sum(vals)/len(vals) if vals else 0
+
+        # Handle COUNT(range)
+        m = _re.fullmatch(r'COUNT\(([^)]+)\)', expr, _re.I)
+        if m:
+            vals = [1 for cid in expand_range(m.group(1).strip()) if cells.get(cid.upper(), {}).get("value") not in (None, '')]
+            return sum(vals)
+
+        # Handle MIN/MAX(range)
+        m = _re.fullmatch(r'(MIN|MAX)\(([^)]+)\)', expr, _re.I)
+        if m:
+            vals = [cell_val(cid) for cid in expand_range(m.group(2).strip())]
+            return min(vals) if m.group(1).upper() == 'MIN' else max(vals)
+
+        # Replace cell references in arithmetic expression (e.g. A1+B2*C3)
+        def repl_cell(m2):
+            return str(cell_val(m2.group(0)))
+        arith = _re.sub(r'[A-Z]+\d+', repl_cell, expr.upper())
+        # Only evaluate if it's a simple arithmetic expression
+        if _re.fullmatch(r'[\d\s\.\+\-\*\/\(\)]+', arith):
+            result = eval(arith, {"__builtins__": {}})  # nosec — restricted input
+            return result
+    except Exception:
+        pass
+    return None
+
+
+async def handle_excel_save(request: web.Request) -> web.Response:
+    """PUT /api/excel/save { path, sheets } — save cell data back to XLSX."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    path_str = str(body.get("path", "")).strip()
+    sheets_data = body.get("sheets", [])
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        for sheet in sheets_data:
+            ws = wb.create_sheet(title=sheet.get("sheetName", "Sheet"))
+            cells = sheet.get("cells", {})
+            for cell_id, cd in cells.items():
+                try:
+                    cell = ws[cell_id]
+                    formula = cd.get("formula")
+                    v = cd.get("value")
+                    if formula and isinstance(formula, str) and formula.startswith('='):
+                        cell.value = formula  # preserve formula so Excel recalculates
+                    elif v is not None:
+                        try: cell.value = float(v) if isinstance(v, str) and v.replace('.','',1).lstrip('-').isdigit() else v
+                        except: cell.value = v
+                    font_kw = {}
+                    if cd.get("fontBold"):   font_kw["bold"] = True
+                    if cd.get("fontItalic"): font_kw["italic"] = True
+                    if cd.get("fontFamily"): font_kw["name"] = cd["fontFamily"]
+                    if cd.get("fontSize"):   font_kw["size"] = cd["fontSize"] / 20
+                    if font_kw: cell.font = Font(**font_kw)
+                except Exception:
+                    pass
+        p = Path(path_str)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(p)
+        return web.json_response({"ok": True, "path": str(p)}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_ppt_load(request: web.Request) -> web.Response:
+    """GET /api/ppt/load?path=<abs> — parse PPTX → slide JSON."""
+    path_str = request.rel_url.query.get("path", "").strip()
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists():
+        return web.json_response({"error": "file not found"}, status=404, headers=CORS_HEADERS)
+    try:
+        from pptx import Presentation
+        from pptx.util import Pt
+        from pptx.enum.text import PP_ALIGN
+        import base64, io
+
+        prs = Presentation(str(p))
+        sw = prs.slide_width   # EMU
+        sh = prs.slide_height  # EMU
+        CW, CH = 896, 504       # canvas pixels
+
+        def emu_to_canvas(emu_x, emu_y, emu_w, emu_h):
+            return (
+                round(emu_x / sw * CW, 2),
+                round(emu_y / sh * CH, 2),
+                round(emu_w / sw * CW, 2),
+                round(emu_h / sh * CH, 2),
+            )
+
+        def rgb_to_hex(rgb):
+            if rgb is None:
+                return None
+            try:
+                return f"#{rgb.r:02x}{rgb.g:02x}{rgb.b:02x}"
+            except Exception:
+                return None
+
+        slides_out = []
+        for slide in prs.slides:
+            # Background color
+            bg_color = "#ffffff"
+            try:
+                bg = slide.background.fill
+                if bg.type is not None:
+                    c = bg.fore_color.rgb
+                    bg_color = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+            except Exception:
+                pass
+
+            boxes = []
+            for shape in slide.shapes:
+                try:
+                    x, y, w, h = emu_to_canvas(shape.left, shape.top, shape.width, shape.height)
+                    box_id = str(shape.shape_id)
+
+                    # Image shape
+                    if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
+                        try:
+                            img_bytes = shape.image.blob
+                            mime = shape.image.content_type or "image/png"
+                            b64 = base64.b64encode(img_bytes).decode()
+                            boxes.append({
+                                "id": box_id, "x": x, "y": y, "w": w, "h": h,
+                                "text": f"data:{mime};base64,{b64}",
+                                "styles": [], "boxStyle": {"bgColor": "transparent"},
+                            })
+                        except Exception:
+                            pass
+                        continue
+
+                    # Text box or auto-shape with text
+                    if shape.has_text_frame:
+                        full_text = ""
+                        styles = []
+                        char_offset = 0
+                        box_style = {"bgColor": "transparent", "fontSize": 16, "fontWeight": 400, "color": "#000000"}
+
+                        for para in shape.text_frame.paragraphs:
+                            for run in para.runs:
+                                rt = run.text
+                                if not rt:
+                                    continue
+                                style_entry = {"start": char_offset, "end": char_offset + len(rt) - 1}
+                                rf = run.font
+                                if rf.bold:       style_entry["fontWeight"] = "bold"
+                                if rf.italic:     style_entry["fontStyle"] = "italic"
+                                if rf.underline:  style_entry["textDecoration"] = "underline"
+                                if rf.size:       style_entry["fontSize"] = round(rf.size / 12700)  # EMU→pt
+                                try:
+                                    c = rf.color.rgb; style_entry["color"] = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+                                except Exception:
+                                    pass
+                                styles.append(style_entry)
+                                full_text += rt
+                                char_offset += len(rt)
+                            if para != shape.text_frame.paragraphs[-1]:
+                                full_text += "\n"; char_offset += 1
+
+                        # Box-level font from first run
+                        try:
+                            first_run = shape.text_frame.paragraphs[0].runs[0] if shape.text_frame.paragraphs[0].runs else None
+                            if first_run:
+                                if first_run.font.size:       box_style["fontSize"] = round(first_run.font.size / 12700)
+                                if first_run.font.bold:       box_style["fontWeight"] = "bold"
+                                try:
+                                    c = first_run.font.color.rgb; box_style["color"] = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+
+                        # Shape background fill
+                        try:
+                            fill = shape.fill
+                            if fill.type is not None:
+                                c = fill.fore_color.rgb; box_style["bgColor"] = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+                        except Exception:
+                            pass
+
+                        boxes.append({
+                            "id": box_id, "x": x, "y": y, "w": w, "h": h,
+                            "text": full_text, "styles": styles, "boxStyle": box_style,
+                        })
+                except Exception:
+                    pass
+
+            slides_out.append({"bgColor": bg_color, "boxes": boxes})
+
+        result = {"slides": slides_out}
+        return web.Response(text=json.dumps(result, default=str), content_type="application/json", headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_ppt_save(request: web.Request) -> web.Response:
+    """PUT /api/ppt/save { path, slides } — save slide JSON → PPTX."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    path_str = str(body.get("path", "")).strip()
+    slides_data = body.get("slides", [])
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    try:
+        from pptx import Presentation
+        from pptx.util import Emu, Pt
+        from pptx.dml.color import RGBColor
+        import base64, io, re
+
+        CW, CH = 896, 504
+
+        # Try to preserve original slide dimensions if file exists
+        p = Path(path_str)
+        if p.exists():
+            prs = Presentation(str(p))
+        else:
+            prs = Presentation()
+        sw = prs.slide_width
+        sh = prs.slide_height
+
+        def canvas_to_emu(cx, cy, cw, ch):
+            return (
+                int(cx / CW * sw), int(cy / CH * sh),
+                int(cw / CW * sw), int(ch / CH * sh),
+            )
+
+        def hex_to_rgb(hex_str):
+            hex_str = (hex_str or "").lstrip("#")
+            if len(hex_str) == 6:
+                return RGBColor(int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16))
+            return None
+
+        # Remove all existing slides
+        xml_slides = prs.slides._sldIdLst
+        for _ in range(len(prs.slides)):
+            rId = prs.slides._sldIdLst[0].get("r:id")
+            prs.part.drop_rel(rId)
+            del prs.slides._sldIdLst[0]
+
+        slide_layout = prs.slide_layouts[6]  # blank layout
+
+        for slide_data in slides_data:
+            slide = prs.slides.add_slide(slide_layout)
+
+            # Background
+            bg_color_str = slide_data.get("bgColor", "#ffffff")
+            try:
+                rgb = hex_to_rgb(bg_color_str)
+                if rgb:
+                    bg = slide.background.fill
+                    bg.solid(); bg.fore_color.rgb = rgb
+            except Exception:
+                pass
+
+            for box in slide_data.get("boxes", []):
+                x_e, y_e, w_e, h_e = canvas_to_emu(box["x"], box["y"], box["w"], box["h"])
+                text_val = box.get("text", "")
+
+                # Image box
+                if isinstance(text_val, str) and text_val.startswith("data:image"):
+                    try:
+                        header, data = text_val.split(",", 1)
+                        img_bytes = base64.b64decode(data)
+                        ext = re.search(r"data:image/(\w+)", header)
+                        suffix = f".{ext.group(1)}" if ext else ".png"
+                        buf = io.BytesIO(img_bytes)
+                        slide.shapes.add_picture(buf, x_e, y_e, w_e, h_e)
+                    except Exception:
+                        pass
+                    continue
+
+                # Shape
+                if isinstance(text_val, str) and text_val.startswith("shape:"):
+                    try:
+                        import json as _json
+                        sc = _json.loads(text_val[6:])
+                        from pptx.enum.shapes import MSO_SHAPE_TYPE
+                        from pptx.util import Emu as _Emu
+                        shape_type = 9 if sc.get("type") == "circle" else 1  # oval=9, rectangle=1
+                        sp = slide.shapes.add_shape(shape_type, x_e, y_e, w_e, h_e)
+                        fill = sp.fill; fill.solid()
+                        rgb = hex_to_rgb(sc.get("bgColor", "#1473df"))
+                        if rgb: fill.fore_color.rgb = rgb
+                        line = sp.line
+                        br = hex_to_rgb(sc.get("borderColor", "#0d5bb5"))
+                        if br: line.color.rgb = br
+                        line.width = Pt(sc.get("borderWidth", 2))
+                    except Exception:
+                        pass
+                    continue
+
+                # Text box
+                try:
+                    txBox = slide.shapes.add_textbox(x_e, y_e, w_e, h_e)
+                    tf = txBox.text_frame
+                    tf.word_wrap = True
+                    box_style = box.get("boxStyle", {})
+                    styles = box.get("styles", [])
+
+                    # Fill background
+                    bg_hex = box_style.get("bgColor")
+                    if bg_hex and bg_hex != "transparent":
+                        rgb = hex_to_rgb(bg_hex)
+                        if rgb:
+                            txBox.fill.solid(); txBox.fill.fore_color.rgb = rgb
+
+                    # Write text with run-level styles
+                    lines = text_val.split("\n")
+                    for li, line in enumerate(lines):
+                        para = tf.paragraphs[0] if li == 0 else tf.add_paragraph()
+                        ci = sum(len(l) + 1 for l in lines[:li])  # char index of line start
+                        if not line:
+                            continue
+                        # Find runs based on style changes
+                        run = para.add_run()
+                        run.text = line
+                        # Apply box-level style
+                        fs = box_style.get("fontSize", 16)
+                        run.font.size = Pt(fs)
+                        if box_style.get("fontWeight") == "bold":   run.font.bold = True
+                        if box_style.get("fontStyle") == "italic":  run.font.italic = True
+                        color_hex = box_style.get("color", "#000000")
+                        rgb = hex_to_rgb(color_hex)
+                        if rgb: run.font.color.rgb = rgb
+                        # Override with char-level styles for this line
+                        for s in styles:
+                            if s.get("end", -1) >= ci and s.get("start", 999) < ci + len(line):
+                                if s.get("fontWeight") == "bold":   run.font.bold = True
+                                if s.get("fontStyle") == "italic":  run.font.italic = True
+                                if s.get("fontSize"): run.font.size = Pt(s["fontSize"])
+                                if s.get("color"):
+                                    rgb2 = hex_to_rgb(s["color"])
+                                    if rgb2: run.font.color.rgb = rgb2
+                except Exception:
+                    pass
+
+        p.parent.mkdir(parents=True, exist_ok=True)
+        prs.save(str(p))
+        return web.json_response({"ok": True, "path": str(p)}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
 async def handle_write_file(request: web.Request) -> web.Response:
     """PUT /api/file { path, content } — write text content to a file."""
     if request.method == "OPTIONS":
@@ -2090,6 +3050,75 @@ async def handle_write_file(request: web.Request) -> web.Response:
         return web.json_response({"ok": True, "path": str(p)}, headers=CORS_HEADERS)
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_file_rename(request: web.Request) -> web.Response:
+    """POST /api/file/rename { path, newName } — rename a file or directory."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    path_str = str(body.get("path", "")).strip()
+    new_name = str(body.get("newName", "")).strip()
+    if not path_str or not new_name:
+        return web.json_response({"error": "path and newName required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists():
+        return web.json_response({"error": "path not found"}, status=404, headers=CORS_HEADERS)
+    dest = p.parent / new_name
+    if dest.exists():
+        return web.json_response({"error": "destination already exists"}, status=409, headers=CORS_HEADERS)
+    try:
+        p.rename(dest)
+        return web.json_response({"ok": True, "path": str(dest)}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_file_duplicate(request: web.Request) -> web.Response:
+    """POST /api/file/duplicate { path } — duplicate a file with a unique name."""
+    import shutil
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    path_str = str(body.get("path", "")).strip()
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists():
+        return web.json_response({"error": "path not found"}, status=404, headers=CORS_HEADERS)
+    if p.is_dir():
+        return web.json_response({"error": "directory duplication not supported"}, status=400, headers=CORS_HEADERS)
+    stem, suffix = p.stem, p.suffix
+    # Find a unique name: "file copy.ext", "file copy 2.ext", …
+    dest = p.parent / f"{stem} copy{suffix}"
+    n = 2
+    while dest.exists():
+        dest = p.parent / f"{stem} copy {n}{suffix}"
+        n += 1
+    try:
+        shutil.copy2(str(p), str(dest))
+        return web.json_response({"ok": True, "path": str(dest)}, headers=CORS_HEADERS)
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
+
+
+async def handle_file_download(request: web.Request) -> web.Response:
+    """GET /api/file/download?path=<abs> — serve a file as a binary download."""
+    path_str = request.rel_url.query.get("path", "").strip()
+    if not path_str:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    p = Path(path_str)
+    if not p.exists() or p.is_dir():
+        return web.json_response({"error": "file not found"}, status=404, headers=CORS_HEADERS)
+    import mimetypes
+    mime, _ = mimetypes.guess_type(str(p))
+    mime = mime or "application/octet-stream"
+    headers = dict(CORS_HEADERS)
+    headers["Content-Disposition"] = f'attachment; filename="{p.name}"'
+    headers["Content-Type"] = mime
+    return web.Response(body=p.read_bytes(), headers=headers)
 
 
 async def handle_batch_run(request: web.Request) -> web.Response:
@@ -2201,9 +3230,22 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
     app.router.add_route("OPTIONS", "/files",         handle_options)
     app.router.add_route("OPTIONS", "/files/mkdir",   handle_options)
     # File read / write (for worker + coder editor panel)
-    app.router.add_get( "/api/file",               handle_read_file)
-    app.router.add_put( "/api/file",               handle_write_file)
-    app.router.add_route("OPTIONS", "/api/file",    handle_options)
+    app.router.add_get(  "/api/file",               handle_read_file)
+    app.router.add_put(  "/api/file",               handle_write_file)
+    app.router.add_post( "/api/file/rename",        handle_file_rename)
+    app.router.add_post( "/api/file/duplicate",     handle_file_duplicate)
+    app.router.add_get(  "/api/file/download",      handle_file_download)
+    app.router.add_post("/api/doc/parse",            handle_parse_doc)
+    app.router.add_put( "/api/doc/save",             handle_save_doc)
+    app.router.add_route("OPTIONS", "/api/file",     handle_options)
+    app.router.add_route("OPTIONS", "/api/doc/parse",handle_options)
+    app.router.add_route("OPTIONS", "/api/doc/save", handle_options)
+    app.router.add_get( "/api/excel/load",           handle_excel_load)
+    app.router.add_put( "/api/excel/save",           handle_excel_save)
+    app.router.add_get( "/api/ppt/load",             handle_ppt_load)
+    app.router.add_put( "/api/ppt/save",             handle_ppt_save)
+    app.router.add_route("OPTIONS", "/api/excel/load", handle_options)
+    app.router.add_route("OPTIONS", "/api/excel/save", handle_options)
     # Canvas
     app.router.add_get( "/canvas",                 handle_get_canvas)
     app.router.add_post("/canvas",                 handle_post_canvas)
@@ -2442,7 +3484,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=effective_cwd,
-            env={**os.environ},
+            env={**os.environ, "BZ_PYTHON": sys.executable},
             limit=16 * 1024 * 1024,  # 16 MB — large sessions can emit long lines
         )
     except FileNotFoundError:

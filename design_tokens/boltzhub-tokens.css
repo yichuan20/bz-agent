@@ -23,6 +23,11 @@
 
   --border-primary:   #E2DDD4; /* Standard borders (white surfaces need visible edges)     */
   --border-secondary: #EDE8E0; /* Subtle borders                                           */
+  /* bz-office canvas compat aliases */
+  --border-default:   #D0CAC0;
+  --bg-elevated:      #FFFFFF;
+  --bg-hover:         #E0DAD1;
+  --accent-blue-light: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 
   /* ─── ACCENT COLORS: LIGHT MODE ─── */
   --accent-blue:    #1473DF;
@@ -103,6 +108,11 @@
 
   --border-primary:   #262626;
   --border-secondary: #1F1F1F;
+  /* bz-office canvas compat aliases */
+  --border-default:   #2E2E2E;
+  --bg-elevated:      #141414;
+  --bg-hover:         #222222;
+  --accent-blue-light: color-mix(in srgb, var(--accent-blue) 15%, transparent);
 
   /* Accent — brighter in dark for legibility (bz-token dark palette) */
   --accent-blue:    #2E88FF;
