@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { isLoggedIn } from '#/auth-store';
+import { BoltzbitLogo } from '#/components/BoltzbitLogo';
 import { CubeGridBackground } from '#/components/CubeGridBackground';
 
 export const Route = createFileRoute('/marketing')({
@@ -492,21 +493,7 @@ function MarketingPage() {
       {/* Nav */}
       <nav className={`mkt-nav${scrolled ? ' mkt-nav--scrolled' : ''}`}>
         <div className="mkt-nav-brand">
-          <svg width="20" height="20" viewBox="0 0 790 790" fill="none" aria-hidden>
-            {[
-              'M283 0H184C171 0 161 10 161 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23V23C306 10 296 0 283 0Z',
-              'M283 161H184c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M445 161H346c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M606 161H507c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M122 323H23C10 323 0 333 0 346v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M283 323H184c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M606 323H507c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M767 323H668c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M283 484H184c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M445 484H346c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-              'M445 645H346c-13 0-23 10-23 23v99c0 13 10 23 23 23h99c13 0 23-10 23-23v-99c0-13-10-23-23-23Z',
-            ].map((d, i) => <path key={i} d={d} fill="var(--accent-blue)" />)}
-          </svg>
+          <BoltzbitLogo size={20} />
           <span className="mkt-nav-name">BoltzAgent</span>
         </div>
         <div className="mkt-nav-links">

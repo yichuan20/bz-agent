@@ -2913,7 +2913,11 @@ body.canvas-dragging * { cursor: grabbing !important; }
   white-space: nowrap;
   padding-left: 6px;
   user-select: text;
+  cursor: pointer;
+  transition: color 0.12s;
 }
+
+.canvas-widget-id:hover { color: var(--accent-blue); }
 
 /* Code button in widget header */
 .canvas-widget-code-btn {
@@ -5554,10 +5558,20 @@ pre code {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
-.agent-input-box--locked {
+/* Locked during compacting — control row pointer-events kept so stop button stays clickable */
+.agent-input-box--locked .agent-input-textarea,
+.agent-input-box--locked .agent-attach-chips {
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Busy during streaming — textarea locked, controls (including stop btn) remain interactive */
+.agent-input-box--busy .agent-input-textarea {
   opacity: 0.5;
   pointer-events: none;
   user-select: none;
+  cursor: not-allowed;
 }
 
 /* ─── Compact summary card ─── */
@@ -7717,4 +7731,89 @@ pre code {
   background: var(--accent-blue);
   border-radius: 2px;
   transition: width 0.5s ease;
+}
+
+/* ── Compacting progress bar ── */
+.compact-progress-track {
+  height: 3px;
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.compact-progress-bar {
+  height: 100%;
+  width: 40%;
+  background: var(--accent-blue);
+  border-radius: 2px;
+  animation: compact-slide 1.6s ease-in-out infinite;
+}
+@keyframes compact-slide {
+  0%   { transform: translateX(-100%); width: 40%; }
+  50%  { width: 60%; }
+  100% { transform: translateX(300%); width: 40%; }
+}
+
+/* ── Compact done toast ── */
+.compact-done-toast {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--accent-green) 10%, var(--bg-secondary));
+  border-top: 1px solid color-mix(in srgb, var(--accent-green) 25%, var(--border-primary));
+  color: var(--accent-green);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  animation: animate-slide-in 0.2s ease;
+}
+.compact-done-toast span { flex: 1; color: var(--text-secondary); font-weight: 400; }
+
+/* ── Auth expired banner ── */
+.auth-expired-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--accent-orange) 10%, var(--bg-secondary));
+  border-top: 2px solid color-mix(in srgb, var(--accent-orange) 40%, var(--border-primary));
+  animation: animate-slide-in 0.2s ease;
+  color: var(--accent-orange);
+}
+.auth-expired-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.auth-expired-btn {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-orange);
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.auth-expired-btn:hover { opacity: 0.85; }
+.auth-expired-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.auth-expired-dismiss:hover { color: var(--text-primary); }
+
+/* Stop button pulse while streaming */
+.agent-submit-btn--stop {
+  animation: stop-pulse 1.8s ease-in-out infinite;
+}
+@keyframes stop-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--mode-color-rgb, 20,115,223), 0.4); }
+  50%       { box-shadow: 0 0 0 5px rgba(var(--mode-color-rgb, 20,115,223), 0); }
 }

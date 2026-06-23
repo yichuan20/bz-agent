@@ -1,0 +1,443 @@
+openapi: 3.1.0
+info:
+  title: App Templates API
+  description: |
+    Manage and consume app templates on BoltzHub.
+
+    A **template** is a pre-built app scaffold (code archive + metadata) used to bootstrap new apps.
+
+    ## Workflows
+
+    ### Admin — manage templates (requires admin)
+    1. `POST /templates` — register a template (name, description, tags). Returns the template's `id`.
+    2. `POST /apps/{appId}/code` — upload a code archive (zip/tar) for that template.
+    3. `POST /templates/{appId}/default` — mark a template as the default fallback.
+
+    ### Direct Download — one call, get code
+    1. `GET /templates/download?query=<description>` — returns the best-matching template's code archive as a binary stream. Falls back to the default template if nothing matches.
+
+    ### Search & Select — browse then download
+    1. `GET /templates/search?query=<description>` — returns a ranked list of matching templates (up to 3 + the default).
+    2. Pick a template `id` from the results.
+    3. `GET /templates/{appId}/download` — download that template's code archive.
+
+    ## Auth
+    All endpoints require `Authorization: Bearer <jwt>`.
+  version: 1.0.0
+  contact:
+    name: Boltzbit AppFlow Team
+
+servers:
+  - url: /bz-appstore-api
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Admin
+    description: Register templates, upload code archives, set the default. Requires admin.
+  - name: Direct Download
+    description: One-step — search and download the best match in a single call.
+  - name: Search & Select
+    description: Two-step — get a ranked list, then download a chosen template by ID.
+
+paths:
+  # ── Admin ──────────────────────────────────────────────────────────
+
+  /v1/creator/apps/templates:
+    post:
+      tags: [Admin]
+      summary: Register a new template
+      description: |
+        Creates a template record. Returns a CreatorAppDetail whose `id` you
+        pass to the upload-code and set-default endpoints.
+        Only `name` is required; `description` and `tags` improve search ranking.
+      operationId: createAppTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAppTemplateRequest"
+      responses:
+        "201":
+          description: Template created. Use the returned `id` to upload code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorAppDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/creator/apps/{appId}/code:
+    post:
+      tags: [Admin]
+      summary: Upload template code archive
+      description: |
+        Attaches a code archive to an existing template. Accepts zip, tar, or
+        tar.gz via multipart upload. Replaces any previously uploaded code.
+        Call this after creating the template with POST /templates.
+      operationId: uploadAppCode
+      parameters:
+        - $ref: "#/components/parameters/appId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archiveFile]
+              properties:
+                archiveFile:
+                  type: string
+                  format: binary
+                  description: Code archive (zip, tar, or tar.gz)
+      responses:
+        "200":
+          description: Code uploaded. The template is now downloadable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorAppDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/creator/apps/templates/{appId}/default:
+    post:
+      tags: [Admin]
+      summary: Set a template as the default
+      description: |
+        Marks this template as the default fallback. Only one template can be
+        default at a time; calling this replaces the previous default.
+        The default template is returned by search endpoints and used as a
+        fallback when no query matches.
+      operationId: setDefaultAppTemplate
+      parameters:
+        - $ref: "#/components/parameters/appId"
+      responses:
+        "200":
+          description: Template is now the default.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorAppDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Direct Download ────────────────────────────────────────────────
+
+  /v1/creator/apps/templates/download:
+    get:
+      tags: [Direct Download]
+      summary: Download best-matching template
+      description: |
+        Pass a natural-language description of the app you want to build.
+        Returns the code archive of the best-matching template as a binary
+        stream (check Content-Disposition for the filename).
+        Falls back to the default template if no match is found.
+        Returns 404 only if no templates exist at all.
+      operationId: downloadAppTemplate
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Natural-language description of the desired app (e.g. "customer support chatbot")
+      responses:
+        "200":
+          description: Code archive stream. Save as the filename in Content-Disposition.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Search & Select ────────────────────────────────────────────────
+
+  /v1/creator/apps/templates/search:
+    get:
+      tags: [Search & Select]
+      summary: Search templates
+      description: |
+        Returns up to 3 templates ranked by relevance, plus the default
+        template (if one exists). Use the returned `id` field to download a
+        specific template via GET /templates/{appId}/download.
+      operationId: searchAppTemplates
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Natural-language description of the desired app (e.g. "data dashboard with charts")
+      responses:
+        "200":
+          description: Ranked list of matching templates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppTemplateSearchResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/creator/apps/templates/{appId}/download:
+    get:
+      tags: [Search & Select]
+      summary: Download template by ID
+      description: |
+        Downloads the code archive for a specific template. Use the `id` from
+        a search result. Returns a binary stream (check Content-Disposition
+        for the filename).
+      operationId: downloadAppTemplateByID
+      parameters:
+        - $ref: "#/components/parameters/appId"
+      responses:
+        "200":
+          description: Code archive stream. Save as the filename in Content-Disposition.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    appId:
+      name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Template ID (returned by POST /templates or GET /templates/search)
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+    Forbidden:
+      description: Admin access required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Template not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      description: Standard error envelope.
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable explanation
+      required: [error, message]
+
+    ValidationErrorResponse:
+      type: object
+      description: Validation error with per-field details.
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable explanation
+        details:
+          type: object
+          description: Field name → validation message
+          additionalProperties:
+            type: string
+
+    CategorySummary:
+      type: object
+      description: Lightweight category reference embedded in app responses.
+      properties:
+        id:
+          type: string
+          examples: [cat-design]
+        name:
+          type: string
+          examples: [Design & Creative]
+        slug:
+          type: string
+          examples: [design-creative]
+
+    CreateAppTemplateRequest:
+      type: object
+      description: Body for registering a new template. Only `name` is required.
+      properties:
+        name:
+          type: string
+          description: Template name (used in search)
+        description:
+          type: string
+          description: What this template builds (used in search ranking)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Freeform tags (e.g. ["chatbot", "support", "python"])
+      required: [name]
+
+    AppTemplateSummary:
+      type: object
+      description: Lightweight template info returned by the search endpoint.
+      properties:
+        id:
+          type: string
+          description: Template ID — pass to GET /templates/{appId}/download
+        name:
+          type: string
+          description: Template name
+        description:
+          type: string
+          description: What this template builds
+        tags:
+          type: array
+          items:
+            type: string
+          description: Freeform tags
+        isDefault:
+          type: boolean
+          description: true if this is the platform default template
+      required: [id, name, isDefault]
+
+    AppTemplateSearchResponse:
+      type: array
+      description: Ranked list of matching templates (up to 3 + the default).
+      items:
+        $ref: "#/components/schemas/AppTemplateSummary"
+
+    CreatorAppDetail:
+      type: object
+      description: |
+        Full app/template detail returned by admin write operations. Most
+        fields are informational; the key field for subsequent API calls is `id`.
+      properties:
+        id:
+          type: string
+          description: App/template ID — use in subsequent API calls
+        name:
+          type: string
+        slug:
+          type: string
+          description: URL-friendly identifier
+        description:
+          type: string
+        thumbnailUrl:
+          type: string
+        screenshotUrl:
+          type: [string, "null"]
+        category:
+          $ref: "#/components/schemas/CategorySummary"
+        visibility:
+          type: string
+          enum: [public, private, unlisted]
+        status:
+          type: string
+        priceMonthly:
+          type: number
+          description: Monthly price in GBP
+        ratingAverage:
+          type: number
+          format: double
+        ratingCount:
+          type: integer
+          format: int32
+        userCount:
+          type: integer
+          format: int32
+        revenue:
+          type: object
+          properties:
+            thisMonth:
+              type: number
+            total:
+              type: number
+        screenshots:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        features:
+          type: array
+          items:
+            type: string
+        analytics:
+          type: object
+          properties:
+            dailyActiveUsers:
+              type: integer
+            weeklyActiveUsers:
+              type: integer
+            avgSessionDuration:
+              type: integer
+              description: Seconds
+            retention7Day:
+              type: number
+              description: 0–1
+        createdAt:
+          type: string
+          description: ISO 8601
+        publishedAt:
+          type: string
+          description: ISO 8601
+        url:
+          type: string
+        configId:
+          type: string
+        version:
+          type: string
+        codePath:
+          type: string
+          description: Storage path of the uploaded archive
+        currentDeploymentId:
+          type: string
+          format: uuid
+        deploymentStatus:
+          type: string
+          enum: [pending, deploying, deployed, failed, publishing, published, unpublishing]
+        isTemplate:
+          type: boolean
+          description: Always true for templates
+        dynasId:
+          type: string

@@ -63,6 +63,39 @@ chmod +x scripts/deploy.sh
 
 ---
 
+## File system permissions (important)
+
+The server process must have **write access** to `BZCODE_CWD` — this is where users create folders, save documents, and run agent sessions. Creating new folders will silently fail with a 403 if the server user can't write there.
+
+**Recommended setup:**
+
+```bash
+# Create a dedicated service user with a home directory
+useradd -m -s /bin/bash boltzagent
+
+# Create a writable workspace
+mkdir -p /home/boltzagent/workspace
+chown boltzagent:boltzagent /home/boltzagent/workspace
+
+# /opt/boltzagent holds the app files (can be root-owned, server only reads these)
+# The .venv and server_data must be readable by the service user
+chown -R boltzagent:boltzagent /opt/boltzagent/.venv
+chown -R boltzagent:boltzagent /opt/boltzagent/server_data
+
+# Make bzcode executable
+chmod +x /opt/boltzagent/bzcode
+```
+
+Then set in `boltzagent.service`:
+```ini
+User=boltzagent
+Environment=BZCODE_CWD=/home/boltzagent/workspace
+```
+
+> **Do NOT set `BZCODE_CWD=/opt/boltzagent`** — that directory is owned by root and the service user cannot create folders inside it.
+
+---
+
 ## Python dependencies
 
 All installed automatically from `requirements.txt`:

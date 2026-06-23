@@ -1,4 +1,5 @@
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
+import { BoltzbitLogo } from '#/components/BoltzbitLogo';
 import { IframeWidget } from '#/components/IframeWidget';
 import { WIDGET_REGISTRY, REGISTRY_MAP, type WidgetKind } from '#/lib/widgetRegistry';
 import {
@@ -128,36 +129,6 @@ const MODE_META: Record<SessionMode, { label: string; description: string; color
   yolo:    { label: 'YOLO',   description: 'Auto-allow all tools', color: '#e74c3c' },
 };
 
-// ── BoltzBit logo (blue theme, 10 paths, matches VSCode plugin) ──────────────
-
-function BoltzbitLogo({ size = 14, className }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 790 790"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-      className={className}
-      style={{ color: 'var(--accent-blue)' }}
-    >
-      <path d="M283.442 0H184.313C171.645 0 161.375 10.2697 161.375 22.9381V122.067C161.375 134.735 171.645 145.005 184.313 145.005H283.442C296.11 145.005 306.38 134.735 306.38 122.067V22.9381C306.38 10.2697 296.11 0 283.442 0Z" fill="currentColor"/>
-      <path d="M283.442 161.375H184.313C171.645 161.375 161.375 171.645 161.375 184.313V283.442C161.375 296.11 171.645 306.38 184.313 306.38H283.442C296.11 306.38 306.38 296.11 306.38 283.442V184.313C306.38 171.645 296.11 161.375 283.442 161.375Z" fill="currentColor"/>
-      <path d="M444.918 161.375H345.789C333.121 161.375 322.851 171.645 322.851 184.313V283.442C322.851 296.11 333.121 306.38 345.789 306.38H444.918C457.586 306.38 467.856 296.11 467.856 283.442V184.313C467.856 171.645 457.586 161.375 444.918 161.375Z" fill="currentColor"/>
-      <path d="M606.293 161.375H507.164C494.496 161.375 484.226 171.645 484.226 184.313V283.442C484.226 296.11 494.496 306.38 507.164 306.38H606.293C618.961 306.38 629.231 296.11 629.231 283.442V184.313C629.231 171.645 618.961 161.375 606.293 161.375Z" fill="currentColor"/>
-      <path d="M122.067 322.75H22.9381C10.2697 322.75 0 333.02 0 345.688V444.817C0 457.485 10.2697 467.755 22.9381 467.755H122.067C134.735 467.755 145.005 457.485 145.005 444.817V345.688C145.005 333.02 134.735 322.75 122.067 322.75Z" fill="currentColor"/>
-      <path d="M283.442 322.75H184.313C171.645 322.75 161.375 333.02 161.375 345.688V444.817C161.375 457.485 171.645 467.755 184.313 467.755H283.442C296.11 467.755 306.38 457.485 306.38 444.817V345.688C306.38 333.02 296.11 322.75 283.442 322.75Z" fill="currentColor"/>
-      <path d="M606.293 322.75H507.164C494.496 322.75 484.226 333.02 484.226 345.688V444.817C484.226 457.485 494.496 467.755 507.164 467.755H606.293C618.961 467.755 629.231 457.485 629.231 444.817V345.688C629.231 333.02 618.961 322.75 606.293 322.75Z" fill="currentColor"/>
-      <path d="M767.062 322.75H667.933C655.265 322.75 644.995 333.02 644.995 345.688V444.817C644.995 457.485 655.265 467.755 667.933 467.755H767.062C779.73 467.755 790 457.485 790 444.817V345.688C790 333.02 779.73 322.75 767.062 322.75Z" fill="currentColor"/>
-      <path d="M283.442 484.226H184.313C171.645 484.226 161.375 494.496 161.375 507.164V606.293C161.375 618.962 171.645 629.231 184.313 629.231H283.442C296.11 629.231 306.38 618.962 306.38 606.293V507.164C306.38 494.496 296.11 484.226 283.442 484.226Z" fill="currentColor"/>
-      <path d="M444.918 484.226H345.789C333.121 484.226 322.851 494.496 322.851 507.164V606.293C322.851 618.962 333.121 629.231 345.789 629.231H444.918C457.586 629.231 467.856 618.962 467.856 606.293V507.164C467.856 494.496 457.586 484.226 444.918 484.226Z" fill="currentColor"/>
-      <path d="M606.293 484.226H507.164C494.496 484.226 484.226 494.496 484.226 507.164V606.293C484.226 618.962 494.496 629.231 507.164 629.231H606.293C618.961 629.231 629.231 618.962 629.231 606.293V507.164C629.231 494.496 618.961 484.226 606.293 484.226Z" fill="currentColor"/>
-      <path d="M444.918 644.995H345.789C333.121 644.995 322.851 655.265 322.851 667.933V767.062C322.851 779.73 333.121 790 345.789 790H444.918C457.586 790 467.856 779.73 467.856 767.062V667.933C467.856 655.265 457.586 644.995 444.918 644.995Z" fill="currentColor"/>
-    </svg>
-  );
-}
-
 // ── SVG icons (matching bzcode VSCode plugin) ─────────────────────────────────
 
 function BlockDot({ size = 10 }: { size?: number }) {
@@ -275,18 +246,8 @@ function LiveLearningNotification({
   onDismiss: () => void;
   onViewPage: () => void;
 }) {
-  // Start collapsed; auto-collapse 2s after opening so it doesn't block the UI
-  const [expanded, setExpanded] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setExpanded(false), 2000);
-    return () => clearTimeout(t);
-  }, []);
-  // Re-expand briefly when stage changes so user notices the update
-  useEffect(() => {
-    setExpanded(true);
-    const t = setTimeout(() => setExpanded(false), 2000);
-    return () => clearTimeout(t);
-  }, [stage]);
+  // Always start minimised — user clicks the strip to expand manually
+  const [expanded, setExpanded] = useState(false);
 
   const barWidth = stage === 'collecting' ? '35%' : stage === 'training' ? '75%' : '100%';
   const statusText =
@@ -1028,6 +989,16 @@ function extractDocPaths(text: string): string[] {
   return Array.from(found);
 }
 
+// Detect canvasIds in agent text — e.g. "cw-855f9ac8088a" or "(cw-855f9ac8088a)"
+const WIDGET_ID_RE = /\b(cw-[0-9a-f]{10,14})\b/gi;
+function extractWidgetIds(text: string): string[] {
+  const found = new Set<string>();
+  let m: RegExpExecArray | null;
+  WIDGET_ID_RE.lastIndex = 0;
+  while ((m = WIDGET_ID_RE.exec(text)) !== null) found.add(m[1].toLowerCase());
+  return Array.from(found);
+}
+
 function CopyPathButton({ path, label }: { path: string; label: string }) {
   const [copied, setCopied] = useState(false);
   function handleCopy() {
@@ -1288,7 +1259,7 @@ type WidgetData = { id: string; kind: WidgetKind; title: string; x: number; y: n
 
 // ── Overlap resolver ─────────────────────────────────────────────────────────
 
-const GAP = 14;       // gap between widgets
+const GAP = 6;        // gap between widgets (small — less jumping during auto-adjust)
 const SNAP = 16;      // drag/resize grid snap
 const CANVAS_PAD = 24; // padding from canvas edge
 
@@ -1296,15 +1267,23 @@ const CANVAS_PAD = 24; // padding from canvas edge
 function snapVal(v: number): number { return Math.round(v / SNAP) * SNAP; }
 
 // ── Gravity ───────────────────────────────────────────────────────────────────
-// After any change, pull all widgets upward as far as they can go without
-// overlapping — like react-grid-layout's vertical compaction.
-function applyGravity(widgets: WidgetData[]): WidgetData[] {
+// Pull all widgets upward to fill gaps, like vertical compaction.
+// fixedId: this widget keeps its position; others flow around it.
+function applyGravity(widgets: WidgetData[], fixedId?: string): WidgetData[] {
   if (widgets.length === 0) return widgets;
+
+  const fixed = fixedId ? widgets.find(w => w.id === fixedId) : null;
+
   // Process top-to-bottom so widgets above settle first
   const sorted = [...widgets].map(w => ({ ...w })).sort((a, b) => a.y - b.y || a.x - b.x);
   const placed: WidgetData[] = [];
 
   for (const w of sorted) {
+    if (w.id === fixedId && fixed) {
+      // Fixed widget stays exactly where it is
+      placed.push({ ...w });
+      continue;
+    }
     let targetY = CANVAS_PAD;
     // Find the lowest y we can place w without overlapping anything already placed
     for (const p of placed) {
@@ -1412,6 +1391,7 @@ const MIN_H = 80;
 
 function CanvasWidget({
   data,
+  sessionId,
   onDragStart,
   onDrop,
   onResize,
@@ -1419,6 +1399,7 @@ function CanvasWidget({
   onShowCode,
 }: {
   data: WidgetData;
+  sessionId?: string | null;
   onDragStart: (id: string) => void;
   onDrop: (id: string, x: number, y: number) => void;
   onResize: (id: string, x: number, y: number, w: number, h: number) => void;
@@ -1517,7 +1498,7 @@ function CanvasWidget({
   const code = data.code ?? (isCustomKind ? null : REGISTRY_MAP[data.kind]?.code ?? '');
   const content = code == null
     ? <div className="canvas-widget-loading" />
-    : <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} refreshKey={data.id} />;
+    : <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} sessionId={sessionId} refreshKey={data.id} />;
 
   return (
     <div ref={elRef} className="canvas-widget" style={{ left: data.x, top: data.y, width: data.w, height: data.h }}>
@@ -1529,7 +1510,18 @@ function CanvasWidget({
 
       <div className="canvas-widget-header" onMouseDown={handleDragMouseDown}>
         <span className="canvas-widget-title">{data.title}</span>
-        <span className="canvas-widget-id">{data.id}</span>
+        <span
+          className="canvas-widget-id"
+          title="Click to copy widget ID"
+          onClick={e => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(data.id).catch(() => null);
+            const el = e.currentTarget as HTMLElement;
+            const prev = el.textContent;
+            el.textContent = 'copied!';
+            setTimeout(() => { el.textContent = prev; }, 1200);
+          }}
+        >{data.id}</span>
 
         <button type="button" className="canvas-widget-code-btn"
           onClick={e => { e.stopPropagation(); onShowCode(data.title, code); }}
@@ -1579,36 +1571,47 @@ type CanvasEntry = {
 };
 
 const canvasApi = {
-  load: (cwd: string) =>
-    fetch(`${AGENT_HTTP_BASE}/canvas?cwd=${encodeURIComponent(cwd)}`)
-      .then(r => r.json()) as Promise<{ widgets: CanvasEntry[] }>,
+  load: (cwd: string, sessionId?: string | null) => {
+    const params = new URLSearchParams({ cwd });
+    if (sessionId) params.set('sessionId', sessionId);
+    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`)
+      .then(r => r.json()) as Promise<{ widgets: CanvasEntry[] }>;
+  },
 
-  save: (cwd: string, widgets: CanvasEntry[]) =>
-    fetch(`${AGENT_HTTP_BASE}/canvas?cwd=${encodeURIComponent(cwd)}`, {
+  save: (cwd: string, widgets: CanvasEntry[], sessionId?: string | null) => {
+    const params = new URLSearchParams({ cwd });
+    if (sessionId) params.set('sessionId', sessionId);
+    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: 1, widgets }),
-    }).then(r => r.json()),
+    }).then(r => r.json());
+  },
 };
 
-// Per-instance custom code — stored in server_data/custom_widgets/{canvasId}.js
-// Separate from the toolbar widget templates so canvas edits don't pollute the library.
+// Per-instance custom code — stored in {sessionDir}/custom_widgets/{canvasId}.js
 const customWidgetApi = {
-  load: (canvasId: string): Promise<string | null> =>
-    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`)
+  load: (canvasId: string, sessionId?: string | null): Promise<string | null> => {
+    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`)
       .then(r => r.ok ? r.json() as Promise<{ code: string }> : null)
       .then(d => d?.code ?? null)
-      .catch(() => null),
+      .catch(() => null);
+  },
 
-  save: (canvasId: string, code: string): Promise<void> =>
-    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`, {
+  save: (canvasId: string, code: string, sessionId?: string | null): Promise<void> => {
+    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
-    }).then(() => undefined).catch(() => undefined),
+    }).then(() => undefined).catch(() => undefined);
+  },
 
-  remove: (canvasId: string): Promise<void> =>
-    fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}`, {
+  remove: (canvasId: string, sessionId?: string | null): Promise<void> => {
+    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
       method: 'DELETE',
-    }).then(() => undefined).catch(() => undefined),
+    }).then(() => undefined).catch(() => undefined);
+  },
 };
 
 const widgetApi = {
@@ -1865,7 +1868,7 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
 
 // ── Canvas panel ──────────────────────────────────────────────────────────────
 
-function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: number }) {
+function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; sessionId?: string | null; refreshKey?: number }) {
   const [canvasWidgets, setCanvasWidgets] = useState<WidgetData[]>([]);
   const [dragging,      setDragging]      = useState(false);
   const [apiWidgets,    setApiWidgets]    = useState<WidgetRecord[]>([]);
@@ -1879,10 +1882,15 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
   const [codeDrawer,    setCodeDrawer]    = useState<{ id: string; title: string; code: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Load saved canvas layout for this working directory
+  // Clear canvas immediately when session changes so stale widgets don't show during load
   useEffect(() => {
-    if (!cwd) return;
-    canvasApi.load(cwd)
+    setCanvasWidgets([]);
+  }, [sessionId]);
+
+  // Load saved canvas layout — only when sessionId is known (canvas is session-scoped)
+  useEffect(() => {
+    if (!cwd || !sessionId) return;
+    canvasApi.load(cwd, sessionId)
       .then(({ widgets: entries }) => {
         if (!entries?.length) return;
         const PAD = 24;
@@ -1908,7 +1916,7 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
         if (customEntries.length > 0) {
           Promise.all(
             customEntries.map(e =>
-              customWidgetApi.load(e.canvasId).then(code => ({ canvasId: e.canvasId, code }))
+              customWidgetApi.load(e.canvasId, sessionId).then(code => ({ canvasId: e.canvasId, code }))
             )
           ).then(results => {
             setCanvasWidgets(prev => prev.map(w => {
@@ -1920,7 +1928,8 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
       })
       .catch(() => { /* canvas file missing or server offline — start blank */ });
   // refreshKey increments after each agent turn so newly deployed widgets appear
-  }, [cwd, refreshKey]);
+  // sessionId must be included so the canvas reloads when a session is established
+  }, [cwd, sessionId, refreshKey]);
 
   // Scroll to origin on the first render that has widgets, then hold that
   // position for 900 ms — long enough for all widget iframes to finish
@@ -1947,7 +1956,7 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
 
   // Debounced save: whenever the canvas layout changes, persist to <cwd>/.bzcanvas.json
   useEffect(() => {
-    if (!cwd || canvasWidgets.length === 0) return;
+    if (!cwd || !sessionId || canvasWidgets.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const entries: CanvasEntry[] = canvasWidgets.map(w => ({
@@ -1959,10 +1968,10 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
         title:    w.title,
         x: w.x, y: w.y, w: w.w, h: w.h,
       }));
-      canvasApi.save(cwd, entries).catch(() => { /* silent — offline */ });
+      canvasApi.save(cwd, entries, sessionId).catch(() => { /* silent — offline */ });
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [cwd, canvasWidgets]);
+  }, [cwd, sessionId, canvasWidgets]);
 
   // On mount: seed built-ins then fetch the full list from the API
   useEffect(() => {
@@ -2051,14 +2060,24 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
 
   function handleDrop(id: string, x: number, y: number) {
     setDragging(false);
-    // Snap to grid, clamp to canvas edge, then apply gravity
     const sx = Math.max(0, snapVal(x));
     const sy = Math.max(0, snapVal(y));
-    setCanvasWidgets(prev => applyGravity(prev.map(w => w.id === id ? { ...w, x: sx, y: sy } : w)));
+    setCanvasWidgets(prev => {
+      // 1. Place dropped widget at exact snap position
+      const moved = prev.map(w => w.id === id ? { ...w, x: sx, y: sy } : w);
+      // 2. Gravity: pull all OTHER widgets up to fill gaps; dropped widget stays fixed
+      const gravitated = applyGravity(moved, id);
+      // 3. Resolve any remaining overlaps; dropped widget still fixed
+      return resolveOverlaps(gravitated, id);
+    });
   }
   function handleResize(id: string, x: number, y: number, w: number, h: number) {
     setDragging(false);
-    setCanvasWidgets(prev => resolveOverlaps(prev.map(ww => ww.id === id ? { ...ww, x, y, w, h } : ww), id));
+    setCanvasWidgets(prev => {
+      const resized = prev.map(ww => ww.id === id ? { ...ww, x, y, w, h } : ww);
+      const gravitated = applyGravity(resized, id);
+      return resolveOverlaps(gravitated, id);
+    });
   }
 
   return (
@@ -2072,7 +2091,7 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
             setCanvasWidgets(prev => prev.map(w => w.id === codeDrawer.id ? { ...w, code: newCode } : w));
             setCodeDrawer(d => d ? { ...d, code: newCode } : null);
             // Persist to server_data/custom_widgets/{canvasId}.js so it survives refresh
-            void customWidgetApi.save(codeDrawer.id, newCode);
+            void customWidgetApi.save(codeDrawer.id, newCode, sessionId);
           }}
           onClose={() => setCodeDrawer(null)}
         />
@@ -2169,14 +2188,14 @@ function CanvasPanel({ cwd, refreshKey = 0 }: { cwd?: string; refreshKey?: numbe
           </div>
         )}
         {canvasWidgets.map(w => (
-          <CanvasWidget key={w.id} data={w}
+          <CanvasWidget key={w.id} data={w} sessionId={sessionId}
             onDragStart={() => setDragging(true)}
             onDrop={handleDrop} onResize={handleResize}
             onClose={id => {
               setCanvasWidgets(prev => {
                 const removed = prev.find(ww => ww.id === id);
                 // Clean up custom code file if one was saved for this instance
-                if (removed?.code) void customWidgetApi.remove(id);
+                if (removed?.code) void customWidgetApi.remove(id, sessionId);
                 return prev.filter(ww => ww.id !== id);
               });
             }}
@@ -2866,6 +2885,8 @@ function AgentPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('connecting');
   const [mode, setMode] = useState<SessionMode>('default');
+  const modeRef = useRef<SessionMode>('default');        // always current — readable inside stale closures
+  const pendingModeRef = useRef<SessionMode | null>(null); // mode user explicitly requested, waiting for bzcode confirmation
   const [availableModes, setAvailableModes] = useState<SessionMode[]>(['default', 'plan', 'yolo']);
   const [availableCommands, setAvailableCommands] = useState<Array<{name: string; description: string; aliases?: string[]}>>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -2881,6 +2902,8 @@ function AgentPage() {
   const [bzHubModal,        setBzHubModal]        = useState<BzHubModal | null>(null);
   const [showConversations, setShowConversations] = useState(false);
   const [isCompacting,      setIsCompacting]      = useState(false);
+  const [compactDoneMsg,    setCompactDoneMsg]    = useState<string | null>(null);
+  const [authExpired,       setAuthExpired]       = useState(false);
   const [batchQueue,        setBatchQueue]        = useState<{ cwd: string; message: string }[]>(() => {
     try { return JSON.parse(sessionStorage.getItem('agent:batchQueue') ?? '[]') as { cwd: string; message: string }[]; } catch { return []; }
   });
@@ -3080,6 +3103,11 @@ function AgentPage() {
 
       if (type === 'session') {
         setConnStatus('connected');
+        // Re-sync bzcode session mode after every (re)connect.
+        // bzcode always starts in 'default' — we must push the current mode back.
+        if (mode !== 'default') {
+          wsRef.current?.send(JSON.stringify({ type: 'setMode', mode }));
+        }
         // Auto-send pending message from home page in YOLO mode
         if (pendingAutoSendRef.current) {
           const text = pendingAutoSendRef.current;
@@ -3088,7 +3116,7 @@ function AgentPage() {
           setTimeout(() => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
               wsRef.current.send(JSON.stringify({ type: 'setMode', mode: 'yolo' }));
-              setMode('yolo');
+              setMode('yolo'); modeRef.current = 'yolo';
               const userMsg = { id: uid(), kind: 'user' as const, text };
               setItems(prev => [...prev, userMsg]);
               wsRef.current.send(JSON.stringify({ type: 'user', content: text }));
@@ -3171,6 +3199,17 @@ function AgentPage() {
             }
           }
           setItems(restored);
+
+          // Detect interrupted turn: last message is a user toolResult (agent was mid-loop)
+          const last = history[history.length - 1];
+          const lastIsToolResult = last?.role === 'user' && Array.isArray(last.content) &&
+            (last.content as Array<Record<string,unknown>>).some(b => b['type'] === 'toolResult');
+          if (lastIsToolResult) {
+            setItems(prev => [...prev, {
+              id: uid(), kind: 'system' as const,
+              message: '⚠ Previous turn was interrupted mid-execution. Send your message again to continue.',
+            }]);
+          }
         }
       }
 
@@ -3187,10 +3226,28 @@ function AgentPage() {
           isCompactingRef.current = false;
           streamingBlocksRef.current.clear();
           setStreamingBlocks([]);
-          if (msg['mode']) setMode(msg['mode'] as SessionMode);
+          if (msg['mode']) {
+            const m = msg['mode'] as SessionMode;
+            if (pendingModeRef.current) {
+              // Waiting for bzcode to confirm user-requested mode — don't revert UI yet
+              if (m === pendingModeRef.current) {
+                pendingModeRef.current = null; // confirmed — fall through to update
+              } else {
+                // bzcode hasn't switched yet — keep showing user's requested mode
+              }
+            }
+            if (!pendingModeRef.current || m === modeRef.current) {
+              setMode(m); modeRef.current = m;
+            }
+          }
           // After compact completes, force-reconnect so bzcode starts fresh
           // with the clean compacted history and avoids stale auto-run state
           if (wasCompacting) {
+            // Show done toast — pull the summary line from items if available
+            const summary = items.findLast?.((i: DisplayItem) => i.kind === 'system' && (i as { text: string }).text.includes('compacted'));
+            const summaryText = summary ? (summary as { text: string }).text : 'Context compacted';
+            setCompactDoneMsg(summaryText);
+            setTimeout(() => setCompactDoneMsg(null), 5000);
             // Force a full reconnect: wsKey change tears down current WS
             // and opens a fresh one with the clean compacted session
             setTimeout(() => setWsKey(k => k + 1), 800);
@@ -3257,7 +3314,14 @@ function AgentPage() {
         const subtype = msg['subtype'] as string;
         const requestId = msg['requestId'] as string;
         if (subtype === 'permission') {
-          setPendingPermission({ requestId, tool: msg['tool'] as string, input: msg['input'] });
+          if (modeRef.current === 'yolo') {
+            // In YOLO mode auto-approve silently — use ref (not state) to avoid stale closure
+            wsRef.current?.send(JSON.stringify({
+              type: 'user', subtype: 'permission', requestId, behavior: 'always',
+            }));
+          } else {
+            setPendingPermission({ requestId, tool: msg['tool'] as string, input: msg['input'] });
+          }
         } else if (subtype === 'input') {
           const questions = (msg['questions'] as Question[] | undefined) ?? [];
           setPendingInput({ requestId, message: msg['message'] as string, questions });
@@ -3265,9 +3329,13 @@ function AgentPage() {
       }
 
       else if (type === 'system') {
-        // Informational events (e.g. context compaction) — render as a dim info line
+        const event   = msg['event']   as string;
         const message = msg['message'] as string;
-        if (message) setItems(prev => [...prev, { id: uid(), kind: 'system' as const, message }]);
+        if (event === 'auth-error') {
+          setAuthExpired(true);
+        } else if (message) {
+          setItems(prev => [...prev, { id: uid(), kind: 'system' as const, message }]);
+        }
       }
 
       else if (type === 'result') {
@@ -3298,6 +3366,8 @@ function AgentPage() {
 
   const handleModeChange = useCallback((m: SessionMode) => {
     setMode(m);
+    modeRef.current = m;
+    pendingModeRef.current = m; // await bzcode confirmation before allowing status to override
     sendRaw({ type: 'setMode', mode: m });
   }, [sendRaw]);
 
@@ -3784,7 +3854,8 @@ function AgentPage() {
                       if (block.type === 'text') {
                         const cmdList = parseCommandListOutput(block.text);
                         if (cmdList) return <CommandListDisplay key={j} result={cmdList} />;
-                        const docPaths = agentMode === 'worker' ? extractDocPaths(block.text) : [];
+                        const docPaths    = agentMode === 'worker' ? extractDocPaths(block.text) : [];
+                        const widgetIds   = agentMode === 'widget' && !isLive ? extractWidgetIds(block.text) : [];
                         return (
                           <div key={j} className="agent-msg-row">
                             <span className="agent-block-icon"><BlockDot size={10} /></span>
@@ -3793,6 +3864,23 @@ function AgentPage() {
                                 className="chat-bubble-assistant"
                                 dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
                               />
+                              {widgetIds.length > 0 && (
+                                <div className="agent-doc-open-chips">
+                                  {widgetIds.map(id => (
+                                    <button
+                                      key={id}
+                                      type="button"
+                                      className="agent-doc-open-btn"
+                                      onClick={() => {
+                                        setCanvasRefreshKey(k => k + 1);
+                                      }}
+                                    >
+                                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                                      View on canvas
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                               {docPaths.length > 0 && (
                                 <div className="agent-doc-open-chips">
                                   {docPaths.map(p => (
@@ -3897,12 +3985,48 @@ function AgentPage() {
         </div>
       )}
 
+      {/* Auth expired banner */}
+      {authExpired && (
+        <div className="auth-expired-banner">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span className="auth-expired-text">Your session has expired — please sign in again to continue.</span>
+          <button
+            type="button"
+            className="auth-expired-btn"
+            onClick={() => {
+              // Clear expired token on server, then redirect to login
+              fetch(`${HTTP_BASE}/auth/logout`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ authUrl: 'https://boltzhub.com' }),
+              }).finally(() => { window.location.href = '/login'; });
+            }}
+          >Sign in</button>
+          <button type="button" className="auth-expired-dismiss" onClick={() => setAuthExpired(false)}>✕</button>
+        </div>
+      )}
+
       {/* Compacting banner — shown while /compact is running */}
       {isCompacting && (
         <div className="compact-banner">
           <BoltzbitLogo size={14} className="boltzbit-logo-animate" />
-          <span className="compact-banner-text">Compacting conversation…</span>
-          <span className="compact-banner-sub">Summarising history to reduce context size. Input disabled until complete.</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+              <span className="compact-banner-text">Compacting conversation…</span>
+              <span className="compact-banner-sub">Summarising history to free context space</span>
+            </div>
+            <div className="compact-progress-track">
+              <div className="compact-progress-bar" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact done toast */}
+      {compactDoneMsg && !isCompacting && (
+        <div className="compact-done-toast">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>{compactDoneMsg}</span>
+          <button type="button" onClick={() => setCompactDoneMsg(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:'0 2px', lineHeight:1 }}>✕</button>
         </div>
       )}
 
@@ -3962,7 +4086,7 @@ function AgentPage() {
         />
 
         <div
-          className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}`}
+          className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}${isStreaming ? ' agent-input-box--busy' : ''}`}
           style={{ '--mode-color': modeColor } as React.CSSProperties}
         >
           {/* Live Learning notification — inside the input box so it's one unified card */}
@@ -4010,7 +4134,7 @@ function AgentPage() {
           <textarea
             ref={textareaRef}
             className="agent-input-textarea"
-            placeholder={isStreaming ? 'Running…' : 'Ask the agent…'}
+            placeholder={isStreaming ? 'bzcode is running — click ■ to stop' : 'Ask the agent…'}
             value={inputValue}
             rows={1}
             disabled={isStreaming || isCompacting}
@@ -4086,10 +4210,10 @@ function AgentPage() {
             {isStreaming ? (
               <button
                 type="button"
-                className="agent-submit-btn"
+                className="agent-submit-btn agent-submit-btn--stop"
                 style={{ background: modeColor }}
                 onClick={handleAbort}
-                title="Stop"
+                title="Stop (cancel running command)"
               >
                 <SquareIcon size={14} weight="fill" />
               </button>
@@ -4115,7 +4239,7 @@ function AgentPage() {
 
       {agentMode === 'widget' && (
         <div className="agent-widget-canvas-wrap">
-          <CanvasPanel cwd={activeCwd} refreshKey={canvasRefreshKey} />
+          <CanvasPanel cwd={activeCwd} sessionId={activeSessionId} refreshKey={canvasRefreshKey} />
         </div>
       )}
       {(agentMode === 'worker' || agentMode === 'coder') && (

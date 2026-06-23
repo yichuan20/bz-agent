@@ -93,14 +93,12 @@ export const drawYToContentY = (drawY, topMargin) => {
     return topMargin + PAGE_MARGIN_TOP + ((pageNum + 1) * PAGE_CONTENT_HEIGHT);
   }
 
-  // Within a page - calculate content Y
-  const yWithinPageContent = yWithinPageArea - PAGE_MARGIN_TOP;
-  if (yWithinPageContent < 0) {
-    // In top margin area of page
-    return topMargin + PAGE_MARGIN_TOP + (pageNum * PAGE_CONTENT_HEIGHT);
-  }
-
-  // Normal content area
+  // Within a page - clamp to [0, PAGE_CONTENT_HEIGHT) so top/bottom margins
+  // never map to a different page's content coordinates
+  const yWithinPageContent = Math.min(
+    PAGE_CONTENT_HEIGHT - 1,
+    Math.max(0, yWithinPageArea - PAGE_MARGIN_TOP)
+  );
   return topMargin + PAGE_MARGIN_TOP + (pageNum * PAGE_CONTENT_HEIGHT) + yWithinPageContent;
 };
 

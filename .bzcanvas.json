@@ -27,7 +27,7 @@
       "kind": "pie",
       "title": "Pie Chart",
       "x": 32,
-      "y": 553,
+      "y": 227,
       "w": 315,
       "h": 238
     },
@@ -36,7 +36,7 @@
       "widgetId": "bar",
       "kind": "bar",
       "title": "Bar Chart",
-      "x": 784,
+      "x": 400,
       "y": 251,
       "w": 476,
       "h": 216
@@ -47,7 +47,7 @@
       "kind": "whiteboard",
       "title": "Whiteboard",
       "x": 384,
-      "y": 859,
+      "y": 481,
       "w": 692,
       "h": 254
     },
@@ -57,19 +57,9 @@
       "kind": "weather",
       "title": "Weather",
       "x": 53,
-      "y": 805,
+      "y": 479,
       "w": 300,
       "h": 320
-    },
-    {
-      "canvasId": "pxt67bag73",
-      "widgetId": "github",
-      "kind": "github",
-      "title": "GitHub",
-      "x": 24,
-      "y": 227,
-      "w": 360,
-      "h": 312
     },
     {
       "canvasId": "z11n7w2hkba",
@@ -77,7 +67,7 @@
       "kind": "calendar",
       "title": "Calendar",
       "x": 372,
-      "y": 1127,
+      "y": 749,
       "w": 280,
       "h": 290
     },
@@ -87,27 +77,7 @@
       "kind": "bar",
       "title": "Bar Chart",
       "x": 666,
-      "y": 1127,
-      "w": 380,
-      "h": 280
-    },
-    {
-      "canvasId": "uh1woovvg2",
-      "widgetId": "news",
-      "kind": "news",
-      "title": "News",
-      "x": 416,
-      "y": 251,
-      "w": 320,
-      "h": 300
-    },
-    {
-      "canvasId": "cw-bcc77cf9a35e",
-      "widgetId": "cw-bcc77cf9a35e",
-      "kind": "custom",
-      "title": "Pie Chart",
-      "x": 384,
-      "y": 565,
+      "y": 749,
       "w": 380,
       "h": 280
     },
@@ -117,7 +87,17 @@
       "kind": "custom",
       "title": "Clock",
       "x": 24,
-      "y": 1431,
+      "y": 1053,
+      "w": 380,
+      "h": 280
+    },
+    {
+      "canvasId": "cw-e602b4fedecc",
+      "widgetId": "cw-e602b4fedecc",
+      "kind": "custom",
+      "title": "Trading Data",
+      "x": 432,
+      "y": 1053,
       "w": 380,
       "h": 280
     }

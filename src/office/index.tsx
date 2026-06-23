@@ -48,15 +48,24 @@ const getBlocksFromDoc = _gbfd as (doc: any) => { blocks: any[] };
 export { getDocFromBlocks, getBlocksFromDoc };
 
 interface WordDocEditorProps {
-  blocks:     import('../components/BzDocEditor').Block[];
-  onChange?:  (blocks: import('../components/BzDocEditor').Block[]) => void;
-  readOnly?:  boolean;
-  className?: string;
-  style?:     React.CSSProperties;
+  blocks:          import('../components/BzDocEditor').Block[];
+  onChange?:       (blocks: import('../components/BzDocEditor').Block[]) => void;
+  onCursorChange?: (cursor: { selStart: number; selEnd: number }) => void;
+  initialCursor?:  { selStart: number; selEnd: number };
+  readOnly?:       boolean;
+  className?:      string;
+  style?:          React.CSSProperties;
 }
 
-export function WordDocEditor({ blocks, onChange, readOnly = false, className, style }: WordDocEditorProps) {
-  const [doc, setDoc] = useState<OfficeDoc>(() => getDocFromBlocks(blocks ?? []) as OfficeDoc);
+export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor, readOnly = false, className, style }: WordDocEditorProps) {
+  const [doc, setDoc] = useState<OfficeDoc>(() => {
+    const d = getDocFromBlocks(blocks ?? []) as OfficeDoc;
+    // Always ensure selStart/selEnd are numeric — drawCaret check uses === so undefined breaks it
+    d.selStart = initialCursor?.selStart ?? d.selStart ?? 0;
+    d.selEnd   = initialCursor?.selEnd   ?? d.selEnd   ?? 0;
+    return d;
+  });
+  const prevCursorRef = useRef<{ selStart: number; selEnd: number } | null>(null);
 
   // Sync from blocks prop only when it changes externally (initial load / agent edit).
   const prevBlocksRef = useRef(blocks);
@@ -74,6 +83,16 @@ export function WordDocEditor({ blocks, onChange, readOnly = false, className, s
 
   const applyDoc = useCallback((newDoc: OfficeDoc) => {
     setDoc(newDoc);
+    // Fire onCursorChange whenever selStart/selEnd changes (cursor move or selection).
+    if (onCursorChange) {
+      const s = newDoc.selStart ?? 0;
+      const e = newDoc.selEnd   ?? 0;
+      const prev = prevCursorRef.current;
+      if (!prev || prev.selStart !== s || prev.selEnd !== e) {
+        prevCursorRef.current = { selStart: s, selEnd: e };
+        onCursorChange({ selStart: s, selEnd: e });
+      }
+    }
     if (readOnly || !onChange) return;
     // Build a lightweight fingerprint of the document content (text + styles).
     // JSON.stringify on the full styles array is the safest comparison.

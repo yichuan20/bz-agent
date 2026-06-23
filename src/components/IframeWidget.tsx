@@ -17,11 +17,12 @@ function getThemeCss(): string {
   return THEME_VARS.map(v => `${v}:${cs.getPropertyValue(v).trim() || 'inherit'}`).join(';');
 }
 
-function buildSrcdoc(code: string, agentHttpBase: string, canvasId?: string): string {
+function buildSrcdoc(code: string, agentHttpBase: string, canvasId?: string, sessionId?: string | null): string {
   const themeCss = getThemeCss();
   const safeCode = code.replace(/<\/script>/gi, '<\\/script>');
   const isDark   = document.documentElement.getAttribute('data-theme') === 'dark';
   const safeId   = canvasId ?? '';
+  const safeSession = sessionId ?? '';
 
   return `<!DOCTYPE html>
 <html>
@@ -78,13 +79,17 @@ input,textarea,select,button{font-family:inherit;font-size:inherit}
 window.__agentHttpBase__ = '${agentHttpBase}';
 window.__isDark__        = ${isDark};
 window.__canvasId__      = '${safeId}';
+window.__sessionId__     = '${safeSession}';
 (function(){
   const _base = window.__agentHttpBase__;
   const _id   = window.__canvasId__;
+  const _sid  = window.__sessionId__;
+  const _sq   = _sid ? '?sessionId=' + encodeURIComponent(_sid) : '';
+  const _sq2  = _sid ? '&sessionId=' + encodeURIComponent(_sid) : '';
   if (!_id) { window.db = null; return; }
   window.db = {
     ensure: function(columns) {
-      return fetch(_base + '/db/widget/' + _id + '/schema', {
+      return fetch(_base + '/db/widget/' + _id + '/schema' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: columns })
       }).then(function(r){ return r.json(); });
@@ -101,28 +106,28 @@ window.__canvasId__      = '${safeId}';
           p.append('filter', k + '=' + opts.filter[k]);
         });
       }
-      return fetch(_base + '/db/widget/' + _id + '/rows?' + p).then(function(r){ return r.json(); });
+      return fetch(_base + '/db/widget/' + _id + '/rows?' + p + _sq2).then(function(r){ return r.json(); });
     },
     insert: function(rowOrRows) {
       var body = Array.isArray(rowOrRows) ? { rows: rowOrRows } : { row: rowOrRows };
-      return fetch(_base + '/db/widget/' + _id + '/rows', {
+      return fetch(_base + '/db/widget/' + _id + '/rows' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }).then(function(r){ return r.json(); });
     },
     update: function(id, data) {
-      return fetch(_base + '/db/widget/' + _id + '/rows/' + id, {
+      return fetch(_base + '/db/widget/' + _id + '/rows/' + id + _sq, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: data })
       }).then(function(r){ return r.json(); });
     },
     delete: function(id) {
-      return fetch(_base + '/db/widget/' + _id + '/rows/' + id, {
+      return fetch(_base + '/db/widget/' + _id + '/rows/' + id + _sq, {
         method: 'DELETE'
       }).then(function(r){ return r.json(); });
     },
     exec: function(code) {
-      return fetch(_base + '/db/widget/' + _id + '/exec', {
+      return fetch(_base + '/db/widget/' + _id + '/exec' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code })
       }).then(function(r){ return r.json(); });
@@ -145,17 +150,18 @@ type Props = {
   code:           string;
   agentHttpBase?: string;
   canvasId?:      string;
+  sessionId?:     string | null;
   refreshKey?:    string | number;
 };
 
-export function IframeWidget({ code, agentHttpBase = 'http://localhost:18789', canvasId, refreshKey }: Props) {
+export function IframeWidget({ code, agentHttpBase = 'http://localhost:18789', canvasId, sessionId, refreshKey }: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const iframe = ref.current;
     if (!iframe) return;
-    iframe.srcdoc = buildSrcdoc(code, agentHttpBase, canvasId);
-  }, [code, agentHttpBase, canvasId, refreshKey]);
+    iframe.srcdoc = buildSrcdoc(code, agentHttpBase, canvasId, sessionId);
+  }, [code, agentHttpBase, canvasId, sessionId, refreshKey]);
 
   useEffect(() => {
     const rebuild = () => {

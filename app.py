@@ -141,6 +141,10 @@ class SetDefaultBody(BaseModel):
 class SearchBody(BaseModel):
     pass
 
+class MkdirBody(BaseModel):
+    parent: str
+    name: str
+
 class CreateAppBody(BaseModel):
     cwd: str = ""
     name: str
@@ -512,6 +516,29 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             except (PermissionError, OSError):
                 pass
         return {"path": str(p), "entries": entries}
+
+    @app.post("/files/mkdir")
+    async def mkdir(body: MkdirBody):
+        name = body.name.strip()
+        if not body.parent or not name:
+            raise HTTPException(400, "parent and name required")
+        if "/" in name or "\\" in name or name in (".", ".."):
+            raise HTTPException(400, "invalid folder name")
+        new_dir = Path(body.parent) / name
+        parent_path = Path(body.parent)
+        if not parent_path.exists() or not parent_path.is_dir():
+            raise HTTPException(400, f"parent directory not found: {body.parent}")
+        if not os.access(parent_path, os.W_OK):
+            raise HTTPException(403, f"no write permission on {body.parent}")
+        try:
+            new_dir.mkdir(parents=False, exist_ok=False)
+            return {"path": str(new_dir)}
+        except FileExistsError:
+            raise HTTPException(409, "folder already exists")
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc))
+        except OSError as exc:
+            raise HTTPException(500, str(exc))
 
     # ── Canvas ────────────────────────────────────────────────────────────────
 

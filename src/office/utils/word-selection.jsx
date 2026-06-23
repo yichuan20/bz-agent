@@ -58,7 +58,6 @@ export const getNearestCharIndexFromEvent = (e, scrollY = 0, xs = [], ys = [], t
   const { offsetX, offsetY } = e?.nativeEvent ?? {};
   const x = offsetX * SF;
   const canvasY = offsetY * SF + scrollY;
-  // Convert canvas Y (with page gaps) to content Y (continuous space)
   const contentY = drawYToContentY(canvasY, topMargin);
   const nearestIndex = getNearestCharIndex({
     x,

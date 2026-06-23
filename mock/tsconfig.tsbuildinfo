@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/appshell.tsx","./src/screens/agentcoder.tsx","./src/screens/agentgeneral.tsx","./src/screens/agentshared.tsx","./src/screens/agentwidget.tsx","./src/screens/agentworker.tsx","./src/screens/home.tsx","./src/screens/learning.tsx","./src/screens/login.tsx","./src/screens/settings.tsx"],"version":"5.9.3"}

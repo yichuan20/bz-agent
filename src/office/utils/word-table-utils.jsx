@@ -102,7 +102,6 @@ export const getStartI = ({ scrollY, ys = [], text, topMargin = 0 }) => {
       inTable = false;
     }
 
-    // Convert content Y to canvas Y (with page gaps) before comparing with scrollY
     const drawY = contentYToDrawY(ys[i], topMargin);
     if (drawY - scrollY > 0) {
       break;

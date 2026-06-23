@@ -7,7 +7,6 @@ import {
   deleteText,
   drawDoc,
   EMPTY_DOC,
-  getNearestCharIndexFromEvent,
   getStartEnd,
   insertText,
   moveCaret,
@@ -25,6 +24,63 @@ import {
   C_START,
   T_END,
 } from '../utils/word-utils-refactor';
+
+// ── Scratch-built cursor engine ───────────────────────────────────────────────
+// xs[i] / ys[i] are in ABSOLUTE canvas pixel space (draw space, before scrollY).
+// clickX = offsetX * SF,  clickY = offsetY * SF + scrollY
+const LINE_SNAP = 4;
+
+function findCursorIndex(clickX, clickY, xs, ys) {
+  if (!xs || !ys || xs.length === 0) return 0;
+  // Step 1: find the line whose Y is nearest to clickY
+  let nearestLineY = null, minYDist = Infinity;
+  for (let i = 0; i < ys.length; i++) {
+    if (ys[i] == null) continue;
+    const d = Math.abs(ys[i] - clickY);
+    if (d < minYDist) { minYDist = d; nearestLineY = ys[i]; }
+  }
+  if (nearestLineY === null) return 0;
+  // Step 2: on that line, find the char with nearest X
+  let bestIdx = 0, minXDist = Infinity;
+  for (let i = 0; i < xs.length; i++) {
+    if (ys[i] == null || Math.abs(ys[i] - nearestLineY) > LINE_SNAP) continue;
+    const d = Math.abs(xs[i] - clickX);
+    if (d < minXDist) { minXDist = d; bestIdx = i; }
+  }
+  // Step 3: if click is past the char centre, advance to next char on same line
+  if (xs[bestIdx] != null && clickX > xs[bestIdx]) {
+    const next = bestIdx + 1;
+    if (next < ys.length && ys[next] != null && Math.abs(ys[next] - nearestLineY) <= LINE_SNAP) {
+      bestIdx = next;
+    }
+  }
+  return Math.max(0, Math.min(bestIdx, xs.length - 1));
+}
+
+function paintCursor(ctx, xs, ys, selStart, scrollY, styles, topMargin) {
+  const absX = xs[selStart], contentY = ys[selStart];
+  if (absX == null || contentY == null) return;
+  // ys are in content space — convert to canvas draw space
+  const drawY = contentYToDrawY(contentY, topMargin) - scrollY;
+
+  // Derive font size from the character just before the cursor (fallback to default)
+  const refIdx = selStart > 0 ? selStart - 1 : 0;
+  const fontSize = (styles?.[refIdx]?.fontSize ?? 16) * SF;
+
+  const prev = { stroke: ctx.strokeStyle, width: ctx.lineWidth, cap: ctx.lineCap };
+  ctx.strokeStyle = '#111111';
+  ctx.lineWidth   = 2 * SF;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(absX, drawY - fontSize);   // top of cursor (one font-size above baseline)
+  ctx.lineTo(absX, drawY + fontSize * 0.2); // slight descender below baseline
+  ctx.stroke();
+  ctx.strokeStyle = prev.stroke;
+  ctx.lineWidth   = prev.width;
+  ctx.lineCap     = prev.cap;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+import { contentYToDrawY, drawYToContentY } from '../utils/word-render-utils';
 import { getCellAtClick } from '../utils/table-utils';
 import ImageResizeOverlay from './ImageResizeOverlay';
 import TableContextMenu from './TableContextMenu';
@@ -54,6 +110,10 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
   const [xs, setXs] = useState([]);
   const [ys, setYs] = useState([]);
   const [isFocussed, setIsFocussed] = useState(false);
+  const [canvasVersion, setCanvasVersion] = useState(0); // increments when canvas is resized
+  // Track mousedown position to require a minimum drag distance before extending selection.
+  // This prevents single-click jitter from accidentally creating a selection.
+  const mouseDownPosRef = useRef({ x: 0, y: 0 });
   const [imageLoadTrigger, setImageLoadTrigger] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
   const [contextMenu, setContextMenu] = useState({
@@ -79,9 +139,23 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
 
   const { text, styles, selStart, selEnd } = doc;
 
-  // init: size
+  // Canvas sizing: use ResizeObserver so the canvas re-initialises when it
+  // gets its real layout dimensions (e.g. after a key-triggered remount where
+  // getBoundingClientRect() would return 0×0 on the first synchronous pass).
   useEffect(() => {
+    const canvas = canvasRef?.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry && entry.contentRect.width > 0) {
+        initCanvasSize(canvasRef);
+        setCanvasVersion(v => v + 1); // trigger redraw with correct dimensions
+      }
+    });
+    observer.observe(canvas);
+    // Also attempt immediately in case dimensions are already known
     initCanvasSize(canvasRef);
+    return () => observer.disconnect();
   }, [canvasRef]);
 
   // Listen for theme changes to re-render canvas
@@ -180,13 +254,20 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
 
   // redrawing loop
   useEffect(() => {
-    const ctx = canvasRef?.current?.getContext('2d');
+    const canvas = canvasRef?.current;
+    const ctx = canvas?.getContext('2d');
     const gapColor = containerRef?.current
       ? getComputedStyle(containerRef.current).getPropertyValue('--bg-tertiary').trim() || '#e8e8e8'
       : '#e8e8e8';
-    const [newXs, newYs] = drawDoc({ ctx, doc, scrollY, xs, ys, topMargin, hideCaretAtIndex: selectedImageIndex, caretVisible, gapColor });
+    // Pass caretVisible=false so drawDoc never paints the cursor itself.
+    // Our scratch-built paintCursor handles it separately, using draw-space xs/ys.
+    const [newXs, newYs] = drawDoc({ ctx, doc, scrollY, xs, ys, topMargin, hideCaretAtIndex: selectedImageIndex, caretVisible: false, gapColor });
     setXs(newXs || []);
     setYs(newYs || []);
+    // Paint cursor on top using the new engine (draw-space coords)
+    if (caretVisible && selStart === selEnd && selectedImageIndex == null) {
+      paintCursor(ctx, newXs, newYs, selStart, scrollY, styles, topMargin);
+    }
   }, [
     text?.length,
     styles,
@@ -194,7 +275,7 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     selEnd,
     canvasRef,
     scrollY,
-    null,
+    canvasVersion,
     imageLoadTrigger,
     selectedImageIndex,
     caretVisible,
@@ -205,14 +286,13 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     e.preventDefault();
     document.activeElement.blur();
 
-    const ind = getNearestCharIndexFromEvent(e, scrollY, xs, ys, text, topMargin);
+    const clickX      = e.nativeEvent.offsetX * SF;
+    const clickCanvasY = e.nativeEvent.offsetY * SF + scrollY;           // draw/canvas space
+    const clickY       = drawYToContentY(clickCanvasY, topMargin);        // content space (for ys)
+    const ind = findCursorIndex(clickX, clickY, xs, ys);
     let clampedInd = clamp(ind, 0, text?.length);
-    const clickX = e.nativeEvent.offsetX * SF;
-    const clickY = e.nativeEvent.offsetY * SF + scrollY;
 
-    // TABLE CLICK OVERRIDE: if the click landed visually inside a table cell,
-    // always place the cursor inside that exact cell regardless of what
-    // getNearestCharIndex computed (it can drift to adjacent cells/rows/lines).
+    // TABLE CLICK OVERRIDE: getCellAtClick works in content-space ys — pass clickY (content)
     const clickedCell = getCellAtClick(clickX, clickY, text, xs, ys);
     if (clickedCell) {
       const { tStartIndex, tEndIndex, rowIndex, columnIndex } = clickedCell;
@@ -297,6 +377,7 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
 
     setIsMouseDown(true);
     setIsFocussed(true);
+    mouseDownPosRef.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
     let newDoc = { ...doc, selStart: clampedInd, selEnd: clampedInd };
     newDoc = addMultiClickSelection(newDoc, e);
 
@@ -352,12 +433,23 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     setIsMouseDown(false);
   };
 
+  // Global mouseup — resets drag state even if mouse is released outside the canvas.
+  useEffect(() => {
+    const handler = () => setIsMouseDown(false);
+    document.addEventListener('mouseup', handler);
+    return () => document.removeEventListener('mouseup', handler);
+  }, []);
+
+  const MIN_DRAG_PX = 4; // pixels before a click becomes a drag-selection
   const onMouseMove = e => {
-    if (!isMouseDown) {
-      return;
-    }
-    const ind = getNearestCharIndexFromEvent(e, scrollY, xs, ys, text, topMargin);
-    onDocChange({ ...doc, selEnd: ind });
+    if (!isMouseDown) return;
+    const dx = e.clientX - mouseDownPosRef.current.x;
+    const dy = e.clientY - mouseDownPosRef.current.y;
+    if (Math.sqrt(dx * dx + dy * dy) < MIN_DRAG_PX) return; // ignore micro-jitter
+    const mx = e.nativeEvent.offsetX * SF;
+    const my = drawYToContentY(e.nativeEvent.offsetY * SF + scrollY, topMargin);
+    const ind = findCursorIndex(mx, my, xs, ys);
+    onDocChange({ ...doc, selEnd: clamp(ind, 0, text?.length) });
   };
 
   const onPaste = e => {

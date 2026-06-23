@@ -86,7 +86,8 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     # Purge sub-agent session files/dirs that bzcode's Agent tool leaves inside
     # the config dir (e.g. cozy-hopping-comet.jsonl, tool-results/).  They are
     # not part of our config and prevent bzcode from resuming cleanly.
-    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills", "scripts"}
+    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills", "scripts",
+                    "custom_widgets", "widget_data", ".bzcanvas.json"}
     for item in list(cfg_dir.iterdir()):
         if item.name not in _OWNED_NAMES:
             if item.is_dir():
@@ -136,6 +137,7 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
         return (text
             .replace("{server_data_path}", str(SERVER_DATA_DIR))
             .replace("{scripts_path}",     _session_scripts)
+            .replace("{session_dir}",      str(cfg_dir))
             .replace("{working_dir}",      working_dir)
             .replace("{widget_template_table}", _build_widget_template_table())
         )
@@ -179,6 +181,10 @@ DB_CONFIG = {
 
 # Bzcode session files (written by bzcode itself — location is fixed)
 SESSIONS_DIR  = Path.home() / ".boltzbit" / "sessions"
+
+# Per-file cursor positions: abs_path -> {selStart, selEnd}
+# Stored in-memory (survives tab switches, cleared on server restart).
+_cursor_store: dict = {}
 
 # Tracks cwds with an active WebSocket / bzcode process
 _active_cwds  = set()  # type: ignore[var-annotated]
@@ -241,10 +247,22 @@ SERVER_DATA_DIR = (Path(__file__).resolve().parent / "server_data")
 CUSTOM_WIDGETS_DIR = SERVER_DATA_DIR / "custom_widgets"
 
 
+def _custom_widgets_dir(session_id: str) -> Path:
+    """Return the custom_widgets directory for a session (or global fallback)."""
+    if session_id:
+        return SESSIONS_DIR / session_id / "custom_widgets"
+    return CUSTOM_WIDGETS_DIR
+
+
 async def handle_get_custom_widget(request: web.Request) -> web.Response:
-    """GET /custom-widgets/{canvasId} — read saved code for a canvas widget instance."""
-    canvas_id = request.match_info.get("canvasId", "")
-    p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
+    """GET /custom-widgets/{canvasId}?sessionId= — read saved code for a canvas widget instance."""
+    canvas_id  = request.match_info.get("canvasId", "")
+    session_id = request.rel_url.query.get("sessionId", "").strip()
+    cwd_dir    = _custom_widgets_dir(session_id)
+    p = cwd_dir / f"{canvas_id}.js"
+    # Fallback to global store for older widgets
+    if not p.exists() and session_id:
+        p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
     if not p.exists():
         return web.json_response({"error": "not found"}, status=404, headers=CORS_HEADERS)
     return web.json_response({"canvasId": canvas_id, "code": p.read_text(encoding="utf-8")},
@@ -252,28 +270,32 @@ async def handle_get_custom_widget(request: web.Request) -> web.Response:
 
 
 async def handle_put_custom_widget(request: web.Request) -> web.Response:
-    """PUT /custom-widgets/{canvasId} { code } — save edited code for a canvas widget instance."""
+    """PUT /custom-widgets/{canvasId}?sessionId= { code } — save edited code."""
     if request.method == "OPTIONS":
         return web.Response(headers=CORS_HEADERS)
-    canvas_id = request.match_info.get("canvasId", "")
+    canvas_id  = request.match_info.get("canvasId", "")
+    session_id = request.rel_url.query.get("sessionId", "").strip()
     if not canvas_id:
         return web.json_response({"error": "canvasId required"}, status=400, headers=CORS_HEADERS)
     try:
         body = await request.json()
         code = str(body.get("code", ""))
-        CUSTOM_WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
-        (CUSTOM_WIDGETS_DIR / f"{canvas_id}.js").write_text(code, encoding="utf-8")
+        dest = _custom_widgets_dir(session_id)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / f"{canvas_id}.js").write_text(code, encoding="utf-8")
         return web.json_response({"ok": True, "canvasId": canvas_id}, headers=CORS_HEADERS)
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
 async def handle_delete_custom_widget(request: web.Request) -> web.Response:
-    """DELETE /custom-widgets/{canvasId} — remove saved custom code."""
-    canvas_id = request.match_info.get("canvasId", "")
-    p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
-    if p.exists():
-        p.unlink()
+    """DELETE /custom-widgets/{canvasId}?sessionId= — remove saved custom code."""
+    canvas_id  = request.match_info.get("canvasId", "")
+    session_id = request.rel_url.query.get("sessionId", "").strip()
+    for d in [_custom_widgets_dir(session_id), CUSTOM_WIDGETS_DIR]:
+        p = d / f"{canvas_id}.js"
+        if p.exists():
+            p.unlink()
     return web.json_response({"ok": True}, headers=CORS_HEADERS)
 
 
@@ -435,6 +457,30 @@ async def handle_auth(request: web.Request) -> web.Response:
         json.dump(existing, f, indent=2)
 
     print(f"[auth] credentials written for {auth_url}", file=sys.stderr)
+    return web.json_response({"ok": True}, headers=CORS_HEADERS)
+
+
+async def handle_logout(request: web.Request) -> web.Response:
+    """POST /auth/logout — remove stored credentials so the user must re-authenticate."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    auth_url  = body.get("authUrl", "https://boltzhub.com")
+    creds_file = Path.home() / ".boltzbit" / "credentials.json"
+    try:
+        if creds_file.exists():
+            existing: dict = {}
+            with open(creds_file) as f:
+                existing = json.load(f)
+            existing.pop(auth_url, None)   # remove expired entry
+            with open(creds_file, "w") as f:
+                json.dump(existing, f, indent=2)
+        print(f"[auth] credentials cleared for {auth_url}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[auth] logout error: {exc}", file=sys.stderr)
     return web.json_response({"ok": True}, headers=CORS_HEADERS)
 
 
@@ -662,7 +708,8 @@ async def handle_shell(request: web.Request) -> web.Response:
 
 async def handle_files(request: web.Request) -> web.Response:
     """List files and directories at a given path."""
-    path_str = request.rel_url.query.get("path", os.getcwd()).strip()
+    default_cwd = request.app.get("default_cwd", os.getcwd())
+    path_str = request.rel_url.query.get("path", default_cwd).strip() or default_cwd
     path = Path(path_str)
     if not path.exists() or not path.is_dir():
         return web.json_response({"error": "path not found or not a directory"}, status=404, headers=CORS_HEADERS)
@@ -702,21 +749,35 @@ async def handle_mkdir(request: web.Request) -> web.Response:
     if "/" in name or "\\" in name or name in (".", ".."):
         return web.json_response({"error": "invalid folder name"}, status=400, headers=CORS_HEADERS)
     new_dir = Path(parent) / name
+    # Verify parent exists and is writable before attempting mkdir
+    parent_path = Path(parent)
+    if not parent_path.exists() or not parent_path.is_dir():
+        return web.json_response({"error": f"parent directory not found: {parent}"}, status=400, headers=CORS_HEADERS)
+    if not os.access(parent_path, os.W_OK):
+        return web.json_response({"error": f"no write permission on {parent} — check server process user and directory ownership"}, status=403, headers=CORS_HEADERS)
     try:
         new_dir.mkdir(parents=False, exist_ok=False)
         return web.json_response({"path": str(new_dir)}, headers=CORS_HEADERS)
     except FileExistsError:
         return web.json_response({"error": "folder already exists"}, status=409, headers=CORS_HEADERS)
+    except PermissionError as exc:
+        return web.json_response({"error": f"permission denied: {exc} — ensure the server process has write access to {parent}"}, status=403, headers=CORS_HEADERS)
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
+def _canvas_file(session_id: str, cwd: str) -> Path:
+    """Return the .bzcanvas.json path — session dir preferred, cwd as fallback."""
+    if session_id:
+        return SESSIONS_DIR / session_id / ".bzcanvas.json"
+    return Path(cwd) / ".bzcanvas.json"
+
+
 async def handle_get_canvas(request: web.Request) -> web.Response:
-    """Load canvas layout for a working directory."""
-    cwd = request.rel_url.query.get("cwd", "").strip()
-    if not cwd or not os.path.isdir(cwd):
-        return web.json_response({"widgets": []}, headers=CORS_HEADERS)
-    canvas_file = Path(cwd) / ".bzcanvas.json"
+    """Load canvas layout. Prefers session dir; falls back to cwd."""
+    session_id = request.rel_url.query.get("sessionId", "").strip()
+    cwd        = request.rel_url.query.get("cwd", "").strip()
+    canvas_file = _canvas_file(session_id, cwd)
     if not canvas_file.exists():
         return web.json_response({"widgets": []}, headers=CORS_HEADERS)
     try:
@@ -728,17 +789,19 @@ async def handle_get_canvas(request: web.Request) -> web.Response:
 
 
 async def handle_post_canvas(request: web.Request) -> web.Response:
-    """Save canvas layout for a working directory."""
+    """Save canvas layout. Writes to session dir when sessionId is provided."""
     if request.method == "OPTIONS":
         return web.Response(headers=CORS_HEADERS)
-    cwd = request.rel_url.query.get("cwd", "").strip()
-    if not cwd or not os.path.isdir(cwd):
-        return web.json_response({"error": "invalid cwd"}, status=400, headers=CORS_HEADERS)
+    session_id = request.rel_url.query.get("sessionId", "").strip()
+    cwd        = request.rel_url.query.get("cwd", "").strip()
+    if not session_id and (not cwd or not os.path.isdir(cwd)):
+        return web.json_response({"error": "sessionId or valid cwd required"}, status=400, headers=CORS_HEADERS)
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
-    canvas_file = Path(cwd) / ".bzcanvas.json"
+    canvas_file = _canvas_file(session_id, cwd)
+    canvas_file.parent.mkdir(parents=True, exist_ok=True)
     with open(canvas_file, "w", encoding="utf-8") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)
     return web.json_response({"ok": True, "file": str(canvas_file)}, headers=CORS_HEADERS)
@@ -771,6 +834,7 @@ async def handle_deploy_widget(request: web.Request) -> web.Response:
     except Exception:
         return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
 
+    session_id   = str(body.get("sessionId", "")).strip()
     cwd   = str(body.get("cwd", "")).strip()
     title = str(body.get("title", "Widget")).strip()
     code  = str(body.get("code", "")).strip()
@@ -780,23 +844,24 @@ async def handle_deploy_widget(request: web.Request) -> web.Response:
     y     = body.get("y")
     initial_data = body.get("initialData") or []
 
-    if not cwd or not os.path.isdir(cwd):
-        return web.json_response({"error": "invalid cwd"}, status=400, headers=CORS_HEADERS)
+    if not session_id and (not cwd or not os.path.isdir(cwd)):
+        return web.json_response({"error": "sessionId or valid cwd required"}, status=400, headers=CORS_HEADERS)
     if not code:
         return web.json_response({"error": "code is required"}, status=400, headers=CORS_HEADERS)
 
     # ── 1. Generate a stable canvas ID ───────────────────────────────────────
     import secrets as _sec
-    canvas_id = _sec.token_hex(5)   # 10-char hex, same length as uid() in the frontend
+    canvas_id = _sec.token_hex(5)
 
-    # ── 2. Save widget code to server_data/custom_widgets/{canvasId}.js ──────
-    CUSTOM_WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
-    (CUSTOM_WIDGETS_DIR / f"{canvas_id}.js").write_text(code, encoding="utf-8")
+    # ── 2. Save widget code to session/custom_widgets/{canvasId}.js ──────────
+    widget_code_dir = _custom_widgets_dir(session_id)
+    widget_code_dir.mkdir(parents=True, exist_ok=True)
+    (widget_code_dir / f"{canvas_id}.js").write_text(code, encoding="utf-8")
 
     # ── 3. Seed initial data rows if provided ─────────────────────────────────
     if initial_data:
         import datetime as _dt
-        widget_data_dir = SERVER_DATA_DIR / "widget_data"
+        widget_data_dir = (SESSIONS_DIR / session_id / "widget_data") if session_id else (SERVER_DATA_DIR / "widget_data")
         widget_data_dir.mkdir(parents=True, exist_ok=True)
         data_file = widget_data_dir / f"{canvas_id}.json"
         records   = []
@@ -812,8 +877,8 @@ async def handle_deploy_widget(request: web.Request) -> web.Response:
             encoding="utf-8",
         )
 
-    # ── 4. Update .bzcanvas.json — append widget with auto-placement ──────────
-    canvas_file = Path(cwd) / ".bzcanvas.json"
+    # ── 4. Update .bzcanvas.json in session dir ───────────────────────────────
+    canvas_file = _canvas_file(session_id, cwd)
     canvas_data: dict = {"version": 1, "widgets": []}
     if canvas_file.exists():
         try:
@@ -856,6 +921,19 @@ async def handle_deploy_widget(request: web.Request) -> web.Response:
         "canvasFile": str(canvas_file),
         "codePath":  str(CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"),
     }, headers=CORS_HEADERS)
+
+
+async def handle_get_widget_template(request: web.Request) -> web.Response:
+    """GET /widgets/template?name=pie — return the raw JS of a built-in template."""
+    name = request.rel_url.query.get("name", "").strip()
+    if not name:
+        return web.json_response({"error": "name required"}, status=400, headers=CORS_HEADERS)
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    path = WIDGETS_DIR / f"{safe}.js"
+    if not path.exists():
+        return web.json_response({"error": f"template not found: {name}"}, status=404, headers=CORS_HEADERS)
+    return web.Response(text=path.read_text(encoding="utf-8"),
+                        content_type="application/javascript", headers=CORS_HEADERS)
 
 
 async def handle_get_widgets(request: web.Request) -> web.Response:
@@ -1913,23 +1991,30 @@ def _widget_lock(canvas_id: str) -> _threading.Lock:
         return _widget_locks[canvas_id]
 
 
-def _widget_path(canvas_id: str) -> Path:
+def _widget_path(canvas_id: str, session_id: str = "") -> Path:
     if not _CANVAS_ID_RE.match(canvas_id):
         raise ValueError(f"Invalid canvasId: {canvas_id!r}")
+    # Prefer session-scoped widget_data when a session owns this widget
+    if session_id:
+        session_dir = SESSIONS_DIR / session_id / "widget_data"
+        p = session_dir / f"{canvas_id}.json"
+        if p.exists() or not (WIDGET_DATA_DIR / f"{canvas_id}.json").exists():
+            session_dir.mkdir(parents=True, exist_ok=True)
+            return p
     WIDGET_DATA_DIR.mkdir(parents=True, exist_ok=True)
     return WIDGET_DATA_DIR / f"{canvas_id}.json"
 
 
-def _widget_load(canvas_id: str) -> dict:
-    p = _widget_path(canvas_id)
+def _widget_load(canvas_id: str, session_id: str = "") -> dict:
+    p = _widget_path(canvas_id, session_id)
     if not p.exists():
         return {"_next_id": 1, "records": []}
     with open(p) as f:
         return json.load(f)
 
 
-def _widget_save(canvas_id: str, data: dict) -> None:
-    p = _widget_path(canvas_id)
+def _widget_save(canvas_id: str, data: dict, session_id: str = "") -> None:
+    p = _widget_path(canvas_id, session_id)
     with open(p, "w") as f:
         json.dump(data, f, indent=2, default=str)
 
@@ -1950,7 +2035,8 @@ async def handle_widget_query(request: web.Request) -> web.Response:
     """GET /db/widget/{canvasId}/rows — return all records, optional sort/limit."""
     try:
         cid     = request.match_info["canvasId"]
-        data    = _widget_load(cid)
+        sid     = request.query.get("sessionId", "").strip()
+        data    = _widget_load(cid, sid)
         records = data["records"]
         order   = request.query.get("order", "id")
         desc    = request.query.get("dir", "asc").upper() == "DESC"
@@ -1976,12 +2062,13 @@ async def handle_widget_insert(request: web.Request) -> web.Response:
     try:
         import datetime as _dt
         cid  = request.match_info["canvasId"]
+        sid  = request.query.get("sessionId", "").strip()
         body = await request.json()
         rows = body.get("rows") or ([body["row"]] if "row" in body else [])
         if not rows:
             return _wj({"error": "Provide 'row' or 'rows'"}, 400)
         with _widget_lock(cid):
-            data = _widget_load(cid)
+            data = _widget_load(cid, sid)
             inserted = []
             for row in rows:
                 row = {k: v for k, v in row.items() if k not in ("id", "created_at")}
@@ -1990,7 +2077,7 @@ async def handle_widget_insert(request: web.Request) -> web.Response:
                 data["_next_id"] += 1
                 data["records"].append(row)
                 inserted.append(row)
-            _widget_save(cid, data)
+            _widget_save(cid, data, sid)
         return _wj({"inserted": inserted})
     except Exception as exc:
         return _wj({"error": str(exc)}, 400)
@@ -2004,6 +2091,7 @@ async def handle_widget_update(request: web.Request) -> web.Response:
             "Access-Control-Allow-Headers": "*"})
     try:
         cid    = request.match_info["canvasId"]
+        sid    = request.query.get("sessionId", "").strip()
         row_id = int(request.match_info["id"])
         body   = await request.json()
         patch  = {k: v for k, v in body.get("data", {}).items()
@@ -2011,11 +2099,11 @@ async def handle_widget_update(request: web.Request) -> web.Response:
         if not patch:
             return _wj({"error": "'data' required"}, 400)
         with _widget_lock(cid):
-            data = _widget_load(cid)
+            data = _widget_load(cid, sid)
             for r in data["records"]:
                 if r.get("id") == row_id:
                     r.update(patch)
-                    _widget_save(cid, data)
+                    _widget_save(cid, data, sid)
                     return _wj({"updated": r})
         return _wj({"error": "Row not found"}, 404)
     except Exception as exc:
@@ -2026,14 +2114,15 @@ async def handle_widget_delete(request: web.Request) -> web.Response:
     """DELETE /db/widget/{canvasId}/rows/{id}"""
     try:
         cid    = request.match_info["canvasId"]
+        sid    = request.query.get("sessionId", "").strip()
         row_id = int(request.match_info["id"])
         with _widget_lock(cid):
-            data    = _widget_load(cid)
+            data    = _widget_load(cid, sid)
             before  = len(data["records"])
             data["records"] = [r for r in data["records"] if r.get("id") != row_id]
             if len(data["records"]) == before:
                 return _wj({"error": "Row not found"}, 404)
-            _widget_save(cid, data)
+            _widget_save(cid, data, sid)
         return _wj({"deleted": row_id})
     except Exception as exc:
         return _wj({"error": str(exc)}, 400)
@@ -2057,11 +2146,12 @@ async def handle_widget_exec(request: web.Request) -> web.Response:
             "Access-Control-Allow-Headers": "*"})
     try:
         cid  = request.match_info["canvasId"]
+        sid  = request.query.get("sessionId", "").strip()
         body = await request.json()
         code = body.get("code", "").strip()
         if not code:
             return _wj({"error": "'code' is required"}, 400)
-        data    = _widget_load(cid)
+        data    = _widget_load(cid, sid)
         ns      = {"records": data["records"], "result": None}
         exec(compile(code, "<widget-exec>", "exec"), ns)  # nosec — intentional by design
         return _wj({"result": ns.get("result")})
@@ -2589,15 +2679,17 @@ async def handle_excel_load(request: web.Request) -> web.Response:
                             if cell.font.size:   cd["fontSize"] = int(cell.font.size * 20)
                             if cell.font.color:
                                 try:
-                                    rgb = cell.font.color.rgb
-                                    if rgb: cd["fontColor"] = str(rgb)
+                                    rgb = str(cell.font.color.rgb)
+                                    # Validate: openpyxl returns error msg string for theme colors
+                                    if rgb and len(rgb) in (6, 8) and all(c in '0123456789ABCDEFabcdef' for c in rgb):
+                                        cd["fontColor"] = rgb
                                 except Exception:
                                     pass
                         if cell.fill and cell.fill.fgColor:
                             try:
-                                rgb = cell.fill.fgColor.rgb
-                                if rgb and str(rgb) not in ("00000000", ""):
-                                    cd["bgColor"] = str(rgb)
+                                rgb = str(cell.fill.fgColor.rgb)
+                                if rgb and len(rgb) in (6, 8) and all(c in '0123456789ABCDEFabcdef' for c in rgb) and rgb not in ("00000000", "000000"):
+                                    cd["bgColor"] = rgb
                             except Exception:
                                 pass
                         if cell.alignment:
@@ -3034,6 +3126,99 @@ async def handle_ppt_save(request: web.Request) -> web.Response:
         return web.json_response({"error": str(exc)}, status=500, headers=CORS_HEADERS)
 
 
+# ── Dev-server manager ───────────────────────────────────────────────────────
+# Runs `pnpm dev` (or npm/yarn) in the project cwd and exposes the URL.
+# Only one dev server per cwd is tracked; a second start call returns the URL.
+
+import asyncio as _asyncio
+_dev_servers: dict = {}   # cwd → { proc, url }
+
+async def _find_free_port() -> int:
+    import socket as _socket
+    with _socket.socket() as s:
+        s.bind(('', 0))
+        return s.getsockname()[1]
+
+async def handle_dev_server_start(request: web.Request) -> web.Response:
+    """POST /api/dev-server/start { cwd } — start pnpm dev and return the URL."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    cwd = str(body.get("cwd", "")).strip()
+    if not cwd or not Path(cwd).is_dir():
+        return web.json_response({"error": "invalid cwd"}, status=400, headers=CORS_HEADERS)
+
+    # Return existing server if already running
+    if cwd in _dev_servers:
+        entry = _dev_servers[cwd]
+        if entry["proc"].returncode is None:  # still running
+            return web.json_response({"url": entry["url"]}, headers=CORS_HEADERS)
+
+    # Pick a free port
+    port = await _find_free_port()
+
+    # Detect remote environment via Host header.
+    # Gateway routes ws_abc123-{port}.workspaces.boltzhub.com → container:18789
+    # with X-Target-Port:{port}, so the browser-visible URL uses the subdomain.
+    host = request.headers.get("Host", "")
+    if ".workspaces.boltzhub.com" in host:
+        workspace_id = host.split(".")[0]  # e.g. "ws_abc123"
+        url = f"https://{workspace_id}-{port}.workspaces.boltzhub.com"
+    else:
+        url = f"http://localhost:{port}"
+
+    # Detect package manager and start command.
+    # Bind to 0.0.0.0 so the X-Target-Port proxy (loopback → target) can reach it;
+    # Vite's --host flag controls the listening address.
+    pkg_dir = Path(cwd)
+    if (pkg_dir / "pnpm-lock.yaml").exists():
+        cmd = ["pnpm", "dev", "--port", str(port), "--host", "0.0.0.0"]
+    elif (pkg_dir / "yarn.lock").exists():
+        cmd = ["yarn", "dev", "--port", str(port), "--host", "0.0.0.0"]
+    else:
+        cmd = ["npm", "run", "dev", "--", "--port", str(port), "--host", "0.0.0.0"]
+
+    try:
+        proc = await _asyncio.create_subprocess_exec(
+            *cmd, cwd=cwd,
+            stdout=_asyncio.subprocess.DEVNULL,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError as e:
+        return web.json_response({"error": f"command not found: {e}"}, status=500, headers=CORS_HEADERS)
+
+    _dev_servers[cwd] = {"proc": proc, "url": url}
+    # Give the server a moment to start
+    await _asyncio.sleep(2)
+    if proc.returncode is not None:
+        return web.json_response({"error": "dev server exited immediately — check package.json"}, status=500, headers=CORS_HEADERS)
+
+    print(f"[dev-server] started pid={proc.pid} url={url} cwd={cwd}", file=sys.stderr)
+    return web.json_response({"url": url, "pid": proc.pid}, headers=CORS_HEADERS)
+
+
+async def handle_dev_server_stop(request: web.Request) -> web.Response:
+    """POST /api/dev-server/stop { cwd } — stop the dev server for this cwd."""
+    if request.method == "OPTIONS":
+        return web.Response(headers=CORS_HEADERS)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    cwd = str(body.get("cwd", "")).strip()
+    entry = _dev_servers.pop(cwd, None)
+    if entry:
+        try:
+            entry["proc"].terminate()
+            print(f"[dev-server] stopped pid={entry['proc'].pid}", file=sys.stderr)
+        except Exception:
+            pass
+    return web.json_response({"ok": True}, headers=CORS_HEADERS)
+
+
 async def handle_write_file(request: web.Request) -> web.Response:
     """PUT /api/file { path, content } — write text content to a file."""
     if request.method == "OPTIONS":
@@ -3121,6 +3306,31 @@ async def handle_file_download(request: web.Request) -> web.Response:
     return web.Response(body=p.read_bytes(), headers=headers)
 
 
+async def handle_get_cursor(request: web.Request) -> web.Response:
+    """GET /api/doc/cursor?path=<abs> — return saved cursor position for a file."""
+    path = request.rel_url.query.get("path", "").strip()
+    if not path:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    cursor = _cursor_store.get(path, {"selStart": 0, "selEnd": 0})
+    return web.json_response(cursor, headers=CORS_HEADERS)
+
+
+async def handle_put_cursor(request: web.Request) -> web.Response:
+    """PUT /api/doc/cursor { path, selStart, selEnd } — save cursor position for a file."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400, headers=CORS_HEADERS)
+    path = str(body.get("path", "")).strip()
+    if not path:
+        return web.json_response({"error": "path required"}, status=400, headers=CORS_HEADERS)
+    _cursor_store[path] = {
+        "selStart": int(body.get("selStart", 0)),
+        "selEnd":   int(body.get("selEnd",   0)),
+    }
+    return web.json_response({"ok": True}, headers=CORS_HEADERS)
+
+
 async def handle_batch_run(request: web.Request) -> web.Response:
     """POST /batch  { cwds: [str], message: str, sessions?: {cwd: sessionId} }
     Starts bzcode in YOLO mode for each directory concurrently.
@@ -3157,9 +3367,104 @@ async def handle_batch_status(request: web.Request) -> web.Response:
     return web.json_response({"batchId": batch_id, "done": done, "items": items}, headers=CORS_HEADERS)
 
 
+async def _target_port_middleware(app: web.Application, handler):
+    """
+    Middleware: if the request carries X-Target-Port, reverse-proxy it to
+    localhost:{port} instead of handling it as an API call.
+    This is how the FlowInfra gateway routes subdomain traffic like
+    ws_abc123-3000.workspaces.boltzhub.com → port 18789 with X-Target-Port: 3000.
+    """
+    async def middleware(request: web.Request) -> web.StreamResponse:
+        target_port_hdr = request.headers.get("X-Target-Port", "").strip()
+        if not target_port_hdr:
+            return await handler(request)
+
+        try:
+            target_port = int(target_port_hdr)
+        except ValueError:
+            return await handler(request)
+
+        target_base = f"http://localhost:{target_port}"
+
+        # ── WebSocket upgrade → proxy as WebSocket ────────────────────────────
+        if (request.headers.get("Upgrade", "").lower() == "websocket" or
+                request.headers.get("Connection", "").lower().find("upgrade") >= 0):
+            ws_client = web.WebSocketResponse()
+            await ws_client.prepare(request)
+            import aiohttp as _aio
+            target_url = target_base.replace("http://", "ws://") + str(request.rel_url)
+            forward_headers = {
+                k: v for k, v in request.headers.items()
+                if k.lower() not in ("host", "x-target-port")
+            }
+            try:
+                async with _aio.ClientSession() as sess:
+                    async with sess.ws_connect(target_url, headers=forward_headers) as ws_target:
+                        async def _fwd_to_target():
+                            async for msg in ws_client:
+                                if msg.type == _aio.WSMsgType.TEXT:
+                                    await ws_target.send_str(msg.data)
+                                elif msg.type == _aio.WSMsgType.BINARY:
+                                    await ws_target.send_bytes(msg.data)
+                                elif msg.type in (_aio.WSMsgType.CLOSE, _aio.WSMsgType.ERROR):
+                                    break
+                        async def _fwd_to_client():
+                            async for msg in ws_target:
+                                if msg.type == _aio.WSMsgType.TEXT:
+                                    await ws_client.send_str(msg.data)
+                                elif msg.type == _aio.WSMsgType.BINARY:
+                                    await ws_client.send_bytes(msg.data)
+                                elif msg.type in (_aio.WSMsgType.CLOSE, _aio.WSMsgType.ERROR):
+                                    break
+                        import asyncio as _aio2
+                        done, pending = await _aio2.wait(
+                            [_aio2.ensure_future(_fwd_to_target()),
+                             _aio2.ensure_future(_fwd_to_client())],
+                            return_when=_aio2.FIRST_COMPLETED,
+                        )
+                        for t in pending:
+                            t.cancel()
+            except Exception as exc:
+                print(f"[proxy-ws] error: {exc}", file=sys.stderr)
+            return ws_client
+
+        # ── Regular HTTP → reverse-proxy ─────────────────────────────────────
+        target_url = target_base + str(request.rel_url)
+        forward_headers = {
+            k: v for k, v in request.headers.items()
+            if k.lower() not in ("host", "x-target-port", "transfer-encoding")
+        }
+        body = await request.read()
+        import aiohttp as _aio
+        try:
+            async with _aio.ClientSession() as sess:
+                resp = await sess.request(
+                    request.method, target_url,
+                    headers=forward_headers,
+                    data=body or None,
+                    allow_redirects=False,
+                )
+                resp_headers = {
+                    k: v for k, v in resp.headers.items()
+                    if k.lower() not in ("transfer-encoding", "content-encoding")
+                }
+                resp_headers["Access-Control-Allow-Origin"] = "*"
+                content = await resp.read()
+                return web.Response(
+                    status=resp.status,
+                    headers=resp_headers,
+                    body=content,
+                )
+        except Exception as exc:
+            print(f"[proxy-http] error proxying to {target_url}: {exc}", file=sys.stderr)
+            return web.Response(status=502, text=f"Bad Gateway: {exc}")
+
+    return middleware
+
+
 def make_http_app(bzcode_path: str = "", default_cwd: str = "",
                   port: int = 18789) -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[_target_port_middleware])
     app["bzcode_path"] = bzcode_path
     app["default_cwd"] = default_cwd
     app["port"]        = port
@@ -3200,9 +3505,12 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
     app.router.add_post("/whatsapp/status",    handle_whatsapp_status)
     # Auth
     app.router.add_post("/auth",                   handle_auth)
+    app.router.add_post("/auth/logout",            handle_logout)
     app.router.add_route("OPTIONS", "/auth",         handle_options)
+    app.router.add_route("OPTIONS", "/auth/logout",  handle_options)
     # Widgets
     app.router.add_get(   "/widgets",                handle_get_widgets)
+    app.router.add_get(   "/widgets/template",       handle_get_widget_template)
     app.router.add_post(  "/widgets",                handle_post_widget)
     app.router.add_post(  "/widgets/seed",           handle_seed_widgets)
     app.router.add_get(   "/widgets/{id}",           handle_get_widget)
@@ -3232,9 +3540,16 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
     # File read / write (for worker + coder editor panel)
     app.router.add_get(  "/api/file",               handle_read_file)
     app.router.add_put(  "/api/file",               handle_write_file)
+    app.router.add_post( "/api/dev-server/start",   handle_dev_server_start)
+    app.router.add_post( "/api/dev-server/stop",    handle_dev_server_stop)
+    app.router.add_route("OPTIONS", "/api/dev-server/start", handle_options)
+    app.router.add_route("OPTIONS", "/api/dev-server/stop",  handle_options)
     app.router.add_post( "/api/file/rename",        handle_file_rename)
     app.router.add_post( "/api/file/duplicate",     handle_file_duplicate)
     app.router.add_get(  "/api/file/download",      handle_file_download)
+    app.router.add_get(  "/api/doc/cursor",          handle_get_cursor)
+    app.router.add_put(  "/api/doc/cursor",          handle_put_cursor)
+    app.router.add_route("OPTIONS", "/api/doc/cursor", handle_options)
     app.router.add_post("/api/doc/parse",            handle_parse_doc)
     app.router.add_put( "/api/doc/save",             handle_save_doc)
     app.router.add_route("OPTIONS", "/api/file",     handle_options)
@@ -3407,12 +3722,30 @@ async def send_to_client(queue: asyncio.Queue, ws: "web.WebSocketResponse") -> N
                 break
 
 
-async def drain_bzcode_stderr(proc: asyncio.subprocess.Process) -> None:
+async def drain_bzcode_stderr(
+    proc: asyncio.subprocess.Process,
+    out_queue: "asyncio.Queue | None" = None,
+) -> None:
+    """Read bzcode stderr, log it, and forward auth errors to the client."""
+    _AUTH_KEYWORDS = ("token is expired", "Token refresh failed", "invalid authentication token",
+                      "invalid_token", "unauthorized", "401")
     while True:
         line = await proc.stderr.readline()
         if not line:
             break
-        print(f"[bzcode] {line.decode().rstrip()}", file=sys.stderr)
+        text = line.decode().rstrip()
+        print(f"[bzcode] {text}", file=sys.stderr)
+        # Forward authentication errors so the frontend can prompt re-login
+        if out_queue and any(k.lower() in text.lower() for k in _AUTH_KEYWORDS):
+            msg = json.dumps({
+                "type":    "system",
+                "event":   "auth-error",
+                "message": "Your authentication token has expired. Please sign in again.",
+            })
+            try:
+                out_queue.put_nowait(msg)
+            except Exception:
+                pass
 
 
 async def relay_client_messages(
@@ -3502,7 +3835,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
             read_bzcode_stdout(proc, out_queue, ready_event,
                                cwd=effective_cwd, mode=req_mode),
             send_to_client(out_queue, ws),
-            drain_bzcode_stderr(proc),
+            drain_bzcode_stderr(proc, out_queue),
             relay_client_messages(proc, ws, ready_event),
         )
     except (BrokenPipeError, ConnectionResetError, asyncio.CancelledError):
@@ -3529,7 +3862,26 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="bzcode bridge + search/session server")
-    parser.add_argument("--bzcode", default="./bzcode")
+    def _default_bzcode() -> str:
+        """Find the bzcode binary: env var → common install locations → ./bzcode fallback."""
+        import shutil as _sh
+        env_val = os.environ.get("BZCODE_PATH", "")
+        if env_val:
+            return env_val
+        # Common install locations
+        for candidate in [
+            Path.home() / ".local" / "bin" / "bzcode",
+            Path("/usr/local/bin/bzcode"),
+            Path("/opt/boltzagent/bzcode"),
+        ]:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        found = _sh.which("bzcode")
+        if found:
+            return found
+        return "./bzcode"  # last resort (may be a directory — will fail with a clear error)
+
+    parser.add_argument("--bzcode", default=_default_bzcode())
     parser.add_argument("--host",   default="localhost")
     parser.add_argument("--port",   type=int, default=18789)
     parser.add_argument("--cwd",    default=os.getcwd())
@@ -3543,6 +3895,13 @@ def main() -> None:
     args = parser.parse_args()
 
     bzcode_path = os.path.abspath(args.bzcode)
+    if not os.path.isfile(bzcode_path) or not os.access(bzcode_path, os.X_OK):
+        print(
+            f"\n⚠️  bzcode not found or not executable at: {bzcode_path}\n"
+            f"   Pass the correct path with --bzcode or set BZCODE_PATH env var.\n"
+            f"   Example: BZCODE_PATH=~/.local/bin/bzcode .venv/bin/python server.py\n",
+            file=sys.stderr,
+        )
     default_cwd = os.path.abspath(args.cwd)
     port        = args.port   # single port for everything
 

@@ -4,13 +4,20 @@ After=network.target
 
 [Service]
 Type=simple
+# Run as a dedicated non-root user (create with: useradd -m -s /bin/bash boltzagent)
+User=boltzagent
+Group=boltzagent
+
 WorkingDirectory=/opt/boltzagent
 ExecStart=/opt/boltzagent/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 18789
 Restart=on-failure
 RestartSec=5
 
 Environment=BZCODE_PATH=/opt/boltzagent/bzcode
-Environment=BZCODE_CWD=/opt/boltzagent
+# BZCODE_CWD must be a directory the service user can write to.
+# /opt/boltzagent is typically owned by root — use the user's home or a
+# dedicated workspace instead:
+Environment=BZCODE_CWD=/home/boltzagent/workspace
 Environment=PORT=18789
 
 # Optional: keep logs in systemd journal

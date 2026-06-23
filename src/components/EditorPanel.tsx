@@ -256,8 +256,12 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
   const [dragTab,      setDragTab]      = useState<string | null>(null);
   const [dragOver,     setDragOver]     = useState<string | null>(null);
   const [ctxMenu,      setCtxMenu]      = useState<CtxMenu | null>(null);
+  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [treeVersion,  setTreeVersion]  = useState(0);
+  const [cursors,      setCursors]      = useState<Record<string, { selStart: number; selEnd: number }>>({});
+  const cursorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const ctxMenuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on outside click
@@ -325,7 +329,19 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
 
   // Open a file: fetch content and add a tab
   async function openFile(filePath: string) {
-    if (tabs.find(t => t.path === filePath)) { setActiveTab(filePath); return; }
+    const existing = tabs.find(t => t.path === filePath);
+    if (existing) {
+      // Excel/PPT tabs load data from the server — close and reopen to get fresh data
+      // (avoids showing stale error state after server restart)
+      if (existing.isExcel || existing.isPpt) {
+        setTabs(prev => prev.filter(t => t.path !== filePath));
+        // fall through to reopen below
+      } else {
+        setError('');
+        setActiveTab(filePath);
+        return;
+      }
+    }
     setError('');
     const name = filePath.split('/').pop() ?? filePath;
     try {
@@ -348,6 +364,9 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
         });
         const d = await r.json() as { content?: string; blocks?: Block[]; type?: string; pages?: number; wordCount?: number; truncated?: boolean; error?: string };
         if (d.error) { setError(d.error); return; }
+        // Reset cursor to 0 on fresh open so it's always in the visible viewport.
+        // The in-memory cursors map is also cleared so a re-open starts fresh.
+        setCursors(prev => { const n = { ...prev }; delete n[filePath]; return n; });
         setTabs(prev => [...prev, {
           path: filePath, name, content: d.content ?? '', dirty: false,
           docType: d.type, docPages: d.pages, docWordCount: d.wordCount, docTruncated: d.truncated,
@@ -363,9 +382,11 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     } catch (e) { setError(String(e)); }
   }
 
-  // Reload active file when agent finishes a turn (increments refreshKey)
+  // Reload active file and refresh file tree when agent finishes a turn (increments refreshKey)
   // Skip document files — they use /api/doc/parse and raw bytes would overwrite parsed content
   useEffect(() => {
+    if (refreshKey === 0) return; // skip initial mount
+    setTreeVersion(v => v + 1);
     if (!activeTab) return;
     const currentTabData = tabs.find(t => t.path === activeTab);
     if (currentTabData?.docType) return; // document — don't reload raw bytes
@@ -377,7 +398,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
       })
       .catch(() => null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, refreshKey]);
+  }, [refreshKey]);
 
   // Resize textarea to match content so the outer div scrolls (not the textarea itself)
   useEffect(() => {
@@ -394,6 +415,20 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     if (activeTab === path) setActiveTab(next[Math.max(0, idx - 1)]?.path ?? null);
     setTabs(next);
   }
+
+  // Called by WordDocEditor on every cursor/selection change.
+  // Updates in-memory map immediately; debounces server save to avoid flooding.
+  const handleCursorChange = useCallback((path: string, cursor: { selStart: number; selEnd: number }) => {
+    setCursors(prev => ({ ...prev, [path]: cursor }));
+    // Debounce: cancel previous timer for this path
+    if (cursorSaveTimers.current[path]) clearTimeout(cursorSaveTimers.current[path]);
+    cursorSaveTimers.current[path] = setTimeout(() => {
+      fetch(`${HTTP_BASE}/api/doc/cursor`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, ...cursor }),
+      }).catch(() => null);
+    }, 500);
+  }, []);
 
   async function save() {
     if (!currentTab?.dirty) return;
@@ -428,6 +463,46 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     letterSpacing: 0,
     wordSpacing: 0,
   };
+
+  // ── Preview mode — full-panel iframe replacing editor + file tree ──────────
+  if (previewUrl) {
+    return (
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid var(--border-primary)` }}>
+        {/* Preview toolbar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          background: 'var(--bg-secondary)', borderBottom: `1px solid var(--border-primary)`,
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: FONT_STYLE.fontFamily, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            🟢 Running · <a href={previewUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{previewUrl}</a>
+          </span>
+          <button type="button" onClick={() => { const f = document.querySelector<HTMLIFrameElement>('.editor-preview-iframe'); if (f) f.src = f.src; }} style={{
+            padding: '2px 8px', fontSize: 11, border: `1px solid var(--border-primary)`,
+            borderRadius: 3, background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
+          }}>↺ Reload</button>
+          <button type="button" onClick={() => {
+            setPreviewUrl(null);
+            fetch(`${HTTP_BASE}/api/dev-server/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd }) }).catch(() => null);
+          }} style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '2px 10px', fontSize: 11,
+            border: `1px solid var(--accent-red)`, borderRadius: 3,
+            background: 'transparent', color: 'var(--accent-red)', cursor: 'pointer',
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent-red)', display: 'inline-block' }} />
+            Stop
+          </button>
+        </div>
+        <iframe
+          className="editor-preview-iframe"
+          src={previewUrl}
+          style={{ flex: 1, border: 'none', minHeight: 0, background: '#fff' }}
+          title="Preview"
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'visible', borderRight: `1px solid var(--border-primary)` }}>
@@ -493,9 +568,11 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
 
         {/* Tab bar — tabs are draggable to reorder */}
         <div style={{
-          display: 'flex', alignItems: 'flex-end', background: 'var(--bg-secondary)',
-          borderBottom: `1px solid var(--border-primary)`, minHeight: 35, flexShrink: 0, overflowX: 'auto',
+          display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)',
+          borderBottom: `1px solid var(--border-primary)`, minHeight: 35, flexShrink: 0,
         }}>
+          {/* Scrollable tab list */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', overflowX: 'auto', minWidth: 0, height: '100%' }}>
           {tabs.length === 0
             ? <span style={{ padding: '8px 16px', fontSize: 12, color: 'var(--text-tertiary)' }}>No file open</span>
             : tabs.map(tab => {
@@ -567,7 +644,32 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
                 </button>
               );
             })}
-        </div>
+          </div>{/* end scrollable tab list */}
+
+          {/* Run button — always visible, runs the whole project */}
+          <div style={{ flexShrink: 0, padding: '0 8px', borderLeft: `1px solid var(--border-primary)`, display: 'flex', alignItems: 'center', height: '100%' }}>
+            {previewUrl ? (
+              <button type="button" onClick={() => {
+                setPreviewUrl(null);
+                fetch(`${HTTP_BASE}/api/dev-server/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd }) }).catch(() => null);
+              }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', fontSize: 11, border: `1px solid var(--accent-red)`, borderRadius: 3, background: 'transparent', color: 'var(--accent-red)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent-red)', display: 'inline-block' }} /> Stop
+              </button>
+            ) : (
+              <button type="button" disabled={previewLoading} onClick={async () => {
+                setPreviewLoading(true);
+                try {
+                  const r = await fetch(`${HTTP_BASE}/api/dev-server/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd }) });
+                  const d = await r.json() as { url?: string; error?: string };
+                  if (d.url) setPreviewUrl(d.url); else setError(d.error ?? 'Failed to start dev server');
+                } catch (e) { setError(String(e)); } finally { setPreviewLoading(false); }
+              }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', fontSize: 11, border: `1px solid var(--accent-green)`, borderRadius: 3, background: 'transparent', color: 'var(--accent-green)', cursor: 'pointer', opacity: previewLoading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                {previewLoading ? 'Starting…' : 'Run'}
+              </button>
+            )}
+          </div>
+        </div>{/* end tab bar */}
 
         {/* Path + save toolbar — hidden for doc files which have their own toolbar */}
         {currentTab && !currentTab.docType && (
@@ -635,8 +737,11 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
               {currentTab.blocks ? (
                 /* Word (DOCX): flex: 1 so it fills remaining height in doc-word-shell column */
                 <WordDocEditor
+                  key={currentTab.path}
                   blocks={currentTab.blocks}
+                  initialCursor={cursors[currentTab.path]}
                   onChange={(blocks: Block[]) => setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, blocks, dirty: true } : t))}
+                  onCursorChange={(cursor) => handleCursorChange(currentTab.path, cursor)}
                   style={{ flex: 1, minHeight: 0 }}
                 />
               ) : (

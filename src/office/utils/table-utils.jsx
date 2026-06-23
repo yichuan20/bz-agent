@@ -43,7 +43,8 @@ export const getCellAtClick = (clickX, clickY, text, xs, ys) => {
 
     const tEndY = ys[tEndIndex];
 
-    if (clickY < tStartY - LINE_HEIGHT || clickY > tEndY + PAD + LINE_HEIGHT) {
+    // Skip table if its positions are outside the rendered viewport (undefined) or out of click range
+    if (tStartY == null || tEndY == null || clickY < tStartY - LINE_HEIGHT || clickY > tEndY + PAD + LINE_HEIGHT) {
       i = tEndIndex + 1;
       continue;
     }

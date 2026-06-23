@@ -322,7 +322,6 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     y = nextPos.y;
     tableState = nextPos.tableState;
 
-    // Convert content Y to canvas Y for visibility check
     const drawY = contentYToDrawY(y, topMargin);
     if (drawY - scrollY > VIEW_H * SF && !tableState && text?.[i] !== T_END) {
       newXs = newXs.slice(0, i + 1);
@@ -347,7 +346,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   // Draw page backgrounds BEFORE drawing content
   drawPageSetup({ ctx, topMargin, scrollY, numPages, headerText, footerText, gapColor });
 
-  // step 2: draw the document
+  // step 2: draw the document (viewport-clipped — only paint visible chars)
   i = clamp(startI, 0, text.length);
 
   while (i < newXs.length && i < text.length) {
@@ -355,6 +354,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     y = newYs[i];
     // Convert content Y to canvas Y (with page gaps) for drawing
     const drawY = contentYToDrawY(y, topMargin) - scrollY;
+
 
     ctx.font = `${FONT_SIZE * SF}px Arial`;
     ctx.fillStyle = 'black';
@@ -476,7 +476,6 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   drawTableLines({ ctx, ys: newYs, text, startI, endI: i, scrollY, topMargin });
 
   if (selStart === selEnd && selStart === text.length && caretVisible) {
-    // Use newYs[text.length] for correct y position after newlines
     const caretY = newYs[text.length] !== undefined ? newYs[text.length] : y;
     const caretDrawY = contentYToDrawY(caretY, topMargin) - scrollY;
     drawCaret({ x: newXs[text.length] || x, y: caretDrawY, ctx });
