@@ -4,6 +4,20 @@ All notable changes to the bz-agent server are documented here.
 
 ---
 
+## [0.1.0] - 2026-06-27
+
+### Changed
+- **`app.py` is now the sole HTTP entry point.** All ~67 routes previously split between `server.py` (aiohttp) and `app.py` (FastAPI) are now consolidated in `app.py`. `server.py` is a pure utility/business-logic module with no runnable HTTP layer — it cannot be launched as a server.
+- All routes are grouped into named `APIRouter` instances (`ws`, `auth`, `files`, `sessions`, `canvas`, `db`, `boltzhub`, `batch`, `whatsapp`, `misc`) visible in the `/docs` OpenAPI UI.
+
+### Fixed
+- **`BZ_PYTHON` missing from bzcode environment** — new sessions spawned via `app.py` were missing the `BZ_PYTHON` env var, causing agent scripts (e.g. `create-doc.py`, `create-widget.py`) to fail with "Permission denied" when the model tried to run them. Fixed by passing `BZ_PYTHON: sys.executable` in the subprocess env, matching `server.py` behaviour.
+- **`GET /widgets/template` shadowed by `GET /widgets/{widget_id}`** — route registration order caused `/widgets/template?name=clock` to match the parameterized handler (returning "widget not found") instead of the template handler. Moved the static route before the parameterized one.
+- **Canvas not persisted / wrong widget shown after page refresh** — `GET /canvas` and `POST /canvas` ignored the `sessionId` query parameter and always read/wrote `{cwd}/.bzcanvas.json`. The agent scripts write to `~/.boltzbit/sessions/{id}/.bzcanvas.json`, so the canvas was never found on reload. Both endpoints now use `_canvas_file(sessionId, cwd)` consistent with all other session-scoped storage.
+- **"Open file" chat chip opening blank screen** — relative paths extracted from agent messages (e.g. `poem.docx`) were sent to the server as-is. The server could not resolve them without cwd context. Chips now resolve relative paths against `activeCwd` before dispatching the `open-file` event or calling `/api/doc/parse`.
+
+---
+
 ## [0.0.3] - 2026-06-26
 
 ### Fixed

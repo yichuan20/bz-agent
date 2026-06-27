@@ -3890,10 +3890,11 @@ function AgentPage() {
                                       className="agent-doc-open-btn"
                                       onClick={() => {
                                         const ext = p.split('.').pop()?.toLowerCase() ?? '';
+                                        const absPath = p.startsWith('/') ? p : `${activeCwd}/${p}`;
                                         // Office files: open in EditorPanel (Excel, PPT, Word)
                                         if (['xlsx','xls','pptx','ppt','docx','doc'].includes(ext)) {
                                           setEditorRefreshKey(k => k + 1);
-                                          window.dispatchEvent(new CustomEvent('open-file', { detail: { path: p } }));
+                                          window.dispatchEvent(new CustomEvent('open-file', { detail: { path: absPath } }));
                                           return;
                                         }
                                         setDocViewerLoading(true);
@@ -3901,12 +3902,12 @@ function AgentPage() {
                                         fetch(`${HTTP_BASE}/api/doc/parse`, {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ path: p }),
+                                          body: JSON.stringify({ path: absPath }),
                                         })
                                           .then(r => r.json())
                                           .then((d: { filename?: string; type?: string; pages?: number; wordCount?: number; content?: string; truncated?: boolean; error?: string }) => {
                                             if (d.error) return;
-                                            setDocViewer({ path: p, name: d.filename ?? p.split('/').pop() ?? p, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated });
+                                            setDocViewer({ path: absPath, name: d.filename ?? absPath.split('/').pop() ?? absPath, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated });
                                           })
                                           .finally(() => setDocViewerLoading(false));
                                       }}

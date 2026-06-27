@@ -16,3 +16,4 @@ todos.json
 .npmrc
 server_data/
 twilio_config.sh
+*.zip

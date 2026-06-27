@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import (
+    APIRouter,
     BackgroundTasks,
     FastAPI,
     HTTPException,
@@ -94,6 +95,18 @@ from server import (
     relay_client_messages,
     handle_ws_client,
     _write_bzcode_credentials,
+    # Canvas / widget helpers
+    WIDGETS_DIR,
+    CUSTOM_WIDGETS_DIR,
+    _custom_widgets_dir,
+    _canvas_file,
+    # Document parsing
+    _detect_and_parse,
+    _blocks_to_docx,
+    # Dev-server & cursor
+    _cursor_store,
+    _dev_servers,
+    _find_free_port,
     # _add_frontend kept separate — called after app is built
 )
 
@@ -194,6 +207,69 @@ class WriteFileBody(BaseModel):
 class WhatsAppStatus(BaseModel):
     pass
 
+class FileRenameBody(BaseModel):
+    path: str
+    newName: str
+
+class FileDuplicateBody(BaseModel):
+    path: str
+
+class WriteFileBody2(BaseModel):
+    path: str
+    content: str = ""
+
+class CursorBody(BaseModel):
+    path: str
+    selStart: int = 0
+    selEnd: int = 0
+
+class DocPathBody(BaseModel):
+    path: str
+
+class DocSaveBody(BaseModel):
+    path: str
+    blocks: list
+
+class ExcelSaveBody(BaseModel):
+    path: str
+    sheets: list = []
+
+class PptSaveBody(BaseModel):
+    path: str
+    slides: list = []
+
+class DeployWidgetBody(BaseModel):
+    sessionId: str = ""
+    cwd: str = ""
+    title: str = "Widget"
+    code: str = ""
+    w: int = 380
+    h: int = 280
+    x: Optional[int] = None
+    y: Optional[int] = None
+    initialData: list = []
+
+class CustomWidgetCodeBody(BaseModel):
+    code: str = ""
+
+class LogoutBody(BaseModel):
+    authUrl: str = "https://boltzhub.com"
+
+class DevServerBody(BaseModel):
+    cwd: str = ""
+
+class BzHubSyncBody(BaseModel):
+    cwd: str = ""
+    appId: str = ""
+
+class BzHubVersionBody(BaseModel):
+    appId: str
+    releaseNotes: str = ""
+    versionNumber: str = "1.0.0"
+
+class BzHubPublishBody(BaseModel):
+    appId: str
+
 # ── Lifespan (startup / shutdown) ────────────────────────────────────────────
 
 @asynccontextmanager
@@ -249,9 +325,21 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         allow_headers=["*"],
     )
 
-    # ── WebSocket bridge ──────────────────────────────────────────────────────
+    # ── Routers (one per domain — tags drive OpenAPI grouping) ────────────────
+    ws_router        = APIRouter(tags=["WebSocket"])
+    auth_router      = APIRouter(tags=["Auth"])
+    files_router     = APIRouter(tags=["Files"])
+    sessions_router  = APIRouter(tags=["Sessions"])
+    canvas_router    = APIRouter(tags=["Canvas & Widgets"])
+    db_router        = APIRouter(prefix="/db",        tags=["Database"])
+    boltzhub_router  = APIRouter(prefix="/boltzhub",  tags=["BoltzHub"])
+    batch_router     = APIRouter(tags=["Batch"])
+    whatsapp_router  = APIRouter(prefix="/whatsapp",  tags=["WhatsApp"])
+    misc_router      = APIRouter(tags=["Misc"])
 
-    @app.websocket("/ws")
+    # ── § 1 · WebSocket bridge ────────────────────────────────────────────────
+
+    @ws_router.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket,
                           cwd: str = Query(""),
                           sessionId: str = Query(""),
@@ -350,7 +438,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=effective_cwd,
-                env={**os.environ},
+                env={**os.environ, "BZ_PYTHON": sys.executable},
             )
         except (FileNotFoundError, PermissionError) as exc:
             _active_cwds.discard(effective_cwd)
@@ -389,9 +477,9 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 except ProcessLookupError:
                     pass
 
-    # ── Auth ──────────────────────────────────────────────────────────────────
+    # ── § 2 · Auth & Credentials ─────────────────────────────────────────────
 
-    @app.post("/auth")
+    @auth_router.post("/auth")
     async def auth(body: AuthBody):
         _write_bzcode_credentials(
             access_token=body.accessToken,
@@ -401,11 +489,13 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         )
         return {"ok": True}
 
-    @app.get("/api/version")
+    # ── § 10 · Misc (version + home live here; rest follows below) ───────────
+
+    @misc_router.get("/api/version")
     async def api_version():
         return {"backend": BACKEND_VERSION}
 
-    @app.get("/api/home")
+    @misc_router.get("/api/home")
     async def api_home():
         home = str(Path.home())
         default_cwd = os.getcwd()
@@ -414,9 +504,9 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             "defaultCwd": default_cwd if os.path.isdir(default_cwd) else home,
         }
 
-    # ── Proxy ─────────────────────────────────────────────────────────────────
+    # ── Proxy (misc) ──────────────────────────────────────────────────────────
 
-    @app.post("/proxy")
+    @misc_router.post("/proxy")
     async def proxy(body: ProxyBody):
         import aiohttp, re as _re
         creds_file = SERVER_DATA_DIR / "credentials.json"
@@ -451,7 +541,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
     # ── Credentials ───────────────────────────────────────────────────────────
 
-    @app.get("/credentials")
+    @auth_router.get("/credentials")
     async def get_credential_keys():
         f = SERVER_DATA_DIR / "credentials.json"
         if not f.exists():
@@ -461,7 +551,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         except Exception:
             return {"keys": []}
 
-    @app.post("/credentials")
+    @auth_router.post("/credentials")
     async def post_credential(body: CredentialBody):
         SERVER_DATA_DIR.mkdir(parents=True, exist_ok=True)
         f = SERVER_DATA_DIR / "credentials.json"
@@ -470,7 +560,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         f.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         return {"ok": True, "key": body.key}
 
-    @app.delete("/credentials/{key}")
+    @auth_router.delete("/credentials/{key}")
     async def delete_credential(key: str):
         f = SERVER_DATA_DIR / "credentials.json"
         if not f.exists():
@@ -482,9 +572,21 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         f.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         return {"ok": True, "deleted": key}
 
-    # ── Shell + Files ─────────────────────────────────────────────────────────
+    @auth_router.post("/auth/logout")
+    async def logout(body: LogoutBody):
+        creds_file = Path.home() / ".boltzbit" / "credentials.json"
+        try:
+            if creds_file.exists():
+                existing = json.loads(creds_file.read_text())
+                existing.pop(body.authUrl, None)
+                creds_file.write_text(json.dumps(existing, indent=2))
+        except Exception as exc:
+            print(f"[auth] logout error: {exc}", file=sys.stderr)
+        return {"ok": True}
 
-    @app.get("/shell")
+    # ── § 3 · File System ─────────────────────────────────────────────────────
+
+    @files_router.get("/shell")
     async def shell(cmd: str = Query(""), cwd: str = Query("")):
         if not cmd:
             raise HTTPException(400, "cmd is required")
@@ -502,7 +604,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         except Exception as exc:
             raise HTTPException(500, str(exc))
 
-    @app.get("/files")
+    @files_router.get("/files")
     async def list_files(path: str = Query("")):
         if not path:
             path = os.getcwd()
@@ -520,7 +622,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 pass
         return {"path": str(p), "entries": entries}
 
-    @app.post("/files/mkdir")
+    @files_router.post("/files/mkdir")
     async def mkdir(body: MkdirBody):
         name = body.name.strip()
         if not body.parent or not name:
@@ -543,29 +645,26 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         except OSError as exc:
             raise HTTPException(500, str(exc))
 
-    # ── Canvas ────────────────────────────────────────────────────────────────
+    # ── § 5 · Canvas & Widgets ───────────────────────────────────────────────
 
-    @app.get("/canvas")
-    async def get_canvas(cwd: str = Query("")):
-        if not cwd or not os.path.isdir(cwd):
-            return {"widgets": []}
-        f = Path(cwd) / ".bzcanvas.json"
+    @canvas_router.get("/canvas")
+    async def get_canvas(cwd: str = Query(""), sessionId: str = Query("")):
+        f = _canvas_file(sessionId, cwd)
         if not f.exists():
             return {"widgets": []}
         return json.loads(f.read_text())
 
-    @app.post("/canvas")
-    async def post_canvas(request: Request, cwd: str = Query("")):
-        if not cwd or not os.path.isdir(cwd):
-            raise HTTPException(400, "invalid cwd")
+    @canvas_router.post("/canvas")
+    async def post_canvas(request: Request, cwd: str = Query(""), sessionId: str = Query("")):
         body = await request.json()
-        f = Path(cwd) / ".bzcanvas.json"
+        f = _canvas_file(sessionId, cwd)
+        f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(body, indent=2, ensure_ascii=False))
         return {"ok": True, "file": str(f)}
 
     # ── Widgets ───────────────────────────────────────────────────────────────
 
-    @app.get("/widgets")
+    @canvas_router.get("/widgets")
     async def get_widgets():
         data = _load_index()
         return {"widgets": [
@@ -573,7 +672,16 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             for e in data.get("widgets", []) if not e.get("archived", False)
         ]}
 
-    @app.get("/widgets/{widget_id}")
+    @canvas_router.get("/widgets/template")
+    async def get_widget_template(name: str = Query(...)):
+        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+        p = WIDGETS_DIR / f"{safe}.js"
+        if not p.exists():
+            raise HTTPException(404, f"template not found: {name}")
+        from fastapi.responses import Response as _Resp
+        return _Resp(content=p.read_text(encoding="utf-8"), media_type="application/javascript")
+
+    @canvas_router.get("/widgets/{widget_id}")
     async def get_widget(widget_id: str = FPath(...)):
         data = _load_index()
         entry = next((w for w in data.get("widgets", []) if w.get("id") == widget_id), None)
@@ -581,7 +689,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             raise HTTPException(404, "widget not found")
         return {**entry, "code": _load_code(widget_id)}
 
-    @app.post("/widgets")
+    @canvas_router.post("/widgets")
     async def post_widget(request: Request):
         body = await request.json()
         widget_id = body.get("id", "").strip()
@@ -605,7 +713,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             _save_code(widget_id, code)
         return {**entry, "code": _load_code(widget_id)}
 
-    @app.post("/widgets/seed")
+    @canvas_router.post("/widgets/seed")
     async def seed_widgets(request: Request):
         body = await request.json()
         incoming = body if isinstance(body, list) else (body.get("widgets") or [])
@@ -638,7 +746,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         print(f"[widgets] seeded {seeded} built-in widget(s)", file=sys.stderr)
         return {"seeded": seeded}
 
-    @app.delete("/widgets/{widget_id}")
+    @canvas_router.delete("/widgets/{widget_id}")
     async def delete_widget(widget_id: str = FPath(...)):
         data = _load_index()
         widgets = data.get("widgets", [])
@@ -655,9 +763,79 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         _save_index(data)
         return {"ok": True, "archived": widget_id}
 
-    # ── Sessions ──────────────────────────────────────────────────────────────
+    @canvas_router.post("/canvas/deploy-widget")
+    async def deploy_widget(body: DeployWidgetBody):
+        import secrets as _sec, datetime as _dt
+        if not body.sessionId and (not body.cwd or not os.path.isdir(body.cwd)):
+            raise HTTPException(400, "sessionId or valid cwd required")
+        if not body.code:
+            raise HTTPException(400, "code is required")
+        canvas_id = _sec.token_hex(5)
+        widget_code_dir = _custom_widgets_dir(body.sessionId)
+        widget_code_dir.mkdir(parents=True, exist_ok=True)
+        (widget_code_dir / f"{canvas_id}.js").write_text(body.code, encoding="utf-8")
+        if body.initialData:
+            widget_data_dir = (SESSIONS_DIR / body.sessionId / "widget_data") if body.sessionId else (SERVER_DATA_DIR / "widget_data")
+            widget_data_dir.mkdir(parents=True, exist_ok=True)
+            records, next_id = [], 1
+            for row in body.initialData:
+                row = {k: v for k, v in row.items() if k not in ("id", "created_at")}
+                row["id"] = next_id
+                row["created_at"] = _dt.datetime.utcnow().isoformat() + "Z"
+                records.append(row)
+                next_id += 1
+            (widget_data_dir / f"{canvas_id}.json").write_text(
+                json.dumps({"_next_id": next_id, "records": records}, indent=2), encoding="utf-8")
+        canvas_file = _canvas_file(body.sessionId, body.cwd)
+        canvas_data: dict = {"version": 1, "widgets": []}
+        if canvas_file.exists():
+            try:
+                canvas_data = json.loads(canvas_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        existing = canvas_data.get("widgets", [])
+        pad = 24
+        x = body.x if body.x is not None else (pad if not existing else pad)
+        y = body.y if body.y is not None else (pad if not existing else max((e.get("y", 0) + e.get("h", 0)) for e in existing) + pad)
+        new_entry = {"canvasId": canvas_id, "widgetId": canvas_id, "kind": "custom",
+                     "title": body.title, "x": x, "y": y, "w": body.w, "h": body.h}
+        existing.append(new_entry)
+        canvas_data["widgets"] = existing
+        canvas_file.write_text(json.dumps(canvas_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        return {"ok": True, "canvasId": canvas_id, "widgetId": canvas_id,
+                "title": body.title, "x": x, "y": y, "w": body.w, "h": body.h,
+                "canvasFile": str(canvas_file)}
 
-    @app.get("/sessions")
+    @canvas_router.get("/custom-widgets/{canvas_id}")
+    async def get_custom_widget(canvas_id: str = FPath(...), sessionId: str = Query("")):
+        cwd_dir = _custom_widgets_dir(sessionId)
+        p = cwd_dir / f"{canvas_id}.js"
+        if not p.exists() and sessionId:
+            p = CUSTOM_WIDGETS_DIR / f"{canvas_id}.js"
+        if not p.exists():
+            raise HTTPException(404, "not found")
+        return {"canvasId": canvas_id, "code": p.read_text(encoding="utf-8")}
+
+    @canvas_router.put("/custom-widgets/{canvas_id}")
+    async def put_custom_widget(canvas_id: str = FPath(...), body: CustomWidgetCodeBody = CustomWidgetCodeBody(), sessionId: str = Query("")):
+        if not canvas_id:
+            raise HTTPException(400, "canvasId required")
+        dest = _custom_widgets_dir(sessionId)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / f"{canvas_id}.js").write_text(body.code, encoding="utf-8")
+        return {"ok": True, "canvasId": canvas_id}
+
+    @canvas_router.delete("/custom-widgets/{canvas_id}")
+    async def delete_custom_widget(canvas_id: str = FPath(...), sessionId: str = Query("")):
+        for d in [_custom_widgets_dir(sessionId), CUSTOM_WIDGETS_DIR]:
+            p = d / f"{canvas_id}.js"
+            if p.exists():
+                p.unlink()
+        return {"ok": True}
+
+    # ── § 4 · Sessions ────────────────────────────────────────────────────────
+
+    @sessions_router.get("/sessions")
     async def get_sessions(cwd: str = Query("")):
         if not SESSIONS_DIR.exists():
             return {"sessions": []}
@@ -684,7 +862,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             s["defaultSessionId"] = defaults.get(wd)
         return {"sessions": sessions}
 
-    @app.post("/session-default")
+    @sessions_router.post("/session-default")
     async def set_default_session(body: SetDefaultBody):
         if not body.cwd:
             raise HTTPException(400, "cwd required")
@@ -694,7 +872,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             _clear_default(body.cwd)
         return {"ok": True}
 
-    @app.delete("/sessions/{session_id}")
+    @sessions_router.delete("/sessions/{session_id}")
     async def delete_session(session_id: str = FPath(...)):
         if "/" in session_id or ".." in session_id:
             raise HTTPException(400, "invalid sessionId")
@@ -704,16 +882,16 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         p.unlink()
         return {"ok": True}
 
-    @app.post("/sessions/{session_id}/title")
+    @sessions_router.post("/sessions/{session_id}/title")
     async def update_session_title(session_id: str, body: SessionTitleBody):
         if "/" in session_id or ".." in session_id:
             raise HTTPException(400, "invalid sessionId")
         _save_title(session_id, body.title[:100])
         return {"ok": True}
 
-    # ── Search ────────────────────────────────────────────────────────────────
+    # ── Search / token-stats / agent-modes / settings (misc) ─────────────────
 
-    @app.get("/search")
+    @misc_router.get("/search")
     async def search(q: str = Query(""), key: str = Query(""), num: int = Query(10)):
         if not q:
             raise HTTPException(400, "q is required")
@@ -738,21 +916,19 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     "position": r.get("position", i+1)} for i, r in enumerate(organic)]
         return {"results": results, "meta": body.get("search_information", {})}
 
-    # ── Token stats ───────────────────────────────────────────────────────────
+    # ── Token stats / agent modes ─────────────────────────────────────────────
 
-    @app.get("/token-stats")
+    @misc_router.get("/token-stats")
     async def token_stats():
         return _token_stats
 
-    # ── Agent modes ───────────────────────────────────────────────────────────
-
-    @app.get("/agent-modes")
+    @misc_router.get("/agent-modes")
     async def agent_modes():
         return _load_mode_config()
 
-    # ── File read/write ───────────────────────────────────────────────────────
+    # ── File read / write ─────────────────────────────────────────────────────
 
-    @app.get("/api/file")
+    @files_router.get("/api/file")
     async def read_file(path: str = Query("")):
         if not path:
             raise HTTPException(400, "path required")
@@ -761,16 +937,76 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             raise HTTPException(404, "file not found")
         return {"path": str(p), "content": p.read_text(errors="replace")}
 
-    @app.put("/api/file")
+    @files_router.put("/api/file")
     async def write_file(body: WriteFileBody):
         p = Path(body.path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body.content, encoding="utf-8")
         return {"ok": True, "path": str(p)}
 
+    @files_router.post("/api/file/rename")
+    async def file_rename(body: FileRenameBody):
+        p = Path(body.path)
+        if not p.exists():
+            raise HTTPException(404, "path not found")
+        dest = p.parent / body.newName
+        if dest.exists():
+            raise HTTPException(409, "destination already exists")
+        try:
+            p.rename(dest)
+            return {"ok": True, "path": str(dest)}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @files_router.post("/api/file/duplicate")
+    async def file_duplicate(body: FileDuplicateBody):
+        import shutil as _sh
+        p = Path(body.path)
+        if not p.exists():
+            raise HTTPException(404, "path not found")
+        if p.is_dir():
+            raise HTTPException(400, "directory duplication not supported")
+        stem, suffix = p.stem, p.suffix
+        dest = p.parent / f"{stem} copy{suffix}"
+        n = 2
+        while dest.exists():
+            dest = p.parent / f"{stem} copy {n}{suffix}"
+            n += 1
+        try:
+            _sh.copy2(str(p), str(dest))
+            return {"ok": True, "path": str(dest)}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @files_router.get("/api/file/download")
+    async def file_download(path: str = Query(...)):
+        import mimetypes as _mt
+        p = Path(path)
+        if not p.exists() or p.is_dir():
+            raise HTTPException(404, "file not found")
+        mime, _ = _mt.guess_type(str(p))
+        mime = mime or "application/octet-stream"
+        from fastapi.responses import Response as _Resp
+        return _Resp(
+            content=p.read_bytes(),
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
+        )
+
+    @files_router.get("/api/doc/cursor")
+    async def get_cursor(path: str = Query(...)):
+        if not path:
+            raise HTTPException(400, "path required")
+        return _cursor_store.get(path, {"selStart": 0, "selEnd": 0})
+
+    @files_router.put("/api/doc/cursor")
+    async def put_cursor(body: CursorBody):
+        _cursor_store[body.path] = {"selStart": body.selStart, "selEnd": body.selEnd}
+        return {"ok": True}
+
     # ── Settings ──────────────────────────────────────────────────────────────
 
-    @app.get("/settings/resources")
+    @misc_router.get("/settings/resources")
     async def settings_resources():
         import shutil as _sh
         session_count = session_bytes = 0
@@ -797,7 +1033,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         return {"sessions": {"count": session_count, "bytes": session_bytes},
                 "serverData": {"bytes": server_data_bytes}, "disk": disk_info}
 
-    @app.delete("/settings/sessions/clear")
+    @misc_router.delete("/settings/sessions/clear")
     async def clear_sessions(olderThanDays: int = Query(30)):
         import time as _t
         cutoff = _t.time() - max(1, olderThanDays) * 86_400
@@ -812,9 +1048,362 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     pass
         return {"deleted": deleted}
 
-    # ── DB health ─────────────────────────────────────────────────────────────
+    # ── Document / Office ─────────────────────────────────────────────────────
 
-    @app.get("/db/health")
+    @misc_router.post("/api/doc/parse")
+    async def doc_parse(request: Request):
+        from fastapi import UploadFile
+        ct = request.headers.get("content-type", "")
+        _MAX_DOC_BYTES = 50 * 1024 * 1024
+        try:
+            if "multipart" in ct:
+                form = await request.form()
+                upload = form.get("file")
+                if upload is None:
+                    raise HTTPException(400, "expected field 'file'")
+                filename = getattr(upload, "filename", None) or "upload"
+                data = await upload.read()
+            else:
+                body = await request.json()
+                path_str = str(body.get("path", "")).strip()
+                if not path_str:
+                    raise HTTPException(400, "path required")
+                p = Path(path_str)
+                if not p.exists():
+                    raise HTTPException(404, "file not found")
+                if p.stat().st_size > _MAX_DOC_BYTES:
+                    raise HTTPException(413, "file too large (max 50 MB)")
+                data = p.read_bytes()
+                filename = p.name
+            return _detect_and_parse(filename, data)
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        except Exception as exc:
+            raise HTTPException(422, f"could not parse: {exc}")
+
+    @misc_router.put("/api/doc/save")
+    async def doc_save(body: DocSaveBody):
+        p = Path(body.path)
+        if p.suffix.lower() not in (".docx", ".doc"):
+            raise HTTPException(400, "only DOCX files can be saved")
+        try:
+            docx_bytes = _blocks_to_docx(body.blocks)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(docx_bytes)
+            word_count = sum(len(b.get("text", "").split()) for b in body.blocks)
+            return {"ok": True, "path": str(p), "wordCount": word_count}
+        except Exception as exc:
+            raise HTTPException(500, f"could not save: {exc}")
+
+    @misc_router.get("/api/excel/load")
+    async def excel_load(path: str = Query(...)):
+        p = Path(path)
+        if not p.exists():
+            raise HTTPException(404, "file not found")
+        try:
+            import openpyxl
+            from server import _eval_excel_formula
+            wb_vals  = openpyxl.load_workbook(p, data_only=True)
+            wb_forms = openpyxl.load_workbook(p, data_only=False)
+            formula_map: dict = {}
+            for ws_f in wb_forms.worksheets:
+                for row in ws_f.iter_rows():
+                    for cell in row:
+                        if isinstance(cell.value, str) and cell.value.startswith("="):
+                            formula_map[(ws_f.title, cell.coordinate)] = cell.value
+            sheets = []
+            for ws in wb_vals.worksheets:
+                cells: dict = {}
+                col_widths: dict = {}
+                row_heights: dict = {}
+                for row in ws.iter_rows():
+                    for cell in row:
+                        if cell.value is None and (ws_f := wb_forms[ws.title]) and wb_forms[ws.title][cell.coordinate].value is None:
+                            continue
+                        cell_id = cell.coordinate
+                        formula = formula_map.get((ws.title, cell_id))
+                        raw_val = cell.value
+                        if formula:
+                            ev = _eval_excel_formula(formula, cells)
+                            display_val = ev if ev is not None else raw_val
+                        else:
+                            display_val = raw_val
+                        cd: dict = {}
+                        if display_val is not None:
+                            cd["value"] = str(display_val) if not isinstance(display_val, (int, float, bool)) else display_val
+                        if formula:
+                            cd["formula"] = formula
+                        try:
+                            f = cell.font
+                            if f.bold:   cd["fontBold"] = True
+                            if f.italic: cd["fontItalic"] = True
+                            if f.name:   cd["fontFamily"] = f.name
+                            if f.size:   cd["fontSize"] = int(f.size * 20)
+                            if f.color and f.color.type == "rgb" and f.color.rgb:
+                                rgb = f.color.rgb
+                                if rgb not in ("FF000000", "00000000"):
+                                    cd["color"] = f"#{rgb[2:]}"
+                        except Exception:
+                            pass
+                        try:
+                            fill = cell.fill
+                            if fill and fill.fill_type == "solid" and fill.fgColor and fill.fgColor.type == "rgb":
+                                rgb = fill.fgColor.rgb
+                                if rgb not in ("FF000000", "00000000", "FFFFFFFF"):
+                                    cd["bgColor"] = f"#{rgb[2:]}"
+                        except Exception:
+                            pass
+                        if cd:
+                            cells[cell_id] = cd
+                for col_letter, dim in (ws.column_dimensions or {}).items():
+                    if dim.width:
+                        idx = openpyxl.utils.column_index_from_string(col_letter) - 1
+                        col_widths[str(idx)] = max(30, int(dim.width * 7.5))
+                for row_idx, dim in (ws.row_dimensions or {}).items():
+                    if dim.height:
+                        row_heights[str(row_idx - 1)] = max(16, int(dim.height * 1.2))
+                sheets.append({"sheetName": ws.title, "cells": cells, "images": [],
+                               "columnIndexToWidth": col_widths, "rowIndexToHeight": row_heights,
+                               "hiddenColIndices": [], "hiddenRowIndices": [], "mergedCellIndices": []})
+            return {"id": p.stem, "name": p.stem, "sheets": sheets, "sources": []}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @misc_router.put("/api/excel/save")
+    async def excel_save(body: ExcelSaveBody):
+        if not body.path:
+            raise HTTPException(400, "path required")
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            for sheet in body.sheets:
+                ws = wb.create_sheet(title=sheet.get("sheetName", "Sheet"))
+                for cell_id, cd in sheet.get("cells", {}).items():
+                    try:
+                        cell = ws[cell_id]
+                        formula = cd.get("formula")
+                        v = cd.get("value")
+                        if formula and isinstance(formula, str) and formula.startswith("="):
+                            cell.value = formula
+                        elif v is not None:
+                            try:
+                                cell.value = float(v) if isinstance(v, str) and v.replace(".", "", 1).lstrip("-").isdigit() else v
+                            except Exception:
+                                cell.value = v
+                        font_kw = {}
+                        if cd.get("fontBold"):   font_kw["bold"] = True
+                        if cd.get("fontItalic"): font_kw["italic"] = True
+                        if cd.get("fontFamily"): font_kw["name"] = cd["fontFamily"]
+                        if cd.get("fontSize"):   font_kw["size"] = cd["fontSize"] / 20
+                        if font_kw: cell.font = Font(**font_kw)
+                    except Exception:
+                        pass
+            p = Path(body.path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(p)
+            return {"ok": True, "path": str(p)}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @misc_router.get("/api/ppt/load")
+    async def ppt_load(path: str = Query(...)):
+        p = Path(path)
+        if not p.exists():
+            raise HTTPException(404, "file not found")
+        try:
+            from pptx import Presentation
+            from pptx.util import Pt
+            import base64, io
+            prs = Presentation(str(p))
+            sw = prs.slide_width
+            sh = prs.slide_height
+            CW, CH = 896, 504
+            sx = CW / sw if sw else 1
+            sy = CH / sh if sh else 1
+            slides_out = []
+            for slide in prs.slides:
+                bg_color = "#ffffff"
+                try:
+                    bg = slide.background.fill
+                    if bg.type is not None:
+                        c = bg.fore_color.rgb
+                        bg_color = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+                except Exception:
+                    pass
+                boxes = []
+                for shape in slide.shapes:
+                    try:
+                        if not shape.has_text_frame:
+                            continue
+                        import secrets as _sec2
+                        box_id = _sec2.token_hex(4)
+                        x = int(shape.left * sx) if shape.left else 0
+                        y = int(shape.top * sy) if shape.top else 0
+                        w = int(shape.width * sx) if shape.width else 100
+                        h = int(shape.height * sy) if shape.height else 50
+                        full_text = shape.text_frame.text
+                        styles = []
+                        box_style: dict = {}
+                        try:
+                            first_run = shape.text_frame.paragraphs[0].runs[0] if shape.text_frame.paragraphs[0].runs else None
+                            if first_run:
+                                if first_run.font.size: box_style["fontSize"] = int(first_run.font.size / 12700)
+                                if first_run.font.bold: box_style["fontWeight"] = "bold"
+                                try:
+                                    c = first_run.font.color.rgb
+                                    box_style["color"] = f"#{c.r:02x}{c.g:02x}{c.b:02x}"
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        boxes.append({"id": box_id, "x": x, "y": y, "w": w, "h": h,
+                                      "text": full_text, "styles": styles, "boxStyle": box_style})
+                    except Exception:
+                        pass
+                slides_out.append({"bgColor": bg_color, "boxes": boxes})
+            return {"slides": slides_out}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @misc_router.put("/api/ppt/save")
+    async def ppt_save(body: PptSaveBody):
+        if not body.path:
+            raise HTTPException(400, "path required")
+        try:
+            from pptx import Presentation
+            from pptx.util import Emu, Pt
+            from pptx.dml.color import RGBColor
+            import re as _re
+
+            CW, CH = 896, 504
+            p = Path(body.path)
+
+            def hex_to_rgb(hex_str: str):
+                h = hex_str.lstrip("#")
+                if len(h) == 6:
+                    try:
+                        return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+                    except Exception:
+                        pass
+                return None
+
+            if p.exists():
+                prs = Presentation(str(p))
+                sw, sh = prs.slide_width, prs.slide_height
+            else:
+                prs = Presentation()
+                sw = prs.slide_width or Emu(9144000)
+                sh = prs.slide_height or Emu(5143500)
+            sx = sw / CW if CW else 1
+            sy = sh / CH if CH else 1
+            for slide_obj in list(prs.slides._sldIdLst):
+                prs.slides._sldIdLst.remove(slide_obj)
+            blank_layout = prs.slide_layouts[6]
+            for slide_data in body.slides:
+                slide = prs.slides.add_slide(blank_layout)
+                bg_hex = slide_data.get("bgColor", "#ffffff")
+                try:
+                    bg = slide.background.fill
+                    bg.solid()
+                    rgb = hex_to_rgb(bg_hex)
+                    if rgb:
+                        bg.fore_color.rgb = rgb
+                except Exception:
+                    pass
+                for box in slide_data.get("boxes", []):
+                    try:
+                        x = Emu(int(box.get("x", 0) * sx))
+                        y = Emu(int(box.get("y", 0) * sy))
+                        w = Emu(max(1, int(box.get("w", 100) * sx)))
+                        h = Emu(max(1, int(box.get("h", 50) * sy)))
+                        text_val = box.get("text", "")
+                        txBox = slide.shapes.add_textbox(x, y, w, h)
+                        tf = txBox.text_frame
+                        tf.word_wrap = True
+                        box_style = box.get("boxStyle", {})
+                        for li, line in enumerate(text_val.split("\n")):
+                            para = tf.paragraphs[0] if li == 0 else tf.add_paragraph()
+                            if not line:
+                                continue
+                            run = para.add_run()
+                            run.text = line
+                            fs = box_style.get("fontSize", 16)
+                            run.font.size = Pt(fs)
+                            if box_style.get("fontWeight") == "bold":  run.font.bold = True
+                            if box_style.get("fontStyle") == "italic": run.font.italic = True
+                            color_hex = box_style.get("color", "#000000")
+                            rgb = hex_to_rgb(color_hex)
+                            if rgb:
+                                run.font.color.rgb = rgb
+                        bg_hex2 = box_style.get("bgColor")
+                        if bg_hex2 and bg_hex2 != "transparent":
+                            rgb2 = hex_to_rgb(bg_hex2)
+                            if rgb2:
+                                txBox.fill.solid()
+                                txBox.fill.fore_color.rgb = rgb2
+                    except Exception:
+                        pass
+            p.parent.mkdir(parents=True, exist_ok=True)
+            prs.save(str(p))
+            return {"ok": True, "path": str(p)}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @misc_router.post("/api/dev-server/start")
+    async def dev_server_start(body: DevServerBody, request: Request):
+        cwd = body.cwd or app.state.default_cwd
+        if not cwd or not Path(cwd).is_dir():
+            raise HTTPException(400, "invalid cwd")
+        if cwd in _dev_servers:
+            entry = _dev_servers[cwd]
+            if entry["proc"].returncode is None:
+                return {"url": entry["url"]}
+        port = await _find_free_port()
+        host_header = request.headers.get("host", "")
+        if ".workspaces.boltzhub.com" in host_header:
+            workspace_id = host_header.split(".")[0]
+            url = f"https://{workspace_id}-{port}.workspaces.boltzhub.com"
+        else:
+            url = f"http://localhost:{port}"
+        pkg_dir = Path(cwd)
+        if (pkg_dir / "pnpm-lock.yaml").exists():
+            cmd = ["pnpm", "dev", "--port", str(port), "--host", "0.0.0.0"]
+        elif (pkg_dir / "yarn.lock").exists():
+            cmd = ["yarn", "dev", "--port", str(port), "--host", "0.0.0.0"]
+        else:
+            cmd = ["npm", "run", "dev", "--", "--port", str(port), "--host", "0.0.0.0"]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=cwd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(500, f"command not found: {exc}")
+        _dev_servers[cwd] = {"proc": proc, "url": url}
+        await asyncio.sleep(2)
+        if proc.returncode is not None:
+            raise HTTPException(500, "dev server exited immediately — check package.json")
+        return {"url": url, "pid": proc.pid}
+
+    @misc_router.post("/api/dev-server/stop")
+    async def dev_server_stop(body: DevServerBody):
+        cwd = body.cwd
+        entry = _dev_servers.pop(cwd, None)
+        if entry:
+            try:
+                entry["proc"].terminate()
+            except Exception:
+                pass
+        return {"ok": True}
+
+    # ── § 6 · Database ────────────────────────────────────────────────────────
+
+    @db_router.get("/health")
     async def db_health(request: Request):
         pool = getattr(request.app.state, "db", None)
         if pool is None:
@@ -826,9 +1415,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
 
-    # ── Widget data (file-based) ──────────────────────────────────────────────
-
-    @app.get("/db/widget/{canvas_id}/rows")
+    @db_router.get("/widget/{canvas_id}/rows")
     async def widget_query(canvas_id: str = FPath(...),
                            order: str = Query("id"), dir: str = Query("asc"),
                            limit: int = Query(1000), offset: int = Query(0)):
@@ -841,7 +1428,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         page = records[offset: offset + min(limit, 10000)]
         return {"rows": page, "total": len(records), "limit": limit, "offset": offset}
 
-    @app.post("/db/widget/{canvas_id}/rows")
+    @db_router.post("/widget/{canvas_id}/rows")
     async def widget_insert(canvas_id: str, body: WidgetRowBody):
         if not _CANVAS_ID_RE.match(canvas_id):
             raise HTTPException(400, f"Invalid canvasId")
@@ -862,7 +1449,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             _widget_save(canvas_id, data)
         return {"inserted": inserted}
 
-    @app.put("/db/widget/{canvas_id}/rows/{row_id}")
+    @db_router.put("/widget/{canvas_id}/rows/{row_id}")
     async def widget_update(canvas_id: str, row_id: int, body: WidgetUpdateBody):
         if not _CANVAS_ID_RE.match(canvas_id):
             raise HTTPException(400, "Invalid canvasId")
@@ -878,7 +1465,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     return {"updated": r}
         raise HTTPException(404, "Row not found")
 
-    @app.delete("/db/widget/{canvas_id}/rows/{row_id}")
+    @db_router.delete("/widget/{canvas_id}/rows/{row_id}")
     async def widget_delete(canvas_id: str, row_id: int):
         if not _CANVAS_ID_RE.match(canvas_id):
             raise HTTPException(400, "Invalid canvasId")
@@ -891,7 +1478,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             _widget_save(canvas_id, data)
         return {"deleted": row_id}
 
-    @app.post("/db/widget/{canvas_id}/exec")
+    @db_router.post("/widget/{canvas_id}/exec")
     async def widget_exec(canvas_id: str, body: WidgetExecBody):
         if not _CANVAS_ID_RE.match(canvas_id):
             raise HTTPException(400, "Invalid canvasId")
@@ -903,9 +1490,9 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             raise HTTPException(400, str(exc))
         return {"result": ns.get("result")}
 
-    # ── Batch execution ───────────────────────────────────────────────────────
+    # ── § 8 · Batch Execution ─────────────────────────────────────────────────
 
-    @app.post("/batch")
+    @batch_router.post("/batch")
     async def batch_run(body: BatchRunBody, background: BackgroundTasks):
         import uuid as _uuid, time as _t
         if not body.cwds or not body.message:
@@ -923,7 +1510,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         background.add_task(asyncio.ensure_future, _run())
         return {"batchId": batch_id}
 
-    @app.get("/batch/{batch_id}")
+    @batch_router.get("/batch/{batch_id}")
     async def batch_status(batch_id: str = FPath(...)):
         batch = _batch_store.get(batch_id)
         if not batch:
@@ -932,9 +1519,9 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         done  = all(i["status"] in ("done", "error") for i in items)
         return {"batchId": batch_id, "done": done, "items": items}
 
-    # ── BoltzHub integration ──────────────────────────────────────────────────
+    # ── § 7 · BoltzHub ────────────────────────────────────────────────────────
 
-    @app.get("/boltzhub/check")
+    @boltzhub_router.get("/check")
     async def boltzhub_check(cwd: str = Query("")):
         if not cwd:
             cwd = app.state.default_cwd
@@ -951,7 +1538,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             "cwd":          cwd,
         }
 
-    @app.post("/boltzhub/create-app")
+    @boltzhub_router.post("/create-app")
     async def boltzhub_create_app(body: CreateAppBody):
         import aiohttp as _aio
         token = _boltzhub_token()
@@ -978,7 +1565,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         _write_app_config(cwd, cfg)
         return {"ok": True, "appConfig": cfg}
 
-    @app.post("/boltzhub/push")
+    @boltzhub_router.post("/push")
     async def boltzhub_push(body: PushBody):
         """SSE streaming response for push progress."""
         import aiohttp as _aio, zipfile as _zf, io as _io
@@ -1065,7 +1652,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                                  headers={"Cache-Control": "no-cache",
                                           "X-Accel-Buffering": "no"})
 
-    @app.get("/boltzhub/apps")
+    @boltzhub_router.get("/apps")
     async def boltzhub_apps():
         import aiohttp as _aio
         token = _boltzhub_token()
@@ -1079,7 +1666,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     raise HTTPException(r.status, await r.text())
                 return await r.json()
 
-    @app.get("/boltzhub/versions")
+    @boltzhub_router.get("/versions")
     async def boltzhub_versions(appId: str = Query(...)):
         import aiohttp as _aio
         token = _boltzhub_token()
@@ -1102,7 +1689,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     suggested = "1.0.0"
                 return {"versions": items, "suggestedNext": suggested}
 
-    @app.get("/boltzhub/token-usage")
+    @boltzhub_router.get("/token-usage")
     async def boltzhub_token_usage(period: str = Query("30d")):
         import aiohttp as _aio
         token = _boltzhub_token()
@@ -1118,9 +1705,93 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     raise HTTPException(r.status, await r.text())
                 return await r.json()
 
-    # ── WhatsApp ──────────────────────────────────────────────────────────────
+    @boltzhub_router.post("/sync")
+    async def boltzhub_sync(body: BzHubSyncBody):
+        import aiohttp as _aio, io, zipfile as _zf
+        cwd    = body.cwd or app.state.default_cwd
+        app_id = body.appId
+        token  = _boltzhub_token()
 
-    @app.post("/whatsapp/incoming")
+        async def _stream():
+            def emit(step: str, message: str, **kw):
+                return f"data: {json.dumps({'step': step, 'message': message, **kw})}\n\n"
+            try:
+                if not token:
+                    yield emit("error", "Not logged in to BoltzHub"); return
+                if not app_id:
+                    cfg = _read_app_config(cwd)
+                    if not cfg:
+                        yield emit("error", "No .bzhub/app_config.json found"); return
+                    _app_id = cfg["id"]
+                else:
+                    _app_id = app_id
+                connector = _aio.TCPConnector(ssl=False)
+                yield emit("download", "Downloading project…")
+                async with _aio.ClientSession(connector=connector) as sess:
+                    async with sess.get(
+                        f"{BOLTZHUB_API}/v1/creator/apps/{_app_id}/code",
+                        headers={"Authorization": f"Bearer {token}"},
+                    ) as r:
+                        if r.status != 200:
+                            yield emit("error", f"Download failed ({r.status})"); return
+                        zip_bytes = await r.read()
+                yield emit("extract", "Extracting files…")
+                buf = io.BytesIO(zip_bytes)
+                with _zf.ZipFile(buf) as z:
+                    z.extractall(cwd)
+                yield emit("install", "Installing dependencies…")
+                lock_pnpm = (Path(cwd) / "pnpm-lock.yaml").exists()
+                install_cmd = "pnpm install" if lock_pnpm else "npm install"
+                if (Path(cwd) / "package.json").exists():
+                    proc = await asyncio.create_subprocess_shell(
+                        install_cmd, cwd=cwd,
+                        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                    await proc.wait()
+                yield emit("done", "Project synced successfully!")
+            except Exception as exc:
+                yield emit("error", str(exc))
+
+        return StreamingResponse(_stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @boltzhub_router.post("/create-version")
+    async def boltzhub_create_version(body: BzHubVersionBody):
+        import aiohttp as _aio
+        token = _boltzhub_token()
+        if not token:
+            raise HTTPException(401, "Not logged in")
+        connector = _aio.TCPConnector(ssl=False)
+        async with _aio.ClientSession(connector=connector) as sess:
+            async with sess.post(
+                f"{BOLTZHUB_API}/v1/creator/apps/{body.appId}/versions",
+                json={"releaseNotes": body.releaseNotes, "versionNumber": body.versionNumber},
+                headers={"Authorization": f"Bearer {token}"},
+            ) as r:
+                result = await r.json() if r.content_type == "application/json" else {"status": r.status}
+                if r.status not in (200, 201):
+                    raise HTTPException(r.status, str(result))
+                return result
+
+    @boltzhub_router.post("/publish")
+    async def boltzhub_publish(body: BzHubPublishBody):
+        import aiohttp as _aio
+        token = _boltzhub_token()
+        if not token:
+            raise HTTPException(401, "Not logged in")
+        connector = _aio.TCPConnector(ssl=False)
+        async with _aio.ClientSession(connector=connector) as sess:
+            async with sess.put(
+                f"{BOLTZHUB_API}/v1/creator/apps/{body.appId}/publish",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            ) as r:
+                result = await r.json() if r.content_type == "application/json" else {"status": r.status}
+                if r.status not in (200, 201):
+                    raise HTTPException(r.status, str(result))
+                return result
+
+    # ── § 9 · WhatsApp ────────────────────────────────────────────────────────
+
+    @whatsapp_router.post("/incoming")
     async def whatsapp_incoming(request: Request):
         data   = await request.form()
         from_  = data.get("From", "").strip()
@@ -1143,7 +1814,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         from fastapi.responses import Response
         return Response(content="<Response/>", media_type="text/xml")
 
-    @app.post("/whatsapp/status")
+    @whatsapp_router.post("/status")
     async def whatsapp_status(request: Request):
         data   = await request.form()
         status = data.get("MessageStatus", "unknown")
@@ -1151,6 +1822,12 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         print(f"[whatsapp] delivery {sid}: {status}", file=sys.stderr)
         from fastapi.responses import Response
         return Response(content="<Response/>", media_type="text/xml")
+
+    # ── Mount all routers ─────────────────────────────────────────────────────
+    for _router in [ws_router, auth_router, files_router, sessions_router,
+                    canvas_router, db_router, boltzhub_router,
+                    batch_router, whatsapp_router, misc_router]:
+        app.include_router(_router)
 
     return app
 

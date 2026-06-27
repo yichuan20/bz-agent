@@ -211,13 +211,7 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
             }
           }}
         >
-          <span style={{
-            flexShrink: 0, width: 24, height: 24,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
-          }}>
-            <GearIcon size={16} weight={isActive('/settings', false) ? 'fill' : 'regular'} />
-          </span>
+          <GearIcon size={15} weight={isActive('/settings', false) ? 'fill' : 'regular'} style={{ flexShrink: 0 }} />
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>Settings</span>
         </Link>
 
