@@ -28,6 +28,7 @@ zip -r "$ZIP_FILE" \
   server.py \
   requirements.txt \
   agent_modes.json \
+  CHANGELOG.md \
   dist/ \
   server_data/widgets/ \
   server_data/credentials.json \

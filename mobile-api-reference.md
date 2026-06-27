@@ -13,31 +13,62 @@ A mobile app (or any HTTP/WebSocket client) can connect directly to the same ser
 | WebSocket | `ws://<host>:18789/ws` (local) |
 | WebSocket | `wss://<workspace_id>.workspaces.boltzhub.com/ws` (remote) |
 
-All endpoints return `Access-Control-Allow-Origin: *`. There is no per-request token validation on the server — access control is enforced at the network/gateway layer (VPN, reverse proxy, or the BoltzHub workspace gateway).
+All endpoints return `Access-Control-Allow-Origin: *`. There is no per-request token validation on the bz-agent server itself — but when reaching it through the BoltzHub workspace gateway, the gateway enforces its own JWT check before proxying the request through.
+
+---
+
+## Two-Layer Authentication
+
+There are **two separate auth concerns** that are easy to confuse:
+
+| Layer | What it is | Where it runs | How to satisfy it |
+|-------|------------|---------------|-------------------|
+| **Gateway auth** | Proves you are allowed to access this workspace | BoltzHub workspace gateway (before your request reaches the server) | `Authorization: Bearer <jwt>` header on every request |
+| **Agent auth** | Gives the bzcode agent an Anthropic / BoltzHub token to call AI APIs | bz-agent server, stored on disk | `POST /auth` body — call once at login |
+
+### Gateway auth (remote URL only)
+
+When using the workspace URL (`https://<workspace_id>.workspaces.boltzhub.com`), every request — including `POST /auth` — must carry the user's BoltzHub JWT in the `Authorization` header. The gateway validates this before forwarding anything to the server. If the workspace is not running or the ID is wrong, the gateway returns **404**; if the JWT is missing or expired, it returns **401**.
+
+```http
+POST https://ws_<id>.workspaces.boltzhub.com/auth
+Authorization: Bearer <boltzhub_jwt>
+Content-Type: application/json
+```
+
+> **Troubleshooting gateway 404:** `rpc error: code = NotFound desc = not found` means the gateway could not locate the workspace container. Check that the workspace is started and the workspace ID matches exactly.
+
+When using the local URL (`http://localhost:18789`) the gateway layer does not exist — no `Authorization` header is needed on any request.
 
 ---
 
 ## Recommended Client Workflow
 
 ```
-1. POST /auth              — push the user's BoltzHub JWT once at login
-2. GET  /sessions          — list existing agent sessions
-3. WS   /ws?cwd=&mode=     — open a new session, or
-   WS   /ws?sessionId=     — resume an existing session
-4. Send/receive JSON over the WebSocket
-5. GET  /files?path=       — optional: browse server-side files
+# Remote (workspace URL)
+1. Obtain BoltzHub JWT (user login via BoltzHub OAuth)
+2. POST /auth  + Authorization header  — push token to the agent server
+3. GET  /sessions  + Authorization header  — list sessions
+4. WS   /ws?cwd=&mode=  + Authorization header  — open/resume session
+5. Send/receive JSON over the WebSocket
+
+# Local (localhost:18789)
+1. POST /auth  (no Authorization header needed)
+2. GET  /sessions
+3. WS   /ws?cwd=&mode=
 ```
 
 ---
 
-## Authentication
+## Agent Auth — Push credentials to the server
 
-The server does not validate tokens on individual requests. However, the underlying `bzcode` agent process needs a valid BoltzHub JWT to call Anthropic APIs. Push the token once after the user logs in:
+The underlying `bzcode` process needs a valid BoltzHub JWT to call Anthropic APIs. Push it once after the user logs in. This is separate from the gateway `Authorization` header.
 
 ### Push credentials
 
 ```http
 POST /auth
+Authorization: Bearer <boltzhub_jwt>   ← always include; gateway requires it on remote URL
 Content-Type: application/json
 ```
 
@@ -73,6 +104,8 @@ Content-Type: application/json
 
 { "authUrl": "https://boltzhub.com" }
 ```
+
+> **Note — remote URL:** Every HTTP request and WebSocket connection to `https://<workspace_id>.workspaces.boltzhub.com` must include `Authorization: Bearer <jwt>`. The examples below omit it for brevity; add it to all requests when using the remote URL.
 
 ---
 
@@ -535,6 +568,44 @@ All endpoints return standard HTTP status codes. Error bodies follow this shape:
 
 ---
 
+## Troubleshooting — Gateway Errors
+
+When using the remote workspace URL, errors may come from the BoltzHub gateway rather than the bz-agent server. Gateway errors have this distinctive shape:
+
+```json
+{ "error": "rpc error: code = NotFound desc = not found" }
+```
+
+This is a gRPC-style response from the Go gateway, **not** from the Python bz-agent server.
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `404` + `rpc error: code = NotFound` | Workspace container not running, or workspace ID wrong | Start the workspace from the BoltzHub dashboard; verify the workspace ID in the URL |
+| `401` or `403` on any request | Missing or expired `Authorization` header | Re-obtain the BoltzHub JWT and include it as `Authorization: Bearer <jwt>` on every request |
+| `404` on a valid endpoint (e.g. `/auth`) when using local URL | bz-agent server not running | Start the server: `uvicorn server:make_http_app --port 18789` |
+| `502` from gateway | Container is running but bz-agent server inside it is not responding on port 18789 | SSH into the container and restart the server |
+
+### Distinguishing gateway vs server errors
+
+| Source | Typical error body | `content-type` |
+|--------|-------------------|----------------|
+| BoltzHub gateway | `{"error": "rpc error: code = ... desc = ..."}` | `application/json; charset=utf-8` |
+| bz-agent server | `{"error": "plain description"}` | `application/json` |
+| Cloudflare | HTML page or `{"error": "1010"}` | `text/html` |
+
+### Using localhost for development
+
+To avoid gateway issues during development, point your mobile app at the local server directly:
+
+```
+http://localhost:18789        (if on the same machine)
+http://<local-network-ip>:18789   (if on the same WiFi, with firewall open)
+```
+
+No `Authorization` header is required on any endpoint in this mode.
+
+---
+
 ## Security Note
 
-The server performs no per-request authentication checks. For any deployment where the server is reachable from outside a trusted network, restrict access at the network layer (VPN, firewall, the BoltzHub workspace gateway) or add an API key middleware to `server.py`.
+The bz-agent server performs no per-request authentication checks. For any deployment where the server is reachable from outside a trusted network, restrict access at the network layer (VPN, firewall, the BoltzHub workspace gateway) or add an API key middleware to `server.py`.

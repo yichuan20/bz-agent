@@ -47,6 +47,7 @@ from pydantic import BaseModel
 # We deliberately import the module-level globals and helpers; only the
 # aiohttp HTTP/WebSocket layer is replaced here.
 from server import (
+    BACKEND_VERSION,
     BOLTZHUB_API,
     BOLTZHUB_AUTH,
     SESSIONS_DIR,
@@ -92,6 +93,7 @@ from server import (
     drain_bzcode_stderr,
     relay_client_messages,
     handle_ws_client,
+    _write_bzcode_credentials,
     # _add_frontend kept separate — called after app is built
 )
 
@@ -391,25 +393,26 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
     @app.post("/auth")
     async def auth(body: AuthBody):
-        creds_dir  = Path.home() / ".boltzbit"
-        creds_file = creds_dir / "credentials.json"
-        creds_dir.mkdir(parents=True, exist_ok=True)
-        existing: dict = {}
-        if creds_file.exists():
-            try:
-                existing = json.loads(creds_file.read_text())
-            except Exception:
-                pass
-        entry: dict = {"accessToken": body.accessToken}
-        if body.refreshToken:
-            entry["refreshToken"] = body.refreshToken
-        if body.expiresAt is not None:
-            entry["expiresAt"] = body.expiresAt
-        existing[body.authUrl] = entry
-        with open(creds_file, "w") as f:
-            json.dump(existing, f, indent=2)
-        print(f"[auth] credentials written for {body.authUrl}", file=sys.stderr)
+        _write_bzcode_credentials(
+            access_token=body.accessToken,
+            refresh_token=body.refreshToken or "",
+            expires_at=body.expiresAt,
+            auth_url=body.authUrl,
+        )
         return {"ok": True}
+
+    @app.get("/api/version")
+    async def api_version():
+        return {"backend": BACKEND_VERSION}
+
+    @app.get("/api/home")
+    async def api_home():
+        home = str(Path.home())
+        default_cwd = os.getcwd()
+        return {
+            "home": home,
+            "defaultCwd": default_cwd if os.path.isdir(default_cwd) else home,
+        }
 
     # ── Proxy ─────────────────────────────────────────────────────────────────
 

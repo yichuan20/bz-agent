@@ -7,6 +7,8 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
+BACKEND_VERSION = "0.0.3"
+
 import argparse
 import asyncio
 import json
@@ -119,15 +121,29 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     # them by a stable, deployment-agnostic path rather than an absolute one.
     # The session config dir is always at ~/.boltzbit/sessions/{id}/ regardless
     # of where bz-agent is installed.
-    src_scripts = Path(__file__).resolve().parent / "bzcode" / "scripts"
+    _server_dir = Path(__file__).resolve().parent
+    src_scripts = _server_dir / "bzcode" / "scripts"
+    # Fallback: also check CWD/bzcode/scripts in case server.py is run from a
+    # different directory than where it lives (e.g. some workspace deployments).
+    if not src_scripts.is_dir():
+        _cwd_candidate = Path.cwd() / "bzcode" / "scripts"
+        if _cwd_candidate.is_dir():
+            src_scripts = _cwd_candidate
+        else:
+            print(
+                f"[session] WARNING: bzcode/scripts not found at {src_scripts} "
+                f"or {_cwd_candidate} — agent scripts will be unavailable",
+                file=sys.stderr,
+            )
     dst_scripts = cfg_dir / "scripts"
     dst_scripts.mkdir(exist_ok=True)
+    import shutil as _sh
     for script in src_scripts.glob("*.py"):
         dest = dst_scripts / script.name
         # Only overwrite if source is newer (avoids redundant I/O on every reconnect)
         if not dest.exists() or script.stat().st_mtime > dest.stat().st_mtime:
-            import shutil as _sh
             _sh.copy2(script, dest)
+    print(f"[session] scripts: {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)", file=sys.stderr)
 
     # {scripts_path} resolves to the session-local scripts directory.
     # Using the session config dir means no absolute paths leak into templates.
@@ -408,6 +424,56 @@ async def handle_options(request: web.Request) -> web.Response:
     return web.Response(headers=CORS_HEADERS)
 
 
+def _write_bzcode_credentials(
+    access_token: str,
+    refresh_token: str = "",
+    expires_at=None,
+    auth_url: str = "https://boltzhub.com",
+) -> None:
+    """Write access token to ~/.boltzbit/credentials.json in the format bzcode expects."""
+    creds_dir  = Path.home() / ".boltzbit"
+    creds_file = creds_dir / "credentials.json"
+    creds_dir.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if creds_file.exists():
+        try:
+            with open(creds_file) as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    prev_entry: dict = existing.get(auth_url, {})
+    entry: dict = {"accessToken": access_token}
+    # Preserve the existing refreshToken when the caller doesn't supply one.
+    resolved_refresh = refresh_token or prev_entry.get("refreshToken", "")
+    if resolved_refresh:
+        entry["refreshToken"] = resolved_refresh
+    # bzcode expects expiresAt in milliseconds. If the caller didn't supply it,
+    # parse the exp claim from the JWT itself so we always write a valid expiry.
+    if expires_at is None:
+        try:
+            import base64 as _b64
+            seg = access_token.split(".")[1]
+            seg += "=" * (4 - len(seg) % 4)
+            payload = json.loads(_b64.b64decode(seg.replace("-", "+").replace("_", "/")))
+            exp = payload.get("exp")
+            if exp:
+                expires_at = exp * 1000  # seconds → milliseconds
+        except Exception:
+            pass
+    if expires_at is None:
+        # Preserve whatever was there before rather than dropping it.
+        expires_at = prev_entry.get("expiresAt")
+    if expires_at is not None:
+        ms_val = int(expires_at)
+        if ms_val < 10_000_000_000:  # looks like seconds → convert
+            ms_val *= 1000
+        entry["expiresAt"] = ms_val
+    existing[auth_url] = entry
+    with open(creds_file, "w") as f:
+        json.dump(existing, f, indent=2)
+    print(f"[auth] credentials written for {auth_url}", file=sys.stderr)
+
+
 async def handle_auth(request: web.Request) -> web.Response:
     """
     Receive an access token from the frontend and write it to
@@ -425,38 +491,13 @@ async def handle_auth(request: web.Request) -> web.Response:
 
     access_token  = body.get("accessToken", "")
     refresh_token = body.get("refreshToken", "")
-    expires_at    = body.get("expiresAt")       # milliseconds epoch, optional
+    expires_at    = body.get("expiresAt")
     auth_url      = body.get("authUrl", "https://boltzhub.com")
 
     if not access_token:
         return web.json_response({"error": "accessToken is required"}, status=400, headers=CORS_HEADERS)
 
-    creds_dir  = Path.home() / ".boltzbit"
-    creds_file = creds_dir / "credentials.json"
-
-    creds_dir.mkdir(parents=True, exist_ok=True)
-
-    # Merge with existing credentials so other env entries are preserved
-    existing: dict = {}
-    if creds_file.exists():
-        try:
-            with open(creds_file) as f:
-                existing = json.load(f)
-        except Exception:
-            pass
-
-    entry: dict = {"accessToken": access_token}
-    if refresh_token:
-        entry["refreshToken"] = refresh_token
-    if expires_at is not None:
-        entry["expiresAt"] = expires_at
-
-    existing[auth_url] = entry
-
-    with open(creds_file, "w") as f:
-        json.dump(existing, f, indent=2)
-
-    print(f"[auth] credentials written for {auth_url}", file=sys.stderr)
+    _write_bzcode_credentials(access_token, refresh_token, expires_at, auth_url)
     return web.json_response({"ok": True}, headers=CORS_HEADERS)
 
 
@@ -1889,6 +1930,25 @@ class _BatchItem:
 async def handle_token_stats(request: web.Request) -> web.Response:
     """GET /token-stats — accumulated token usage since server start."""
     return web.json_response(_token_stats, headers=CORS_HEADERS)
+
+
+async def handle_version(request: web.Request) -> web.Response:
+    """GET /api/version — server and protocol version info."""
+    return web.json_response({"backend": BACKEND_VERSION}, headers=CORS_HEADERS)
+
+
+async def handle_home(request: web.Request) -> web.Response:
+    """GET /api/home — return the server's home directory and default working directory.
+
+    Mobile / external clients use this instead of hardcoding '/home/user' so they
+    always get a valid starting directory even if the workspace layout differs.
+    """
+    default_cwd = request.app.get("default_cwd", os.getcwd())
+    home = str(Path.home())
+    return web.json_response({
+        "home":       home,
+        "defaultCwd": default_cwd if os.path.isdir(default_cwd) else home,
+    }, headers=CORS_HEADERS)
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -3586,6 +3646,8 @@ def make_http_app(bzcode_path: str = "", default_cwd: str = "",
         app.router.add_route("OPTIONS", _wp, handle_options)
     # Batch background execution
     app.router.add_get(   "/token-stats",                    handle_token_stats)
+    app.router.add_get(   "/api/version",                    handle_version)
+    app.router.add_get(   "/api/home",                       handle_home)
     app.router.add_get(   "/settings/resources",             handle_settings_resources)
     app.router.add_delete("/settings/sessions/clear",        handle_settings_clear_sessions)
     app.router.add_route("OPTIONS", "/settings/resources",          handle_options)

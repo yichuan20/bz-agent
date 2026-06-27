@@ -15,7 +15,7 @@ const LOGIN_URL =
 
 const AGENT_HTTP =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  ?? 'http://localhost:5051';
+  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 const BZCODE_AUTH_URL =
   (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined)
@@ -38,16 +38,24 @@ async function pushBzcodeCredentials(
   expiresAt?: number | null,
 ) {
   try {
-    await fetch(`${AGENT_HTTP}/auth`, {
+    const res = await fetch(`${AGENT_HTTP}/auth`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
+      headers: {
+        'Content-Type':  'application/json',
+        // Include the token so the workspace gateway lets the request through
+        // (gateway requires Authorization on all requests to the workspace URL)
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
         accessToken,
         refreshToken,
         expiresAt: expiresAt ?? undefined,
         authUrl:   BZCODE_AUTH_URL,
       }),
     });
+    if (!res.ok) {
+      console.warn('[login] agent server rejected credentials push:', res.status);
+    }
   } catch {
     // Non-fatal — bzcode will fail to authenticate but the app still works
     console.warn('[login] could not push credentials to agent server');
