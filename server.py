@@ -862,6 +862,445 @@ class _BatchItem:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# § 19 · AGENT POOL
+# ══════════════════════════════════════════════════════════════════════════════
+# Decouples bzcode process lifetime from WebSocket lifetime.
+# Process-facing tasks (stdout/stderr readers) are long-lived.
+# WebSocket-facing tasks (send_to_client, relay_client_messages) attach/detach.
+
+import time as _time
+
+
+class AgentPoolEntry:
+    """A pooled bzcode process that outlives individual WebSocket connections."""
+
+    def __init__(self, session_id: str, cwd: str, mode: str):
+        self.session_id = session_id
+        self.cwd = cwd
+        self.mode = mode  # agent mode from agent_modes.json (general/widget/worker/coder)
+        self.proc: Optional[asyncio.subprocess.Process] = None
+
+        # Per-agent state tracked from bzcode stdout messages
+        self.agent_status = "starting"   # starting | idle | running | waiting_permission | waiting_input
+        self.session_mode = "default"    # runtime mode from bzcode: default | yolo | plan
+        self.model_info: dict = {}
+        self._pending_request_id: Optional[str] = None
+
+        # Process-facing output queue — fed by read_bzcode_stdout and drain_bzcode_stderr
+        self._out_queue: asyncio.Queue = asyncio.Queue()
+        self._ready_event = asyncio.Event()
+
+        # Per-turn replay buffer: accumulates messages during the current turn
+        # so reconnecting SSE clients can catch up. Cleared on turn boundaries.
+        self._turn_buffer: list = []
+
+        # Subscriber queues — each SSE or WS connection gets one
+        self._subscribers: set = set()
+
+        # WebSocket attachment state (legacy, kept for backward compat)
+        self._ws = None  # currently attached WS (aiohttp-like interface)
+        self._ws_fwd_queue: Optional[asyncio.Queue] = None
+        self._ws_send_task: Optional[asyncio.Task] = None
+        self._ws_relay_task: Optional[asyncio.Task] = None
+
+        # Process-facing tasks (long-lived)
+        self._stdout_task: Optional[asyncio.Task] = None
+        self._stderr_task: Optional[asyncio.Task] = None
+        self._dispatcher_task: Optional[asyncio.Task] = None
+
+        # Lifecycle
+        self._created_at = _time.monotonic()
+        self._last_ws_detach_at: Optional[float] = None
+        self._attach_count = 0  # how many times a WS has been attached
+        self._shutting_down = False
+        self._attach_lock = asyncio.Lock()
+
+    async def start(self, bzcode_path: str, cmd: list, env: dict) -> None:
+        """Spawn the bzcode process and start process-facing tasks."""
+        self.proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=self.cwd,
+            env=env,
+        )
+        self._stdout_task = asyncio.create_task(
+            read_bzcode_stdout(self.proc, self._out_queue, self._ready_event,
+                               cwd=self.cwd, mode=self.mode))
+        self._stderr_task = asyncio.create_task(
+            drain_bzcode_stderr(self.proc, self._out_queue))
+        self._dispatcher_task = asyncio.create_task(self._dispatch_stdout())
+
+        # Wait for bzcode's initial session message before sending setMode,
+        # otherwise the mode change is lost during bzcode's startup.
+        entry = _mode_entry(self.mode)
+        session_mode = (entry.get("settings") or {}).get("mode", "")
+        if session_mode:
+            try:
+                await asyncio.wait_for(self._ready_event.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                pass
+            self.proc.stdin.write(json.dumps({"type": "setMode", "mode": session_mode}).encode() + b"\n")
+            await self.proc.stdin.drain()
+            print(f"[pool] sent setMode={session_mode} to {self.session_id}", file=sys.stderr)
+
+    async def _dispatch_stdout(self) -> None:
+        """Read from _out_queue, track agent state, auto-approve in yolo, fan out."""
+        while True:
+            raw = await self._out_queue.get()
+            if raw is None:
+                self.agent_status = "dead"
+                print(f"[{self.session_id}] stdout closed", file=sys.stderr)
+                for q in list(self._subscribers):
+                    try:
+                        q.put_nowait(None)
+                    except asyncio.QueueFull:
+                        pass
+                break
+
+            forward = True  # whether to fan out to subscribers
+
+            if raw and raw[0] == "{":
+                try:
+                    _msg = json.loads(raw)
+                    _t = _msg.get("type", "")
+
+                    # ── State tracking ───────────────────────────────────
+                    if _t == "status":
+                        _s = _msg.get("status", "")
+                        if _s == "running":
+                            self.agent_status = "running"
+                            self._turn_buffer.clear()
+                        elif _s == "idle":
+                            self.agent_status = "idle"
+                        if _msg.get("mode"):
+                            self.session_mode = _msg["mode"]
+                        if _msg.get("model"):
+                            self.model_info = _msg["model"] if isinstance(_msg["model"], dict) else {}
+
+                    elif _t == "result":
+                        self.agent_status = "idle"
+
+                    elif _t == "prompt":
+                        _sub = _msg.get("subtype", "")
+                        _rid = _msg.get("requestId", "")
+                        if _sub == "permission":
+                            self._pending_request_id = _rid
+                            if self.session_mode == "yolo":
+                                # Auto-approve: write directly to stdin, skip frontend
+                                self.agent_status = "running"
+                                _resp = json.dumps({
+                                    "type": "user", "subtype": "permission",
+                                    "requestId": _rid, "behavior": "always",
+                                }) + "\n"
+                                self.proc.stdin.write(_resp.encode())
+                                asyncio.ensure_future(self.proc.stdin.drain())
+                                print(f"[{self.session_id}] auto-approved {_msg.get('tool', '?')}", file=sys.stderr)
+                                forward = False
+                            else:
+                                self.agent_status = "waiting_permission"
+                        elif _sub == "input":
+                            self.agent_status = "waiting_input"
+                            self._pending_request_id = _rid
+
+                    # ── Logging ──────────────────────────────────────────
+                    if _t == "delta":
+                        pass
+                    elif _t == "assistant":
+                        _preview = ""
+                        for _b in (_msg.get("content") or []):
+                            if isinstance(_b, dict) and _b.get("type") == "text":
+                                _preview = str(_b.get("text", ""))[:120]
+                                break
+                        print(f"[{self.session_id}] assistant: {_preview}", file=sys.stderr)
+                    elif forward:
+                        _preview = raw[:200] if len(raw) > 200 else raw
+                        print(f"[{self.session_id}] {_t}: {_preview}", file=sys.stderr)
+
+                except Exception:
+                    print(f"[{self.session_id}] raw: {raw[:200]}", file=sys.stderr)
+
+            if forward:
+                self._turn_buffer.append(raw)
+                for q in list(self._subscribers):
+                    try:
+                        q.put_nowait(raw)
+                    except asyncio.QueueFull:
+                        pass
+                # Clear buffer after appending idle/result (turn complete, .jsonl saved)
+                if self.agent_status == "idle":
+                    self._turn_buffer.clear()
+
+    def subscribe(self, replay: bool = False) -> asyncio.Queue:
+        """Add a subscriber queue. If replay=True, pre-fill with current turn's buffered messages."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        if replay:
+            for msg in self._turn_buffer:
+                try:
+                    q.put_nowait(msg)
+                except asyncio.QueueFull:
+                    break
+        self._subscribers.add(q)
+        self._last_ws_detach_at = None
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue) -> None:
+        """Remove a subscriber queue."""
+        self._subscribers.discard(q)
+        if not self._subscribers and self._ws is None:
+            self._last_ws_detach_at = _time.monotonic()
+
+    def _read_session_messages(self) -> list:
+        """Read .jsonl transcript and return messages list (timestamps stripped)."""
+        jsonl_path = SESSIONS_DIR / f"{self.session_id}.jsonl"
+        if not jsonl_path.exists():
+            return []
+        try:
+            messages = []
+            with open(jsonl_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        entry.pop("timestamp", None)
+                        if entry.get("type") == "session":
+                            continue
+                        messages.append(entry)
+                    except json.JSONDecodeError:
+                        continue
+            return messages
+        except Exception:
+            return []
+
+    async def attach_ws(self, ws) -> tuple:
+        """Attach a WebSocket. Returns (send_task, relay_task) for the caller to await."""
+        async with self._attach_lock:
+            if self._shutting_down:
+                raise RuntimeError("Agent is shutting down")
+
+            # If another WS is attached, detach it first
+            if self._ws is not None:
+                await self._detach_ws_internal()
+
+            self._attach_count += 1
+            is_reattach = self._attach_count > 1
+            self._ws = ws
+            self._ws_fwd_queue = self.subscribe()  # register as subscriber
+            self._last_ws_detach_at = None
+
+            # On reattach, send conversation history since bzcode won't re-emit it
+            if is_reattach:
+                messages = self._read_session_messages()
+                session_msg = json.dumps({
+                    "type": "session",
+                    "sessionId": self.session_id,
+                    "messages": messages,
+                })
+                try:
+                    await ws.send_str(session_msg)
+                except Exception:
+                    pass
+
+            # Start WS-facing tasks
+            self._ws_send_task = asyncio.create_task(
+                send_to_client(self._ws_fwd_queue, ws))
+            self._ws_relay_task = asyncio.create_task(
+                relay_client_messages(self.proc, ws, self._ready_event))
+
+            return self._ws_send_task, self._ws_relay_task
+
+    async def detach_ws(self) -> None:
+        """Detach the current WebSocket. Process keeps running."""
+        async with self._attach_lock:
+            await self._detach_ws_internal()
+
+    async def _detach_ws_internal(self) -> None:
+        """Internal detach — caller must hold _attach_lock."""
+        if self._ws_relay_task and not self._ws_relay_task.done():
+            self._ws_relay_task.cancel()
+            try:
+                await self._ws_relay_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        if self._ws_send_task and not self._ws_send_task.done():
+            if self._ws_fwd_queue:
+                try:
+                    self._ws_fwd_queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
+            self._ws_send_task.cancel()
+            try:
+                await self._ws_send_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        if self._ws_fwd_queue:
+            self.unsubscribe(self._ws_fwd_queue)
+        self._ws = None
+        self._ws_send_task = None
+        self._ws_relay_task = None
+        self._ws_fwd_queue = None
+
+    async def shutdown(self, reason: str = "idle") -> None:
+        """Gracefully stop the bzcode process."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        print(f"[pool] shutting down {self.session_id} reason={reason} pid={self.proc.pid if self.proc else '?'}",
+              file=sys.stderr)
+        await self.detach_ws()
+        # Close stdin — signals bzcode to save session and exit
+        if self.proc and self.proc.stdin:
+            try:
+                self.proc.stdin.close()
+            except Exception:
+                pass
+        if self.proc:
+            try:
+                await asyncio.wait_for(self.proc.wait(), timeout=8)
+            except asyncio.TimeoutError:
+                try:
+                    self.proc.kill()
+                except ProcessLookupError:
+                    pass
+            except ProcessLookupError:
+                pass
+        # Cancel process-facing tasks
+        for task in (self._stdout_task, self._stderr_task, self._dispatcher_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        _active_cwds.discard(self.cwd)
+        _running_cwds.discard(self.cwd)
+
+    @property
+    def is_dead(self) -> bool:
+        return self.proc is not None and self.proc.returncode is not None
+
+    @property
+    def has_ws(self) -> bool:
+        return self._ws is not None
+
+    @property
+    def has_clients(self) -> bool:
+        return self._ws is not None or len(self._subscribers) > 0
+
+
+class AgentPool:
+    """Manages a pool of bzcode processes keyed by sessionId."""
+
+    def __init__(self, idle_timeout: float = 300.0):
+        self._entries: dict[str, AgentPoolEntry] = {}
+        self._lock = asyncio.Lock()
+        self._idle_timeout = idle_timeout
+        self._idle_check_task: Optional[asyncio.Task] = None
+
+    async def start(self) -> None:
+        """Start the idle-timeout sweeper. Call from FastAPI lifespan startup."""
+        self._idle_check_task = asyncio.create_task(self._idle_sweeper())
+        print(f"[pool] started  idle_timeout={self._idle_timeout}s", file=sys.stderr)
+
+    async def stop(self) -> None:
+        """Shutdown all agents. Call from FastAPI lifespan shutdown."""
+        if self._idle_check_task:
+            self._idle_check_task.cancel()
+            try:
+                await self._idle_check_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        async with self._lock:
+            for entry in list(self._entries.values()):
+                await entry.shutdown(reason="server_shutdown")
+            self._entries.clear()
+        print("[pool] stopped — all agents shut down", file=sys.stderr)
+
+    async def get_or_create(
+        self, session_id: str, cwd: str, mode: str,
+        bzcode_path: str, cmd: list, env: dict,
+    ) -> AgentPoolEntry:
+        """Return existing entry for session_id, or create a new one."""
+        async with self._lock:
+            entry = self._entries.get(session_id)
+
+            if entry is not None:
+                if entry.is_dead:
+                    print(f"[pool] removing dead entry {session_id}", file=sys.stderr)
+                    del self._entries[session_id]
+                    entry = None
+                elif entry._shutting_down:
+                    await entry.shutdown()
+                    self._entries.pop(session_id, None)
+                    entry = None
+
+            if entry is None:
+                entry = AgentPoolEntry(session_id=session_id, cwd=cwd, mode=mode)
+                await entry.start(bzcode_path, cmd, env)
+                self._entries[session_id] = entry
+                print(f"[pool] spawned {session_id} pid={entry.proc.pid}", file=sys.stderr)
+            else:
+                print(f"[pool] reusing {session_id} pid={entry.proc.pid}", file=sys.stderr)
+
+            return entry
+
+    async def remove(self, session_id: str) -> None:
+        """Remove and shut down an agent."""
+        async with self._lock:
+            entry = self._entries.pop(session_id, None)
+        if entry:
+            await entry.shutdown(reason="explicit_remove")
+
+    async def _idle_sweeper(self) -> None:
+        """Periodically check for idle agents and shut them down."""
+        while True:
+            await asyncio.sleep(30)
+            now = _time.monotonic()
+            to_remove: list[str] = []
+
+            async with self._lock:
+                for sid, entry in list(self._entries.items()):
+                    if entry.is_dead:
+                        to_remove.append(sid)
+                        continue
+                    if (not entry.has_clients
+                            and entry._last_ws_detach_at is not None
+                            and (now - entry._last_ws_detach_at) > self._idle_timeout
+                            and entry.agent_status == "idle"):
+                        to_remove.append(sid)
+
+                for sid in to_remove:
+                    entry = self._entries.pop(sid, None)
+                    if entry:
+                        asyncio.create_task(entry.shutdown(reason="idle_timeout"))
+
+    def status(self) -> list:
+        """Return pool status for monitoring."""
+        now = _time.monotonic()
+        return [{
+            "sessionId": sid,
+            "cwd": e.cwd,
+            "mode": e.mode,
+            "pid": e.proc.pid if e.proc else None,
+            "alive": e.proc is not None and e.proc.returncode is None,
+            "agent_status": e.agent_status,
+            "session_mode": e.session_mode,
+            "model": e.model_info.get("displayName") or e.model_info.get("name"),
+            "ws_attached": e._ws is not None,
+            "subscribers": len(e._subscribers),
+            "idle_seconds": round(now - e._last_ws_detach_at, 1) if e._last_ws_detach_at else None,
+        } for sid, e in self._entries.items()]
+
+
+agent_pool = AgentPool(
+    idle_timeout=float(os.environ.get("AGENT_IDLE_TIMEOUT", "300"))
+)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # § 18 · MISC / UTILITY ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1530,8 +1969,10 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     out_queue   = asyncio.Queue()
     ready_event = asyncio.Event()
 
-    if req_mode == 'widget':
-        proc.stdin.write(b'{"type":"setMode","mode":"yolo"}\n')
+    _entry_cfg = _mode_entry(req_mode)
+    _session_mode = (_entry_cfg.get("settings") or {}).get("mode", "")
+    if _session_mode:
+        proc.stdin.write(json.dumps({"type": "setMode", "mode": _session_mode}).encode() + b"\n")
         await proc.stdin.drain()
 
     try:

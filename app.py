@@ -89,14 +89,10 @@ from server import (
     _load_code,
     _code_path,
     DB_CONFIG,
-    # WebSocket helpers
-    read_bzcode_stdout,
-    send_to_client,
-    drain_bzcode_stderr,
-    relay_client_messages,
     handle_ws_client,
     _write_bzcode_credentials,
     _read_api_keys,
+    agent_pool,
     # Canvas / widget helpers
     WIDGETS_DIR,
     CUSTOM_WIDGETS_DIR,
@@ -321,9 +317,12 @@ async def lifespan(app: FastAPI):
         app.state.db = None
         print("[db] asyncpg not installed — Postgres disabled", file=sys.stderr)
 
+    await agent_pool.start()
+
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
+    await agent_pool.stop()
     if getattr(app.state, "db", None) is not None:
         await app.state.db.close()
         print("[db] pool closed", file=sys.stderr)
@@ -731,19 +730,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                           cwd: str = Query(""),
                           sessionId: str = Query(""),
                           mode: str = Query("")):
-        """bzcode stdio bridge — one WebSocket per agent session."""
-        # Build a fake aiohttp-style request shim so handle_ws_client can reuse
-        # the existing query-param parsing (it now reads from request.rel_url.query).
-        class _QueryShim:
-            def get(self, key, default=""):
-                m = {"cwd": cwd, "sessionId": sessionId, "mode": mode}
-                return m.get(key, default)
+        """bzcode stdio bridge — one WebSocket per agent session.
 
-        class _RequestShim:
-            rel_url = type("u", (), {"query": _QueryShim()})()
-
-        # FastAPI already accepted the WebSocket — we need a wrapper that presents
-        # the same interface as aiohttp's WebSocketResponse.
+        Uses AgentPool so the bzcode process outlives individual WebSocket
+        connections and can be reconnected to with the same sessionId.
+        """
         class _WsShim:
             """Thin shim: FastAPI WebSocket → aiohttp WebSocketResponse-like API."""
             async def send_str(self, text: str):
@@ -756,7 +747,6 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 import aiohttp
                 try:
                     text = await websocket.receive_text()
-                    # Return a mock aiohttp WSMessage
                     return type("M", (), {
                         "type": aiohttp.WSMsgType.TEXT,
                         "data": text,
@@ -780,20 +770,19 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         # Validate / generate session ID
         req_session_id = sessionId or None
         if req_session_id:
-            if not (SESSIONS_DIR / f"{req_session_id}.jsonl").exists():
-                print(f"[ws] session file not found for {req_session_id!r} — starting fresh",
-                      file=sys.stderr)
-                req_session_id = None
+            # If there's already a live agent in the pool, skip the .jsonl check
+            if req_session_id not in agent_pool._entries:
+                if not (SESSIONS_DIR / f"{req_session_id}.jsonl").exists():
+                    print(f"[ws] session file not found for {req_session_id!r} — starting fresh",
+                          file=sys.stderr)
+                    req_session_id = None
 
         if not req_session_id:
             import secrets as _sec
             req_session_id = f"bz-{_sec.token_hex(6)}"
             print(f"[ws] generated new sessionId={req_session_id}", file=sys.stderr)
 
-        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
-        cmd = [_bzcode, "--stdio", "--resume", req_session_id]
-
-        # ── Pre-flight checks before spawning ────────────────────────────────
+        # ── Pre-flight checks ────────────────────────────────────────────────
         import shutil as _shutil_ws
         _bzcode_resolved = _shutil_ws.which(_bzcode) or _bzcode
         if not os.path.isfile(_bzcode_resolved):
@@ -806,7 +795,6 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         _bzcode = _bzcode_resolved
 
         if not os.access(_bzcode, os.X_OK):
-            # Auto-fix: mark the binary executable so the next spawn works
             try:
                 os.chmod(_bzcode, 0o755)
                 print(f"[ws] chmod +x {_bzcode} (was not executable)", file=sys.stderr)
@@ -818,7 +806,6 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 print(f"[ws] cannot chmod bzcode: {e}", file=sys.stderr)
                 return
 
-        # ── Credential check ─────────────────────────────────────────────────
         cred_ok, cred_reason = _credentials_valid()
         if not cred_ok:
             print(f"[ws] auth_error: {cred_reason}", file=sys.stderr)
@@ -828,20 +815,20 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             }))
             return
 
+        # ── Session config & pool ────────────────────────────────────────────
+        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
+        cmd = [_bzcode, "--stdio", "--resume", req_session_id]
+        env = {**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
+               **( {"BZ_HOME": _bz_home} if _bz_home else {} )}
+
         print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}  mode={req_mode}",
               file=sys.stderr)
         _active_cwds.add(effective_cwd)
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=effective_cwd,
-                env={**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
-                     **( {"BZ_HOME": _bz_home} if _bz_home else {} )},
-            )
+            entry = await agent_pool.get_or_create(
+                req_session_id, effective_cwd, req_mode,
+                _bzcode, cmd, env)
         except (FileNotFoundError, PermissionError) as exc:
             _active_cwds.discard(effective_cwd)
             await websocket.send_text(json.dumps({
@@ -850,49 +837,37 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             }))
             return
 
-        ws_shim     = _WsShim()
-        out_queue   = asyncio.Queue()
-        ready_event = asyncio.Event()
-
-        if req_mode == 'widget':
-            proc.stdin.write(b'{"type":"setMode","mode":"yolo"}\n')
-            await proc.stdin.drain()
+        ws_shim = _WsShim()
 
         try:
-            await asyncio.gather(
-                read_bzcode_stdout(proc, out_queue, ready_event,
-                                   cwd=effective_cwd, mode=req_mode),
-                send_to_client(out_queue, ws_shim),
-                drain_bzcode_stderr(proc, out_queue),
-                relay_client_messages(proc, ws_shim, ready_event),
+            send_task, relay_task = await entry.attach_ws(ws_shim)
+            # Wait until either the WS disconnects or the process dies
+            done, pending = await asyncio.wait(
+                [send_task, relay_task],
+                return_when=asyncio.FIRST_COMPLETED,
             )
+            for t in pending:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
         except (BrokenPipeError, ConnectionResetError, asyncio.CancelledError, WebSocketDisconnect):
             pass
         finally:
+            await entry.detach_ws()
             _active_cwds.discard(effective_cwd)
-            exit_code = proc.returncode
-            if exit_code not in (None, 0):
-                print(f"[ws] bzcode exited with code {exit_code}  pid={proc.pid}", file=sys.stderr)
+            if entry.is_dead:
                 try:
                     await websocket.send_text(json.dumps({
                         "type": "system",
-                        "message": f"⚠ bzcode process exited unexpectedly (code {exit_code}). Reconnecting…",
+                        "message": f"⚠ bzcode exited unexpectedly (code {entry.proc.returncode}). Reconnecting…",
                     }))
                 except Exception:
                     pass
             else:
-                print(f"[ws] disconnect  pid={proc.pid}", file=sys.stderr)
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except (ProcessLookupError, asyncio.TimeoutError):
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
+                print(f"[ws] detached  sessionId={req_session_id}  pid={entry.proc.pid}",
+                      file=sys.stderr)
 
     # ── § 2 · Auth & Credentials ─────────────────────────────────────────────
 
@@ -1410,8 +1385,10 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
         confirmed_id = session_id
         try:
-            if mode == 'widget':
-                proc.stdin.write(b'{"type":"setMode","mode":"yolo"}\n')
+            _entry_cfg = _load_mode_config().get("modes", {}).get(mode, {})
+            _session_mode = (_entry_cfg.get("settings") or {}).get("mode", "")
+            if _session_mode:
+                proc.stdin.write(json.dumps({"type": "setMode", "mode": _session_mode}).encode() + b"\n")
                 await proc.stdin.drain()
 
             # Wait for session message (bzcode ready)
@@ -1529,6 +1506,153 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     @misc_router.get("/token-stats")
     async def token_stats():
         return _token_stats
+
+    @misc_router.get("/api/pool/status")
+    async def pool_status():
+        return {"agents": agent_pool.status()}
+
+    @misc_router.post("/api/pool/connect")
+    async def pool_connect(request: Request):
+        """Create or reuse an agent. Returns session info with conversation history."""
+        body = await request.json()
+        req_cwd = body.get("cwd", "")
+        req_session_id = body.get("sessionId", "")
+        req_mode = body.get("mode", "") or _load_mode_config().get("default", "general")
+
+        _bzcode = app.state.bzcode_path
+        _cwd = app.state.default_cwd
+        _bz_home = app.state.bz_home
+
+        effective_cwd = req_cwd if (req_cwd and os.path.isdir(req_cwd)) else _cwd
+
+        # Validate / generate session ID
+        if req_session_id:
+            if req_session_id not in agent_pool._entries:
+                if not (SESSIONS_DIR / f"{req_session_id}.jsonl").exists():
+                    req_session_id = ""
+            # Recover saved agent mode from meta.json for existing sessions
+            if req_session_id:
+                _meta_file = SESSIONS_DIR / req_session_id / "meta.json"
+                if _meta_file.exists():
+                    try:
+                        _meta = json.loads(_meta_file.read_text())
+                        req_mode = _meta.get("mode", req_mode)
+                    except Exception:
+                        pass
+        if not req_session_id:
+            import secrets as _sec
+            req_session_id = f"bz-{_sec.token_hex(6)}"
+
+        # Pre-flight checks
+        import shutil as _sh
+        _bzcode_resolved = _sh.which(_bzcode) or _bzcode
+        if not os.path.isfile(_bzcode_resolved):
+            raise HTTPException(500, f"bzcode not found: {_bzcode}")
+        _bzcode = _bzcode_resolved
+        if not os.access(_bzcode, os.X_OK):
+            try:
+                os.chmod(_bzcode, 0o755)
+            except OSError:
+                raise HTTPException(500, f"bzcode not executable: {_bzcode}")
+
+        cred_ok, cred_reason = _credentials_valid()
+        if not cred_ok:
+            raise HTTPException(401, cred_reason)
+
+        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
+        cmd = [_bzcode, "--stdio", "--resume", req_session_id]
+        env = {**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
+               **({"BZ_HOME": _bz_home} if _bz_home else {})}
+
+        is_reuse = req_session_id in agent_pool._entries
+        try:
+            entry = await agent_pool.get_or_create(
+                req_session_id, effective_cwd, req_mode, _bzcode, cmd, env)
+        except (FileNotFoundError, PermissionError) as exc:
+            raise HTTPException(500, f"Failed to start bzcode: {exc}")
+
+        # Always read history from .jsonl — works for both new (empty) and reused sessions.
+        # The session message from bzcode startup is consumed by the dispatcher,
+        # not by this endpoint.
+        messages = entry._read_session_messages()
+
+        _active_cwds.add(effective_cwd)
+        return {
+            "sessionId": req_session_id,
+            "cwd": effective_cwd,
+            "mode": req_mode,
+            "sessionMode": entry.session_mode,
+            "agentStatus": entry.agent_status,
+            "pid": entry.proc.pid if entry.proc else None,
+            "reused": is_reuse,
+            "messages": messages,
+        }
+
+    @misc_router.get("/api/pool/{session_id}/stream")
+    async def pool_stream(session_id: str, request: Request):
+        """SSE stream of all bzcode output for a pooled agent."""
+        entry = agent_pool._entries.get(session_id)
+        if entry is None:
+            raise HTTPException(404, f"No agent in pool with sessionId={session_id}")
+        if entry.is_dead:
+            raise HTTPException(410, f"Agent {session_id} process is dead")
+
+        q = entry.subscribe(replay=True)
+
+        async def event_generator():
+            try:
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(q.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield ": ping\n\n"
+                        continue
+                    if raw is None:
+                        yield f"data: {json.dumps({'type': 'system', 'message': 'Agent process exited'})}\n\n"
+                        break
+                    if raw and raw[0] == "{":
+                        yield f"data: {raw}\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                entry.unsubscribe(q)
+
+        from starlette.responses import StreamingResponse
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @misc_router.post("/api/pool/{session_id}/send")
+    async def pool_send(session_id: str, request: Request):
+        """Send a message directly to a pooled agent's stdin."""
+        body = await request.json()
+
+        entry = agent_pool._entries.get(session_id)
+        if entry is None:
+            raise HTTPException(404, f"No agent in pool with sessionId={session_id}")
+        if entry.is_dead:
+            raise HTTPException(410, f"Agent {session_id} process is dead")
+        if entry.proc.stdin is None:
+            raise HTTPException(500, "Agent stdin is not available")
+
+        # Accept full message JSON (type, content, subtype, etc.) or legacy {message} field
+        if "type" in body:
+            payload = json.dumps(body) + "\n"
+        else:
+            message = body.get("message", "")
+            if not message:
+                raise HTTPException(400, "message or type is required")
+            payload = json.dumps({"type": "user", "content": message}) + "\n"
+
+        entry.proc.stdin.write(payload.encode())
+        await entry.proc.stdin.drain()
+        return {"ok": True, "pid": entry.proc.pid, "sessionId": session_id}
 
     @misc_router.get("/agent-modes")
     async def agent_modes():
