@@ -916,6 +916,20 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     async def api_version():
         return {"backend": BACKEND_VERSION}
 
+    @misc_router.get("/api/apikey-status")
+    async def apikey_status():
+        keys_file = Path(app.state.bz_home) / "api_keys.json"
+        if not keys_file.exists():
+            return {"present": False, "last4": None}
+        try:
+            data = json.loads(keys_file.read_text())
+            key = data.get("BZ_API_KEY", "")
+            if key and isinstance(key, str):
+                return {"present": True, "last4": key[-4:]}
+        except Exception:
+            pass
+        return {"present": False, "last4": None}
+
     @misc_router.get("/api/home")
     async def api_home():
         home = str(Path.home())

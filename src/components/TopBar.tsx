@@ -55,20 +55,54 @@ function useTokenStatus() {
 }
 
 function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: string }) {
+  const [apiKey, setApiKey] = useState<{ present: boolean; last4: string | null } | null>(null);
+
+  useEffect(() => {
+    fetch(`${AGENT_HTTP}/api/apikey-status`)
+      .then(r => r.json())
+      .then(setApiKey)
+      .catch(() => null);
+  }, []);
+
   const color = status === 'valid' ? '#22c55e' : status === 'invalid' ? '#ef4444' : '#6b7280';
-  const label = status === 'valid' ? 'Token valid' : status === 'invalid' ? `Token invalid: ${reason}` : 'Checking…';
+  const authLabel = status === 'valid' ? 'Auth valid' : status === 'invalid' ? `Auth invalid: ${reason}` : 'Checking…';
+  const keyLabel = apiKey == null ? '' : apiKey.present ? ` · API key: ****${apiKey.last4}` : ' · No API key';
+  const label = authLabel + keyLabel;
+
   return (
-    <div
-      title={label}
-      style={{
-        width: 8, height: 8,
-        borderRadius: '50%',
-        background: color,
-        flexShrink: 0,
-        boxShadow: status === 'valid' ? `0 0 6px ${color}` : 'none',
-        cursor: 'default',
-      }}
-    />
+    <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}
+      className="token-status-dot-wrap"
+    >
+      <div
+        style={{
+          width: 8, height: 8,
+          borderRadius: '50%',
+          background: color,
+          flexShrink: 0,
+          boxShadow: status === 'valid' ? `0 0 6px ${color}` : 'none',
+          cursor: 'default',
+        }}
+      />
+      <div className="token-status-dot-tip" style={{
+        position: 'absolute',
+        top: 'calc(100% + 6px)',
+        right: 0,
+        background: '#1a1a1a',
+        color: '#e8e8e8',
+        fontSize: 11,
+        fontFamily: 'var(--font-mono, monospace)',
+        fontWeight: 500,
+        letterSpacing: '0.01em',
+        whiteSpace: 'nowrap',
+        padding: '5px 10px',
+        borderRadius: 6,
+        zIndex: 9999,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        border: '1px solid rgba(255,255,255,0.1)',
+      }}>
+        {label}
+      </div>
+    </div>
   );
 }
 import { getCurrentMode, applyTheme } from '#/design-tokens';

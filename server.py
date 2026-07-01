@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.2.4.1"
+BACKEND_VERSION = "0.2.4.3"
 
 import asyncio
 import json

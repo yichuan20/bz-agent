@@ -1831,6 +1831,10 @@ p {
 .agent-connection--disconnected { color: var(--text-tertiary); }
 .agent-connection--disconnected .agent-connection-dot { background: var(--text-tertiary); }
 
+.token-status-dot-wrap { padding: 6px; margin: -6px; }
+.token-status-dot-wrap .token-status-dot-tip { opacity: 0; pointer-events: none; }
+.token-status-dot-wrap:hover .token-status-dot-tip { opacity: 1; }
+
 /* ─── Messages wrapper (position:relative so sticky anchors here, not inside the scrollable area) ─── */
 .agent-messages-wrapper {
   position: relative;

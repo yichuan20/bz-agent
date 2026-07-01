@@ -4025,11 +4025,6 @@ function AgentPage() {
           onSwitch={m => openSession(activeCwd, null, m)}
         />
 
-        <div className={`agent-connection agent-connection--${connStatus}`}>
-          <span className="agent-connection-dot" />
-          {{ connecting: 'Connecting…', connected: 'Connected', error: 'Error', disconnected: 'Disconnected' }[connStatus]}
-        </div>
-
         {/* Conversations panel — anchored to far right so it never overlaps the breadcrumb */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <button
