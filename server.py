@@ -886,6 +886,10 @@ class AgentPoolEntry:
         self.model_info: dict = {}
         self._pending_request_id: Optional[str] = None
 
+        # Agent config captured from bzcode's initial session message
+        self.available_modes: list = []
+        self.available_commands: list = []
+
         # Process-facing output queue — fed by read_bzcode_stdout and drain_bzcode_stderr
         self._out_queue: asyncio.Queue = asyncio.Queue()
         self._ready_event = asyncio.Event()
@@ -967,7 +971,13 @@ class AgentPoolEntry:
                     _t = _msg.get("type", "")
 
                     # ── State tracking ───────────────────────────────────
-                    if _t == "status":
+                    if _t == "session":
+                        if isinstance(_msg.get("modes"), list):
+                            self.available_modes = _msg["modes"]
+                        if isinstance(_msg.get("commands"), list):
+                            self.available_commands = _msg["commands"]
+
+                    elif _t == "status":
                         _s = _msg.get("status", "")
                         if _s == "running":
                             self.agent_status = "running"
