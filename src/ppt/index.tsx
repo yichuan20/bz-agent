@@ -8,6 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp, cloneDeep } from 'lodash';
+import { drawConfig, SF, CANVAS_WIDTH, CANVAS_HEIGHT } from './components/Slide';
 
 const SlideCanvas = React.lazy(() => import('./components/Slide')) as any;
 
@@ -16,6 +17,9 @@ const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ??
 export interface PptEditorProps {
   filePath: string;
   style?: React.CSSProperties;
+  onDirty?: () => void;
+  onClean?: () => void;
+  saveRef?: { current: (() => void) | null };
 }
 
 // ── tiny uuid ──────────────────────────────────────────────────────────────
@@ -25,83 +29,61 @@ const uuidv4 = () =>
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 
-// ── ThumbnailCanvas ────────────────────────────────────────────────────────
-const THUMB_W = 896, THUMB_H = 504;
-
-function ThumbnailCanvas({ slide }: { slide: any }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, THUMB_W, THUMB_H);
-    ctx.fillStyle = slide?.bgColor || '#ffffff';
-    ctx.fillRect(0, 0, THUMB_W, THUMB_H);
-
-    (slide?.boxes || []).forEach((box: any) => {
-      const { x, y, w, h } = box;
-      if (box.canvasImage || (typeof box.text === 'string' && box.text.startsWith('data:image'))) {
-        try {
-          const img = box.canvasImage || (() => { const i = new Image(); i.src = box.text; return i; })();
-          ctx.drawImage(img, x, y, w, h);
-        } catch {}
-        return;
-      }
-      if (typeof box.text === 'string' && box.text.startsWith('shape:')) {
-        try {
-          const sc = JSON.parse(box.text.slice(6));
-          ctx.fillStyle = sc.bgColor || '#1473df'; ctx.strokeStyle = sc.borderColor || '#0d5bb5'; ctx.lineWidth = sc.borderWidth || 2;
-          if (sc.type === 'circle') { ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-          else { ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); }
-        } catch {}
-        return;
-      }
-      const bg = box.boxStyle?.bgColor || 'transparent';
-      if (bg !== 'transparent') { ctx.fillStyle = bg; ctx.fillRect(x, y, w, h); }
-      const text = box.text;
-      if (text && typeof text === 'string' && !text.startsWith('data:') && !text.startsWith('shape:')) {
-        const fs = Math.max(8, box.boxStyle?.fontSize || 14);
-        ctx.fillStyle = box.boxStyle?.color || '#000000';
-        ctx.font = `${box.boxStyle?.fontWeight || 400} ${fs}px Montserrat, sans-serif`;
-        ctx.textBaseline = 'top';
-        const pad = 5, maxW = w - pad * 2, lh = fs * 1.2;
-        let cx = x + pad, cy = y + pad;
-        text.split(' ').reduce((line: string, word: string) => {
-          const test = line + (line ? ' ' : '') + word;
-          if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, cx, cy); cy += lh; return word; }
-          return test;
-        }, '');
-      }
-    });
-  }, [JSON.stringify(slide)]);
-
-  return (
-    <div style={{ width: '100%', aspectRatio: '16/9', position: 'relative', overflow: 'hidden' }}>
-      <canvas ref={ref} width={THUMB_W} height={THUMB_H} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
-    </div>
-  );
+// ── Thumbnail render queue — one render per animation frame ───────────────
+const _thumbQueue: Array<() => void> = [];
+let _thumbRunning = false;
+function _processThumbQueue() {
+  if (!_thumbQueue.length) { _thumbRunning = false; return; }
+  _thumbQueue.shift()!();
+  requestAnimationFrame(_processThumbQueue);
+}
+function _enqueueThumb(fn: () => void, priority = false) {
+  if (priority) _thumbQueue.unshift(fn); else _thumbQueue.push(fn);
+  if (!_thumbRunning) { _thumbRunning = true; requestAnimationFrame(_processThumbQueue); }
 }
 
-// ── icons ──────────────────────────────────────────────────────────────────
-const Icon = ({ d, ...p }: { d: string; [k: string]: any }) => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    {d.split('|').map((seg, i) => <path key={i} d={seg} />)}
-  </svg>
-);
-const LineIcon = ({ x1, y1, x2, y2, ...p }: any) => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" {...p}>
-    <line x1={x1} y1={y1} x2={x2} y2={y2} />
-  </svg>
-);
+// Thumbnail canvas size — quarter of full resolution is plenty for the sidebar
+const THUMB_W = Math.round(CANVAS_WIDTH / 2);
+const THUMB_H = Math.round(CANVAS_HEIGHT / 2);
+
+// ── ThumbnailCanvas ────────────────────────────────────────────────────────
+function ThumbnailCanvas({ slide, priority }: { slide: any; priority?: boolean }) {
+  const [url, setUrl] = useState('');
+  // Change key: tracks all visual properties except large base64 image payloads.
+  const changeKey = slide?.boxes?.map((b: any) => {
+    const t = b.text || '';
+    const textPart = (t.startsWith('data:image') || t.startsWith('shape:')) ? `img:${b.id}` : t;
+    const fill = typeof b.fill === 'object' ? `${b.fill?.color}:${b.fill?.opacity}` : (b.fill || '');
+    return `${b.id}:${b.x}:${b.y}:${b.w}:${b.h}:${b.type}:${fill}:${b.cornerRadius || 0}:${b.opacity || 1}:${textPart}`;
+  }).join('\x1f') + `|${slide?.bgColor}|${JSON.stringify(slide?.bgGradient)}|${slide?.slideWidthPt}`;
+
+  useEffect(() => {
+    if (!slide) return;
+    _enqueueThumb(() => {
+      const oc = document.createElement('canvas');
+      oc.width = THUMB_W;
+      oc.height = THUMB_H;
+      const ctx = oc.getContext('2d')!;
+      ctx.save();
+      // Scale so drawConfig's SF-multiplied coordinates fit into THUMB_W×THUMB_H
+      ctx.scale(THUMB_W / (CANVAS_WIDTH * SF), THUMB_H / (CANVAS_HEIGHT * SF));
+      drawConfig(ctx, slide, { x: 0, y: 0 }, true, null);
+      ctx.restore();
+      setUrl(oc.toDataURL('image/jpeg', 0.75));
+    }, priority);
+  }, [changeKey]);
+
+  return <img src={url} style={{ width: '100%', display: 'block' }} />;
+}
 
 // ── Btn helper ─────────────────────────────────────────────────────────────
-function Btn({ title, active, onClick, children, style }: { title?: string; active?: boolean; onClick?: () => void; children: React.ReactNode; style?: React.CSSProperties }) {
+function Btn({ title, active, onClick, onMouseDown, children, style }: { title?: string; active?: boolean; onClick?: () => void; onMouseDown?: (e: React.MouseEvent) => void; children: React.ReactNode; style?: React.CSSProperties }) {
   const [hover, setHover] = useState(false);
   return (
     <button
       title={title}
       onClick={onClick}
+      onMouseDown={onMouseDown}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -115,14 +97,282 @@ function Btn({ title, active, onClick, children, style }: { title?: string; acti
   );
 }
 
+// ── Color utilities ────────────────────────────────────────────────────────
+function parseColorInput(color: string): { hex: string; alpha: number } {
+  if (!color || color === 'transparent') return { hex: '#000000', alpha: 0 };
+  if (color.startsWith('rgba(')) {
+    const p = color.slice(5, -1).split(',');
+    const r = parseInt(p[0] ?? '0'), g = parseInt(p[1] ?? '0'), b = parseInt(p[2] ?? '0');
+    const a = parseFloat(p[3] ?? '1');
+    return { hex: `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`, alpha: a };
+  }
+  if (color.startsWith('rgb(')) {
+    const p = color.slice(4, -1).split(',');
+    const r = parseInt(p[0] ?? '0'), g = parseInt(p[1] ?? '0'), b = parseInt(p[2] ?? '0');
+    return { hex: `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`, alpha: 1 };
+  }
+  if (color.startsWith('#')) {
+    const h = color.length === 4
+      ? '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3]
+      : color;
+    return { hex: h.slice(0, 7), alpha: 1 };
+  }
+  return { hex: '#000000', alpha: 1 };
+}
+
+function toRgbaString(hex: string, alpha: number): string {
+  if (alpha <= 0) return 'transparent';
+  const m = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return hex;
+  if (alpha >= 0.999) return hex;
+  return `rgba(${parseInt(m[1]!,16)},${parseInt(m[2]!,16)},${parseInt(m[3]!,16)},${alpha.toFixed(2)})`;
+}
+
+// ── ColorPicker ────────────────────────────────────────────────────────────
+// Office theme palette + standard 10×10 grid
+const OFFICE_COLORS = ['#000000','#ffffff','#44546a','#e7e6e6','#4472c4','#ed7d31','#a5a5a5','#ffc000','#5b9bd5','#70ad47'];
+const STD_COLORS: string[] = (() => {
+  const cols: string[] = [];
+  // grays
+  for (let i = 0; i <= 9; i++) { const v = Math.round(i * 255 / 9); cols.push(`#${v.toString(16).padStart(2,'0').repeat(3)}`); }
+  // hues at full sat
+  const hues = [0,30,45,60,120,180,210,240,270,300];
+  for (const sat of [1, 0.7, 0.5, 0.35, 0.2, 0.12]) {
+    for (const h of hues) {
+      const s = sat, l = sat > 0.7 ? 0.5 : sat > 0.4 ? 0.38 : sat > 0.25 ? 0.3 : 0.22;
+      const c = (1-Math.abs(2*l-1))*s, x = c*(1-Math.abs((h/60)%2-1)), m = l-c/2;
+      let r=0,g=0,b=0;
+      if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+      cols.push(`#${Math.round((r+m)*255).toString(16).padStart(2,'0')}${Math.round((g+m)*255).toString(16).padStart(2,'0')}${Math.round((b+m)*255).toString(16).padStart(2,'0')}`);
+    }
+  }
+  return cols;
+})();
+
+function hsvToHex(h: number, s: number, v: number): string {
+  const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+  return `#${Math.round((r+m)*255).toString(16).padStart(2,'0')}${Math.round((g+m)*255).toString(16).padStart(2,'0')}${Math.round((b+m)*255).toString(16).padStart(2,'0')}`;
+}
+function hexToHsv(hex: string): [number,number,number] {
+  const m = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return [0,0,0];
+  const r = parseInt(m[1]!,16)/255, g = parseInt(m[2]!,16)/255, b = parseInt(m[3]!,16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max-min;
+  let h = 0;
+  if (d) {
+    if (max===r) h = ((g-b)/d + (g<b?6:0))*60;
+    else if (max===g) h = ((b-r)/d+2)*60;
+    else h = ((r-g)/d+4)*60;
+  }
+  return [h, max ? d/max : 0, max];
+}
+
+function AdvancedColorPicker({ hex, alpha, onChange, onClose }: {
+  hex: string; alpha: number; onChange: (hex: string, alpha: number) => void; onClose: () => void;
+}) {
+  const [hsv, setHsv] = useState<[number,number,number]>(() => hexToHsv(hex));
+  const [localAlpha, setLocalAlpha] = useState(alpha);
+  const [hexInput, setHexInput] = useState(hex.replace('#',''));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const draggingSv = useRef(false);
+  const draggingH = useRef(false);
+  const draggingA = useRef(false);
+
+  const W = 220, H = 140, SH = 14;
+
+  useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return;
+    const ctx = cv.getContext('2d')!;
+    // SV gradient
+    const gW = ctx.createLinearGradient(0,0,W,0);
+    gW.addColorStop(0,'#fff'); gW.addColorStop(1, hsvToHex(hsv[0],1,1));
+    ctx.fillStyle = gW; ctx.fillRect(0,0,W,H);
+    const gB = ctx.createLinearGradient(0,0,0,H);
+    gB.addColorStop(0,'transparent'); gB.addColorStop(1,'#000');
+    ctx.fillStyle = gB; ctx.fillRect(0,0,W,H);
+    // dot
+    const sx = hsv[1]*W, sy = (1-hsv[2])*H;
+    ctx.beginPath(); ctx.arc(sx,sy,6,0,Math.PI*2);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx,sy,7,0,Math.PI*2);
+    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=1; ctx.stroke();
+  }, [hsv]);
+
+  const pickSv = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    const s = Math.max(0,Math.min(1,(e.clientX-r.left)/W));
+    const v = Math.max(0,Math.min(1,1-(e.clientY-r.top)/H));
+    const nh: [number,number,number] = [hsv[0],s,v];
+    setHsv(nh); setHexInput(hsvToHex(nh[0],nh[1],nh[2]).replace('#',''));
+    onChange(hsvToHex(nh[0],nh[1],nh[2]), localAlpha);
+  };
+
+  const currentHex = hsvToHex(hsv[0],hsv[1],hsv[2]);
+
+  return (
+    <div style={{ padding: 12, width: W+24 }}>
+      {/* SV canvas */}
+      <canvas ref={canvasRef} width={W} height={H} style={{ borderRadius: 6, cursor: 'crosshair', display: 'block', marginBottom: 8 }}
+        onMouseDown={e => { draggingSv.current=true; pickSv(e); }}
+        onMouseMove={e => { if (draggingSv.current) pickSv(e); }}
+        onMouseUp={() => { draggingSv.current=false; }}
+        onMouseLeave={() => { draggingSv.current=false; }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {/* color preview */}
+        <div style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0, background: `repeating-linear-gradient(45deg,#ccc 0,#ccc 4px,#fff 4px,#fff 8px)`, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', inset: 0, background: toRgbaString(currentHex, localAlpha) }} />
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Hue slider */}
+          <div style={{ position: 'relative', height: SH, borderRadius: SH/2, background: 'linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)', cursor: 'pointer' }}
+            onMouseDown={e => { draggingH.current=true; const r=e.currentTarget.getBoundingClientRect(); const h=Math.max(0,Math.min(360,(e.clientX-r.left)/r.width*360)); const nh:[number,number,number]=[h,hsv[1],hsv[2]]; setHsv(nh); setHexInput(hsvToHex(h,hsv[1],hsv[2]).replace('#','')); onChange(hsvToHex(h,hsv[1],hsv[2]),localAlpha); }}
+            onMouseMove={e => { if(!draggingH.current) return; const r=e.currentTarget.getBoundingClientRect(); const h=Math.max(0,Math.min(360,(e.clientX-r.left)/r.width*360)); const nh:[number,number,number]=[h,hsv[1],hsv[2]]; setHsv(nh); setHexInput(hsvToHex(h,hsv[1],hsv[2]).replace('#','')); onChange(hsvToHex(h,hsv[1],hsv[2]),localAlpha); }}
+            onMouseUp={() => { draggingH.current=false; }} onMouseLeave={() => { draggingH.current=false; }}
+          >
+            <div style={{ position: 'absolute', top: -1, width: SH+2, height: SH+2, borderRadius: '50%', background: hsvToHex(hsv[0],1,1), border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', left: `calc(${hsv[0]/360*100}% - ${SH/2}px)`, pointerEvents: 'none' }} />
+          </div>
+          {/* Alpha slider */}
+          <div style={{ position: 'relative', height: SH, borderRadius: SH/2, overflow: 'hidden', cursor: 'pointer' }}
+            onMouseDown={e => { draggingA.current=true; const r=e.currentTarget.getBoundingClientRect(); const a=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); setLocalAlpha(a); onChange(currentHex,a); }}
+            onMouseMove={e => { if(!draggingA.current) return; const r=e.currentTarget.getBoundingClientRect(); const a=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); setLocalAlpha(a); onChange(currentHex,a); }}
+            onMouseUp={() => { draggingA.current=false; }} onMouseLeave={() => { draggingA.current=false; }}
+          >
+            <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(45deg,#ccc 0,#ccc 3px,#fff 3px,#fff 6px)' }} />
+            <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to right, transparent, ${currentHex})` }} />
+            <div style={{ position: 'absolute', top: -1, width: SH+2, height: SH+2, borderRadius: '50%', background: toRgbaString(currentHex, localAlpha), border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', left: `calc(${localAlpha*100}% - ${SH/2}px)`, pointerEvents: 'none' }} />
+          </div>
+        </div>
+      </div>
+      {/* Hex + RGBA inputs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        <div style={{ flex: 2 }}>
+          <div style={{ fontSize: 9, color: '#888', marginBottom: 2, textAlign: 'center' }}>Hex</div>
+          <input value={hexInput} onChange={e => {
+            setHexInput(e.target.value);
+            const h = '#' + e.target.value.replace('#','');
+            if (/^#[0-9a-f]{6}$/i.test(h)) { setHsv(hexToHsv(h)); onChange(h, localAlpha); }
+          }} style={{ width: '100%', height: 26, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+        </div>
+        {(['R','G','B'] as const).map((ch, ci) => {
+          const vals = [parseInt(currentHex.slice(1,3),16), parseInt(currentHex.slice(3,5),16), parseInt(currentHex.slice(5,7),16)];
+          return (
+            <div key={ch} style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: '#888', marginBottom: 2, textAlign: 'center' }}>{ch}</div>
+              <input type="number" min={0} max={255} value={vals[ci]} onChange={e => {
+                const nv = [...vals]; nv[ci] = Math.max(0,Math.min(255,parseInt(e.target.value)||0));
+                const nh = `#${nv.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+                setHsv(hexToHsv(nh)); setHexInput(nh.replace('#','')); onChange(nh, localAlpha);
+              }} style={{ width: '100%', height: 26, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+            </div>
+          );
+        })}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9, color: '#888', marginBottom: 2, textAlign: 'center' }}>A</div>
+          <input type="number" min={0} max={100} value={Math.round(localAlpha*100)} onChange={e => {
+            const a = Math.max(0,Math.min(100,parseInt(e.target.value)||0))/100;
+            setLocalAlpha(a); onChange(currentHex, a);
+          }} style={{ width: '100%', height: 26, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+        <button onClick={onClose} style={{ padding: '4px 14px', fontSize: 12, borderRadius: 5, border: '1px solid var(--border-primary)', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>Cancel</button>
+        <button onClick={() => { onChange(currentHex, localAlpha); onClose(); }} style={{ padding: '4px 14px', fontSize: 12, borderRadius: 5, border: 'none', background: '#f0a500', cursor: 'pointer', color: '#fff', fontWeight: 600, fontFamily: 'var(--font-body)' }}>OK</button>
+      </div>
+    </div>
+  );
+}
+
+function ColorPicker({ label, color, onChange, allowNone, noneLabel = 'None', icon }: {
+  label: string; color: string; onChange: (c: string) => void;
+  allowNone?: boolean; noneLabel?: string; icon?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const { hex, alpha } = parseColorInput(color);
+  const isNone = !color || color === 'transparent' || alpha <= 0;
+  const previewBg = isNone ? 'repeating-linear-gradient(45deg,#ccc 0,#ccc 2px,#fff 2px,#fff 4px)' : color;
+
+  const Swatch = ({ c, active }: { c: string; active?: boolean }) => (
+    <div title={c} onClick={() => { onChange(toRgbaString(c, 1)); }}
+      style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', flexShrink: 0, border: active ? '2px solid var(--accent-blue)' : '1px solid rgba(0,0,0,0.12)', boxSizing: 'border-box', position: 'relative' }}>
+      {active && <div style={{ position: 'absolute', inset: 2, borderRadius: '50%', border: '1.5px solid #fff' }} />}
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button title={label} onClick={() => { setOpen(o => !o); setShowAdvanced(false); }}
+        style={{ width: 30, height: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, borderRadius: 5, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0, color: 'var(--text-secondary)' }}
+      >
+        {icon ?? <span style={{ fontSize: 12, lineHeight: 1, fontWeight: 700 }}>A</span>}
+        <div style={{ width: 18, height: 3, borderRadius: 2, background: previewBg, border: '0.5px solid rgba(0,0,0,0.2)', flexShrink: 0 }} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000, marginTop: 4, background: 'var(--bg-elevated,#fff)', border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {showAdvanced ? (
+              <AdvancedColorPicker
+                hex={isNone ? '#000000' : hex}
+                alpha={isNone ? 1 : alpha}
+                onChange={(h, a) => onChange(toRgbaString(h, a))}
+                onClose={() => setShowAdvanced(false)}
+              />
+            ) : (
+              <div style={{ padding: 12, width: 224 }}>
+                {/* Office theme */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#999', letterSpacing: '0.6px', marginBottom: 6 }}>OFFICE THEME</div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {OFFICE_COLORS.map(c => <Swatch key={c} c={c} active={!isNone && c.toLowerCase() === hex.toLowerCase()} />)}
+                </div>
+                <div style={{ height: 1, background: 'var(--border-primary)', margin: '0 0 10px' }} />
+                {/* Standard grid */}
+                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {STD_COLORS.map((c, i) => <Swatch key={i} c={c} active={!isNone && c.toLowerCase() === hex.toLowerCase()} />)}
+                </div>
+                <div style={{ height: 1, background: 'var(--border-primary)', margin: '0 0 8px' }} />
+                {/* Custom / eyedropper row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <button title="Custom color" onClick={() => setShowAdvanced(true)}
+                    style={{ width: 26, height: 26, borderRadius: '50%', border: '1.5px dashed #aaa', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2.5" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setShowAdvanced(true)}>Custom color…</span>
+                </div>
+                {/* Transparent */}
+                {allowNone && (
+                  <button onClick={() => { onChange('transparent'); setOpen(false); }}
+                    style={{ width: '100%', height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 6, border: '1px solid var(--border-primary)', background: isNone ? '#f0f0f0' : 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2" fill="none"><line x1="2" y1="2" x2="22" y2="22"/><path d="M3 3h18v18H3z"/></svg>
+                    {noneLabel || 'Transparent'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── main component ─────────────────────────────────────────────────────────
-export function PptEditor({ filePath, style }: PptEditorProps) {
+export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEditorProps) {
   const [slides, setSlides]           = useState<any[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
   const [slideIndex, setSlideIndex]   = useState(0);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel]     = useState(100);
+  const [slideEditState, setSlideEditState] = useState<{ boxId: string; selStart: number; selEnd: number } | null>(null);
+  const [slideClipboard, setSlideClipboard] = useState<any>(null);
+  const [thumbCtxMenu, setThumbCtxMenu] = useState<{ visible: boolean; x: number; y: number; idx: number }>({ visible: false, x: 0, y: 0, idx: 0 });
+  const thumbPanelRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTool, setActiveTool]   = useState<string>('select');
   const [saveMsg, setSaveMsg]         = useState('');
@@ -155,9 +405,15 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: filePath, slides: clean }),
     })
-      .then(() => { setSaveMsg('Saved'); setTimeout(() => setSaveMsg(''), 1500); })
+      .then(() => { setSaveMsg('Saved'); setTimeout(() => setSaveMsg(''), 1500); onClean?.(); })
       .catch(() => { setSaveMsg('Save failed'); setTimeout(() => setSaveMsg(''), 2000); });
-  }, [filePath]);
+  }, [filePath, onClean]);
+
+  // Keep saveRef current — only when slides are loaded (never capture empty initial state)
+  useEffect(() => {
+    if (saveRef) saveRef.current = slides.length > 0 ? () => doSave(slides) : null;
+    return () => { if (saveRef) saveRef.current = null; }; // clear on unmount
+  }, [slides, doSave, saveRef]);
 
   // ── fullscreen ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -186,7 +442,8 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
   // ── slide mutation ─────────────────────────────────────────────────────────
   const setCurrentSlide = useCallback((newSlide: any) => {
     setSlides(prev => prev.map((s, i) => i === slideIndex ? newSlide : s));
-  }, [slideIndex]);
+    onDirty?.();
+  }, [slideIndex, onDirty]);
 
   const saveCurrentSlide = useCallback((newSlide: any) => {
     const updated = slides.map((s, i) => i === slideIndex ? newSlide : s);
@@ -198,25 +455,117 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
     const s = [...slides, { bgColor: '#ffffff', boxes: [] }];
     setSlides(s);
     setSlideIndex(s.length - 1);
+    onDirty?.();
+  };
+
+  // ── slide panel operations ────────────────────────────────────────────────
+  const closeThumbCtx = () => setThumbCtxMenu(m => ({ ...m, visible: false }));
+
+  const duplicateSlide = (idx: number) => {
+    const ns = cloneDeep(slides);
+    const copy = { ...cloneDeep(ns[idx]), id: uuidv4() };
+    ns.splice(idx + 1, 0, copy);
+    setSlides(ns); setSlideIndex(idx + 1); onDirty?.();
+  };
+
+  const deleteSlide = (idx: number) => {
+    if (slides.length <= 1) return;
+    const ns = cloneDeep(slides);
+    ns.splice(idx, 1);
+    setSlides(ns);
+    setSlideIndex(Math.min(idx, ns.length - 1));
+    onDirty?.();
+  };
+
+  const cutSlide = (idx: number) => {
+    setSlideClipboard(cloneDeep(slides[idx]));
+    deleteSlide(idx);
+  };
+
+  const copySlide = (idx: number) => setSlideClipboard(cloneDeep(slides[idx]));
+
+  const pasteSlide = (idx: number) => {
+    if (!slideClipboard) return;
+    const ns = cloneDeep(slides);
+    ns.splice(idx + 1, 0, { ...cloneDeep(slideClipboard), id: uuidv4() });
+    setSlides(ns); setSlideIndex(idx + 1); onDirty?.();
+  };
+
+  const insertSlideAfter = (idx: number) => {
+    const ns = cloneDeep(slides);
+    ns.splice(idx + 1, 0, { bgColor: '#ffffff', boxes: [] });
+    setSlides(ns); setSlideIndex(idx + 1); onDirty?.();
+  };
+
+  const moveSlide = (from: number, to: number) => {
+    const ns = cloneDeep(slides);
+    const [s] = ns.splice(from, 1);
+    ns.splice(to, 0, s);
+    setSlides(ns); setSlideIndex(to); onDirty?.();
   };
 
   // ── toolbar helpers ───────────────────────────────────────────────────────
   const addStyleAtSelection = (styleFields: any) => {
+    if (!slideEditState || slideEditState.selStart === slideEditState.selEnd) return;
+    const slide = slides[slideIndex];
+    const nc = cloneDeep(slide);
+    const box = nc.boxes?.find((b: any) => b.id === slideEditState.boxId);
+    if (!box) return;
+    if (!box.styles) box.styles = [];
+    box.styles.push({ start: slideEditState.selStart, end: slideEditState.selEnd, ...styleFields });
+    setCurrentSlide(nc);
+  };
+
+  const updateBoxStyle = (fields: any) => {
     const slide = slides[slideIndex];
     const nc = cloneDeep(slide);
     const box = nc.boxes?.find((b: any) => b.isSelected);
-    const sel = box?.styles?.find((s: any) => s.isSelection);
-    if (!sel) return;
-    box.styles.push({ start: sel.start, end: sel.end, ...styleFields });
+    if (!box) return;
+    box.boxStyle = { ...(box.boxStyle || {}), ...fields };
+    setCurrentSlide(nc);
+  };
+
+  const updateFill = (color: string) => {
+    const slide = slides[slideIndex];
+    const nc = cloneDeep(slide);
+    const box = nc.boxes?.find((b: any) => b.isSelected);
+    if (!box) return;
+    if (!color || color === 'transparent') {
+      box.fill = { type: 'none' };
+      box.boxStyle = { ...(box.boxStyle || {}), bgColor: 'transparent' };
+    } else {
+      const { hex, alpha } = parseColorInput(color);
+      box.fill = { type: 'solid', color: hex, ...(alpha < 0.999 ? { opacity: alpha } : {}) };
+      box.boxStyle = { ...(box.boxStyle || {}), bgColor: hex };
+    }
+    setCurrentSlide(nc);
+  };
+
+  const updateBorderColor = (color: string) => {
+    const slide = slides[slideIndex];
+    const nc = cloneDeep(slide);
+    const box = nc.boxes?.find((b: any) => b.isSelected);
+    if (!box) return;
+    const bs = { ...(box.boxStyle || {}) };
+    bs.borderColor = color;
+    if (!color || color === 'transparent') {
+      bs.borderWidth = 0;
+    } else if (!bs.borderWidth || bs.borderWidth === 0) {
+      bs.borderWidth = 1;
+    }
+    box.boxStyle = bs;
     setCurrentSlide(nc);
   };
 
   const currentSlide = slides[slideIndex];
   const selectedBox  = currentSlide?.boxes?.find((b: any) => b.isSelected);
-  const selStyle     = selectedBox?.styles?.find((s: any) => s.isSelection);
-  const stylesInSel  = selectedBox?.styles?.filter((s: any) => s.start <= (selStyle?.end ?? -1) && s.end >= (selStyle?.start ?? Infinity));
+  // Derive topStyle from the live selection state exposed by Slide
+  const stylesInSel = slideEditState && selectedBox?.id === slideEditState.boxId
+    ? (selectedBox?.styles || []).filter((s: any) =>
+        !s.isSelection && s.start < slideEditState.selEnd && s.end > slideEditState.selStart)
+    : [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const topStyle: any = stylesInSel?.length ? Object.assign({}, ...cloneDeep(stylesInSel)) : {};
+  const topStyle: any = stylesInSel.length ? Object.assign({}, ...cloneDeep(stylesInSel)) : {};
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', fontSize: 13 }}>
@@ -231,7 +580,10 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--bg-primary)', fontFamily: 'var(--font-body)', fontSize: 13, ...style }}>
 
       {/* ── Toolbar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 12px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-primary)', flexShrink: 0, flexWrap: 'wrap' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 12px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-primary)', flexShrink: 0, flexWrap: 'wrap' }}
+        onMouseDown={e => e.nativeEvent.stopPropagation()}
+      >
         {/* New slide */}
         <Btn title="New slide" onClick={addSlide}>
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="12" y1="7" x2="12" y2="13" /><line x1="9" y1="10" x2="15" y2="10" /></svg>
@@ -279,6 +631,70 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
           <Btn title="Underline" active={topStyle.textDecoration === 'underline'} onMouseDown={(e: React.MouseEvent) => e.preventDefault()} onClick={() => addStyleAtSelection({ textDecoration: topStyle.textDecoration === 'underline' ? 'none' : 'underline' })}>
             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><path d="M6 3v7a6 6 0 0 0 12 0V3" /><line x1="4" y1="21" x2="20" y2="21" /></svg>
           </Btn>
+          <Sep />
+          {/* Text alignment */}
+          {(['left','center','right'] as const).map(al => (
+            <Btn key={al} title={`Align ${al}`} active={(selectedBox.boxStyle?.textAlign || 'left') === al} onMouseDown={(e: React.MouseEvent) => e.preventDefault()} onClick={() => updateBoxStyle({ textAlign: al })}>
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+                {al === 'left'   && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></>}
+                {al === 'center' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></>}
+                {al === 'right'  && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></>}
+              </svg>
+            </Btn>
+          ))}
+          <Sep />
+          {/* Font family picker */}
+          <select
+            value={selectedBox.boxStyle?.fontFamily || 'Montserrat'}
+            onChange={e => updateBoxStyle({ fontFamily: e.target.value })}
+            style={{ height: 24, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer', paddingLeft: 4 }}
+          >
+            {['Montserrat','Martian Mono','Arial','Georgia','Times New Roman','Courier New'].map(f => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <Sep />
+          {/* Fill color */}
+          <ColorPicker
+            label="Fill color"
+            color={
+              selectedBox.fill?.type === 'solid' && selectedBox.fill?.color
+                ? toRgbaString(selectedBox.fill.color, selectedBox.fill.opacity ?? 1)
+                : (selectedBox.boxStyle?.bgColor || 'transparent')
+            }
+            onChange={updateFill}
+            allowNone
+            noneLabel="No fill"
+            icon={
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none">
+                <path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15a1.49 1.49 0 0 0 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/>
+                <path d="M0 20h24v4H0z" fill="currentColor" opacity="0.3"/>
+              </svg>
+            }
+          />
+          {/* Border color */}
+          <ColorPicker
+            label="Border color"
+            color={selectedBox.boxStyle?.borderColor || 'transparent'}
+            onChange={updateBorderColor}
+            allowNone
+            noneLabel="No border"
+            icon={
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+            }
+          />
+          {/* Border width — only shown when border is active */}
+          {selectedBox.boxStyle?.borderColor && selectedBox.boxStyle.borderColor !== 'transparent' && (
+            <input
+              type="number" min="0" max="20" step="0.5"
+              value={selectedBox.boxStyle?.borderWidth ?? 1}
+              onChange={e => updateBoxStyle({ borderWidth: Math.max(0, parseFloat(e.target.value) || 0) })}
+              title="Border width (px)"
+              style={{ width: 38, height: 24, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', paddingLeft: 4 }}
+            />
+          )}
         </>)}
 
         {saveMsg && <span style={{ fontSize: 11, color: saveMsg.includes('fail') ? 'var(--accent-red)' : 'var(--accent-green)', marginLeft: 8 }}>{saveMsg}</span>}
@@ -289,7 +705,9 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
 
         {/* Thumbnail panel */}
         {!panelCollapsed && (
-          <div style={{ width: 180, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div ref={thumbPanelRef} style={{ width: 180, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative' }}
+            onClick={closeThumbCtx}
+          >
             <div style={{ height: 36, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', borderBottom: '1px solid var(--border-primary)', flexShrink: 0 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Slides</span>
               <button onClick={() => setPanelCollapsed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4 }}>
@@ -298,9 +716,15 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {slides.map((s, i) => (
-                <div key={i} onClick={() => setSlideIndex(i)} style={{ position: 'relative', borderRadius: 5, border: `2px solid ${slideIndex === i ? 'var(--accent-blue)' : 'transparent'}`, cursor: 'pointer', overflow: 'hidden', background: s.bgColor || '#ffffff' }}>
+                <div key={i}
+                  onClick={() => setSlideIndex(i)}
+                  onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setSlideIndex(i); setThumbCtxMenu({ visible: true, x: e.clientX, y: e.clientY, idx: i }); }}
+                  style={{ position: 'relative', flexShrink: 0, borderRadius: 5, cursor: 'pointer', overflow: 'hidden', background: (() => { const g = s.bgGradient; if (g && g.stops && g.stops.length >= 2) { const st = g.stops.map((p: any) => `${p.color} ${Math.round(p.pos * 100)}%`).join(', '); return `linear-gradient(${g.angle + 90}deg, ${st})`; } return s.bgColor || '#ffffff'; })() }}>
                   <span style={{ position: 'absolute', top: 3, left: 3, width: 16, height: 16, background: 'rgba(0,0,0,0.5)', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: 'white', zIndex: 2 }}>{i + 1}</span>
-                  <ThumbnailCanvas slide={s} />
+                  <ThumbnailCanvas slide={s} priority={i === slideIndex} />
+                  {slideIndex === i && (
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 5, border: '2px solid var(--accent-blue)', pointerEvents: 'none', zIndex: 3 }} />
+                  )}
                 </div>
               ))}
               <button onClick={addSlide} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 6, borderRadius: 5, border: '2px dashed var(--border-primary)', background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-body)' }}
@@ -311,6 +735,50 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
                 Add slide
               </button>
             </div>
+
+            {/* Thumbnail right-click context menu — rendered inside panel for stacking, positioned fixed to avoid scroll drift */}
+            {thumbCtxMenu.visible && (() => {
+              const idx = thumbCtxMenu.idx;
+              const MENU_H = 310; // approximate menu height
+              const MENU_W = 220;
+              const top = Math.min(thumbCtxMenu.y, window.innerHeight - MENU_H - 8);
+              const left = Math.min(thumbCtxMenu.x, window.innerWidth - MENU_W - 8);
+              const menuStyle: React.CSSProperties = {
+                position: 'fixed', top, left, zIndex: 9999,
+                background: 'var(--bg-elevated, #fff)', border: '1px solid var(--border-default, #ddd)',
+                borderRadius: 8, padding: '4px 0', minWidth: MENU_W,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.18)', fontSize: 13,
+                fontFamily: 'var(--font-body)', color: 'var(--text-primary)',
+              };
+              const item = (label: string, shortcut: string, onClick: () => void, disabled = false): React.ReactNode => (
+                <div key={label} onClick={e => { e.stopPropagation(); if (!disabled) { onClick(); closeThumbCtx(); } }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 14px', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, gap: 24,
+                    color: 'var(--text-primary)',
+                  }}
+                  onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, #f0f0f0)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  <span>{label}</span>
+                  {shortcut && <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{shortcut}</span>}
+                </div>
+              );
+              const sep = (k: string) => <div key={k} style={{ height: 1, background: 'var(--border-primary, #eee)', margin: '4px 0' }} />;
+              return (
+                <div style={menuStyle} onClick={e => e.stopPropagation()}>
+                  {item('Cut', '⌘X', () => cutSlide(idx))}
+                  {item('Copy', '⌘C', () => copySlide(idx))}
+                  {item('Paste', '⌘V', () => pasteSlide(idx), !slideClipboard)}
+                  {sep('s1')}
+                  {item('Delete slide', '⌫', () => deleteSlide(idx), slides.length <= 1)}
+                  {sep('s2')}
+                  {item('New slide', '⌘M', () => insertSlideAfter(idx))}
+                  {item('Duplicate slide', '', () => duplicateSlide(idx))}
+                  {sep('s3')}
+                  {item('Move to beginning', '⌘⇧↑', () => moveSlide(idx, 0), idx === 0)}
+                  {item('Move to end', '⌘⇧↓', () => moveSlide(idx, slides.length - 1), idx === slides.length - 1)}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -349,6 +817,7 @@ export function PptEditor({ filePath, style }: PptEditorProps) {
                     activeTool={activeTool}
                     setConfig={setCurrentSlide}
                     onSave={saveCurrentSlide}
+                    onEditStateChange={setSlideEditState}
                     defaultCursor="default"
                   />
                 )}

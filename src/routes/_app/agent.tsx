@@ -1,5 +1,6 @@
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
 import { BoltzbitLogo } from '#/components/BoltzbitLogo';
+import { BoltzAgentMark } from '#/components/BoltzAgentMark';
 import { IframeWidget } from '#/components/IframeWidget';
 import { WIDGET_REGISTRY, REGISTRY_MAP, type WidgetKind } from '#/lib/widgetRegistry';
 import {
@@ -32,7 +33,7 @@ import {
   XIcon,
 } from '@phosphor-icons/react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from 'react';
 import { AGENT_MODES, modeLSKey, type AgentMode } from '#/lib/agentModes';
 import { ModeBadge }    from '#/components/ModeBadge';
 import { ModeSelector } from '#/components/ModeSelector';
@@ -1154,7 +1155,14 @@ function InputPromptCard({
             type="button"
             className={`agent-prompt-option${selected === opt.label ? ' agent-prompt-option--selected' : ''}`}
             style={selected === opt.label ? { borderColor: MODE_META[mode].color } as React.CSSProperties : undefined}
-            onClick={() => setSelected(opt.label)}
+            onClick={() => {
+              setSelected(opt.label);
+              if (isLast) {
+                const answers: Record<string, string> = {};
+                for (const q2 of prompt.questions) answers[q2.question] = opt.label;
+                onAnswer(prompt.requestId, answers);
+              }
+            }}
           >
             <span className="agent-prompt-option-key">{i + 1}</span>
             <span>
@@ -1868,76 +1876,82 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
 
 // ── Canvas panel ──────────────────────────────────────────────────────────────
 
-function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; sessionId?: string | null; refreshKey?: number }) {
+type CanvasPanelHandle = { reload: () => void };
+const CanvasPanel = forwardRef<CanvasPanelHandle, { cwd?: string; sessionId?: string | null }>(
+function CanvasPanel({ cwd, sessionId }, ref) {
   const [canvasWidgets, setCanvasWidgets] = useState<WidgetData[]>([]);
   const [dragging,      setDragging]      = useState(false);
+  const draggingRef = useRef(false);
   const [apiWidgets,    setApiWidgets]    = useState<WidgetRecord[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [editingDef,    setEditingDef]    = useState<CustomWidgetDef | null>(null);
   const [showNewEditor,    setShowNewEditor]    = useState(false);
   const [showCredManager,  setShowCredManager]  = useState(false);
   const [widgetSearch,     setWidgetSearch]     = useState('');
-  const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // saveTimerRef removed — canvas is saved only on explicit user drag/resize, not on every poll update
   const canvasAreaRef  = useRef<HTMLDivElement>(null);
   const [codeDrawer,    setCodeDrawer]    = useState<{ id: string; title: string; code: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadCanvasRef = useRef<() => void>(() => {});
+
+  useImperativeHandle(ref, () => ({
+    reload: () => loadCanvasRef.current(),
+  }));
 
   // Clear canvas immediately when session changes so stale widgets don't show during load
   useEffect(() => {
     setCanvasWidgets([]);
   }, [sessionId]);
 
-  // Load saved canvas layout — only when sessionId is known (canvas is session-scoped)
+  // Load canvas on mount and expose reload() via ref — called explicitly after each agent result
   useEffect(() => {
     if (!cwd || !sessionId) return;
-    canvasApi.load(cwd, sessionId)
-      .then(({ widgets: entries }) => {
-        if (!entries?.length) return;
-        const PAD = 24;
-        // Normalise positions: shift the whole group so the top-left widget
-        // lands at (PAD, PAD), keeping relative positions intact.
-        // This ensures the canvas always opens at origin with content visible.
-        const minX = Math.min(...entries.map(e => e.x));
-        const minY = Math.min(...entries.map(e => e.y));
-        const dx   = PAD - minX;
-        const dy   = PAD - minY;
-        // For widgets where widgetId !== kind the code was edited via </>
-        // and saved to server_data/custom_widgets/{canvasId}.js — fetch it.
-        const baseWidgets = entries.map(e => ({
-          id:    e.canvasId,
-          kind:  e.kind as WidgetKind,
-          title: e.title,
-          x: e.x + dx, y: e.y + dy, w: e.w, h: e.h,
-        }));
-        setCanvasWidgets(baseWidgets);
 
-        // Async: load custom code for any widget that has it saved
-        const customEntries = entries.filter(e => e.widgetId !== e.kind);
-        if (customEntries.length > 0) {
-          Promise.all(
-            customEntries.map(e =>
-              customWidgetApi.load(e.canvasId, sessionId).then(code => ({ canvasId: e.canvasId, code }))
-            )
-          ).then(results => {
-            setCanvasWidgets(prev => prev.map(w => {
-              const hit = results.find(r => r.canvasId === w.id);
-              return hit?.code ? { ...w, code: hit.code } : w;
-            }));
-          }).catch(() => null);
-        }
-      })
-      .catch(() => { /* canvas file missing or server offline — start blank */ });
-  // refreshKey increments after each agent turn so newly deployed widgets appear
-  // sessionId must be included so the canvas reloads when a session is established
-  }, [cwd, sessionId, refreshKey]);
+    const loadCanvas = () => {
+      if (draggingRef.current) return;
+      canvasApi.load(cwd, sessionId)
+        .then(({ widgets: entries }) => {
+          if (!entries?.length) { setCanvasWidgets([]); return; }
+          const PAD = 24;
+          const minX = Math.min(...entries.map(e => e.x));
+          const minY = Math.min(...entries.map(e => e.y));
+          const dx   = PAD - minX;
+          const dy   = PAD - minY;
+          const baseWidgets = entries.map(e => ({
+            id:    e.canvasId,
+            kind:  e.kind as WidgetKind,
+            title: e.title,
+            x: e.x + dx, y: e.y + dy, w: e.w, h: e.h,
+          }));
+          setCanvasWidgets(baseWidgets);
+          const customEntries = entries.filter(e => e.kind === 'custom');
+          if (customEntries.length > 0) {
+            Promise.all(
+              customEntries.map(e =>
+                customWidgetApi.load(e.canvasId, sessionId).then(code => ({ canvasId: e.canvasId, code }))
+              )
+            ).then(results => {
+              setCanvasWidgets(prev => prev.map(w => {
+                const hit = results.find(r => r.canvasId === w.id);
+                return hit?.code ? { ...w, code: hit.code } : w;
+              }));
+            }).catch(() => null);
+          }
+        })
+        .catch(() => {});
+    };
+
+    loadCanvasRef.current = loadCanvas;
+    loadCanvas();
+  }, [cwd, sessionId]);
 
   // Scroll to origin on the first render that has widgets, then hold that
   // position for 900 ms — long enough for all widget iframes to finish
   // loading their CDN scripts (Chart.js etc.), which can otherwise trigger
   // the browser to scroll the canvas-area to bring them into view.
   const initScrolledRef = useRef(false);
-  // Reset scroll lock when refreshKey changes (agent deployed a new widget)
-  useEffect(() => { initScrolledRef.current = false; }, [refreshKey]);
+  // Reset scroll lock when widget count grows (agent deployed a new widget)
+  useEffect(() => { initScrolledRef.current = false; }, [canvasWidgets.length]);
   useLayoutEffect(() => {
     if (canvasWidgets.length === 0 || initScrolledRef.current) return;
     initScrolledRef.current = true;
@@ -1954,24 +1968,8 @@ function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; session
     return () => { clearTimeout(t); area.removeEventListener('scroll', hold); };
   }, [canvasWidgets]);
 
-  // Debounced save: whenever the canvas layout changes, persist to <cwd>/.bzcanvas.json
-  useEffect(() => {
-    if (!cwd || !sessionId || canvasWidgets.length === 0) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const entries: CanvasEntry[] = canvasWidgets.map(w => ({
-        canvasId: w.id,
-        // kind==='custom' widgets always use canvasId as widgetId so the frontend knows to fetch their code,
-        // even before the async code load completes (avoids race-condition corruption on the debounce save).
-        widgetId: (w.kind === 'custom' || w.code) ? w.id : w.kind,
-        kind:     w.kind,
-        title:    w.title,
-        x: w.x, y: w.y, w: w.w, h: w.h,
-      }));
-      canvasApi.save(cwd, entries, sessionId).catch(() => { /* silent — offline */ });
-    }, 800);
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [cwd, sessionId, canvasWidgets]);
+  // Canvas is saved explicitly in handleDrop / handleResize — NOT here — to avoid
+  // overwriting server-side changes made by the agent between a poll and a stale debounce fire.
 
   // On mount: seed built-ins then fetch the full list from the API
   useEffect(() => {
@@ -2058,26 +2056,37 @@ function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; session
     setApiWidgets(prev => prev.filter(w => w.id !== id));
   }
 
+  function _saveCanvas(widgets: WidgetData[]) {
+    if (!cwd || !sessionId) return;
+    const entries: CanvasEntry[] = widgets.map(w => ({
+      canvasId: w.id,
+      widgetId: (w.kind === 'custom' || w.code) ? w.id : w.kind,
+      kind:     w.kind,
+      title:    w.title,
+      x: w.x, y: w.y, w: w.w, h: w.h,
+    }));
+    canvasApi.save(cwd, entries, sessionId).catch(() => {});
+  }
+
   function handleDrop(id: string, x: number, y: number) {
+    draggingRef.current = false;
     setDragging(false);
     const sx = Math.max(0, snapVal(x));
     const sy = Math.max(0, snapVal(y));
-    setCanvasWidgets(prev => {
-      // 1. Place dropped widget at exact snap position
-      const moved = prev.map(w => w.id === id ? { ...w, x: sx, y: sy } : w);
-      // 2. Gravity: pull all OTHER widgets up to fill gaps; dropped widget stays fixed
-      const gravitated = applyGravity(moved, id);
-      // 3. Resolve any remaining overlaps; dropped widget still fixed
-      return resolveOverlaps(gravitated, id);
-    });
+    const moved = canvasWidgets.map(w => w.id === id ? { ...w, x: sx, y: sy } : w);
+    const gravitated = applyGravity(moved, id);
+    const next = resolveOverlaps(gravitated, id);
+    setCanvasWidgets(next);
+    _saveCanvas(next);
   }
   function handleResize(id: string, x: number, y: number, w: number, h: number) {
+    draggingRef.current = false;
     setDragging(false);
-    setCanvasWidgets(prev => {
-      const resized = prev.map(ww => ww.id === id ? { ...ww, x, y, w, h } : ww);
-      const gravitated = applyGravity(resized, id);
-      return resolveOverlaps(gravitated, id);
-    });
+    const resized = canvasWidgets.map(ww => ww.id === id ? { ...ww, x, y, w, h } : ww);
+    const gravitated = applyGravity(resized, id);
+    const next = resolveOverlaps(gravitated, id);
+    setCanvasWidgets(next);
+    _saveCanvas(next);
   }
 
   return (
@@ -2189,7 +2198,7 @@ function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; session
         )}
         {canvasWidgets.map(w => (
           <CanvasWidget key={w.id} data={w} sessionId={sessionId}
-            onDragStart={() => setDragging(true)}
+            onDragStart={() => { draggingRef.current = true; setDragging(true); }}
             onDrop={handleDrop} onResize={handleResize}
             onClose={id => {
               setCanvasWidgets(prev => {
@@ -2205,7 +2214,7 @@ function CanvasPanel({ cwd, sessionId, refreshKey = 0 }: { cwd?: string; session
       </div>
     </div>
   );
-}
+});
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -2789,18 +2798,37 @@ function ConversationsPanel({
 
 // ── Boltzing indicator with elapsed timer ────────────────────────────────────
 
-function BoltzingIndicator() {
+const BOLTZING_MESSAGES = ['Boltzing…', 'Thinking…', 'Working…', 'Analyzing…', 'Processing…'];
+
+function BoltzingIndicator({ variant = 'chat' }: { variant?: 'chat' | 'float' }) {
   const [secs, setSecs] = useState(0);
+  const [msgIdx, setMsgIdx] = useState(0);
   useEffect(() => {
-    setSecs(0);
+    setSecs(0); setMsgIdx(0);
     const t = setInterval(() => setSecs(s => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx(i => (i + 1) % BOLTZING_MESSAGES.length), 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const label = BOLTZING_MESSAGES[msgIdx];
+
+  if (variant === 'float') {
+    return (
+      <div className="agent-widget-working-indicator">
+        <BoltzAgentMark size={16} color="#51D390" className="boltzmark-animate" />
+        <span className="agent-widget-working-label">{label}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="agent-boltzing">
       <BoltzbitLogo size={14} className="boltzbit-logo-animate" />
       <span className="agent-boltzing-label">
-        Boltzing…
+        {label}
         {secs >= 5 && (
           <span style={{ opacity: 0.5, marginLeft: 6 }}>
             {secs}s{secs >= 30 ? ' — this model takes a while, hang tight' : ''}
@@ -2808,6 +2836,56 @@ function BoltzingIndicator() {
         )}
       </span>
     </div>
+  );
+}
+
+// ── Session-create error panel ────────────────────────────────────────────────
+
+function SessionCreateErrorPanel({
+  error, apiKeyValue, apiKeySaving,
+  onApiKeyValueChange, onSaveApiKey, onRetry, onSignOut, onBack,
+}: {
+  error: string;
+  apiKeyValue: string;
+  apiKeySaving: boolean;
+  onApiKeyValueChange: (v: string) => void;
+  onSaveApiKey: () => void;
+  onRetry: () => void;
+  onSignOut: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <p className="new-session-title" style={{ color: 'var(--accent-red)' }}>Session unavailable</p>
+      <p className="new-session-hint">{error}</p>
+      <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p className="new-session-hint" style={{ marginTop: 0 }}>Enter your API key to reconnect:</p>
+        <input
+          type="password"
+          className="conv-search-input"
+          placeholder="Paste API key…"
+          value={apiKeyValue}
+          onChange={e => onApiKeyValueChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSaveApiKey(); }}
+          style={{ width: '100%', boxSizing: 'border-box' }}
+          autoFocus
+        />
+        <button
+          type="button"
+          className="new-session-cancel"
+          disabled={apiKeySaving || !apiKeyValue.trim()}
+          onClick={onSaveApiKey}
+          style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
+        >
+          {apiKeySaving ? 'Saving…' : 'Save & retry'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button type="button" className="new-session-cancel" onClick={onRetry}>Try again</button>
+        <button type="button" className="new-session-cancel" onClick={onSignOut}>Sign out</button>
+        <button type="button" className="new-session-cancel" onClick={onBack}>Back</button>
+      </div>
+    </>
   );
 }
 
@@ -2831,11 +2909,23 @@ function AgentPage() {
     return 'general';
   });
   const [editorRefreshKey,  setEditorRefreshKey]  = useState(0);
-  const [canvasRefreshKey,  setCanvasRefreshKey]  = useState(0);
+  const canvasPanelRef = useRef<CanvasPanelHandle>(null);
   const [docViewer, setDocViewer] = useState<{ path: string; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean } | null>(null);
   const [docViewerLoading, setDocViewerLoading] = useState(false);
   // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
   const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
+  // Session creation handshake state
+  const [sessionCreating,     setSessionCreating]     = useState(false);
+  const [sessionCreateError,  setSessionCreateError]  = useState<string | null>(null);
+  // BZ_API_KEY form shown inside the session-create error panel
+  const [apiKeyValue,       setApiKeyValue]       = useState('');
+  const [apiKeySaving,      setApiKeySaving]      = useState(false);
+  const [showApiKeyPrompt,  setShowApiKeyPrompt]  = useState(false);
+  // Abort controller + params for cancel / retry
+  const createAbortRef          = useRef<AbortController | null>(null);
+  const sessionCreatingParamsRef = useRef<{ cwd: string; mode: AgentMode } | null>(null);
+  // Session permanently unavailable (max reconnect retries exceeded)
+  const [sessionUnavailable,  setSessionUnavailable]  = useState(false);
 
   // Navigate to a session and reflect it in the URL
   const openSession = useCallback((cwd: string, sessionId?: string | null, mode?: AgentMode) => {
@@ -2858,6 +2948,87 @@ function AgentPage() {
     setView('list');
     void navigate({ to: '/agent', search: {}, replace: true });
   }, [navigate]);
+
+  // Create a new session via server-side handshake before opening chat.
+  // Shows a loading overlay while bzcode initialises, and an error if it fails.
+  const startNewSession = useCallback(async (cwd: string, mode: AgentMode) => {
+    const controller = new AbortController();
+    createAbortRef.current = controller;
+    sessionCreatingParamsRef.current = { cwd, mode };
+    setSessionCreating(true);
+    setSessionCreateError(null);
+    try {
+      const res = await fetch(`${HTTP_BASE}/sessions/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd, mode }),
+        signal: controller.signal,
+      });
+      const data = await res.json() as { ok: boolean; sessionId?: string; error?: string; detail?: string };
+      if (!res.ok || !data.ok) {
+        setSessionCreateError(data.detail ?? data.error ?? 'Failed to create session');
+        return;
+      }
+      const sid = data.sessionId!;
+      const params = new URLSearchParams({ cwd, sessionId: sid, mode });
+      window.location.href = `/agent?${params}`;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') {
+        // User cancelled — close overlay silently
+        setSessionCreating(false);
+        setPendingNewCwd(null);
+        return;
+      }
+      setSessionCreateError('Could not reach the server');
+      setSessionCreating(false);
+    }
+  }, []);
+
+  const cancelSessionCreate = useCallback(() => {
+    createAbortRef.current?.abort();
+    createAbortRef.current = null;
+    setSessionCreating(false);
+    setSessionCreateError(null);
+    setPendingNewCwd(null);
+  }, []);
+
+  const retrySessionCreate = useCallback(() => {
+    const p = sessionCreatingParamsRef.current;
+    if (p) void startNewSession(p.cwd, p.mode);
+  }, [startNewSession]);
+
+  const handleSignOut = useCallback(async () => {
+    await fetch(`${HTTP_BASE}/auth/logout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }).catch(() => null);
+    window.location.reload();
+  }, []);
+
+  const handleSaveApiKey = useCallback(async () => {
+    if (!apiKeyValue.trim()) return;
+    // Abort any in-flight session create before retrying with the new key
+    createAbortRef.current?.abort();
+    createAbortRef.current = null;
+    setApiKeySaving(true);
+    try {
+      await fetch(`${HTTP_BASE}/agent-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'BZ_API_KEY', value: apiKeyValue.trim() }),
+      });
+      setApiKeyValue('');
+      retrySessionCreate();
+    } finally {
+      setApiKeySaving(false);
+    }
+  }, [apiKeyValue, retrySessionCreate]);
+
+  // Show API key prompt after 10s of waiting for session creation
+  useEffect(() => {
+    if (!sessionCreating) { setShowApiKeyPrompt(false); return; }
+    const t = setTimeout(() => setShowApiKeyPrompt(true), 10_000);
+    return () => clearTimeout(t);
+  }, [sessionCreating]);
 
   // Clear batch queue from sessionStorage on mount (already loaded into state)
   useEffect(() => { sessionStorage.removeItem('agent:batchQueue'); }, []);
@@ -2889,7 +3060,6 @@ function AgentPage() {
   const pendingModeRef = useRef<SessionMode | null>(null); // mode user explicitly requested, waiting for bzcode confirmation
   const [availableModes, setAvailableModes] = useState<SessionMode[]>(['default', 'plan', 'yolo']);
   const [availableCommands, setAvailableCommands] = useState<Array<{name: string; description: string; aliases?: string[]}>>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   // Slash command menu state
   const [slashMenuIdx,       setSlashMenuIdx]       = useState(0);
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false);
@@ -2925,10 +3095,17 @@ function AgentPage() {
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
-  const wsRef              = useRef<WebSocket | null>(null);
+  const wsRef               = useRef<WebSocket | null>(null);
   const pendingAutoSendRef  = useRef<string | null>(null);
-  const isCompactingRef    = useRef(false);
-  const streamingBlocksRef = useRef<StreamingBlocks>(new Map());
+  const isCompactingRef     = useRef(false);
+  const streamingBlocksRef  = useRef<StreamingBlocks>(new Map());
+  // WS stability: track reconnect attempts for exponential backoff, last pong time
+  // for dead-connection detection, confirmed server session ID for reconnect URL
+  // correction, and previous wsUrl to distinguish new-session vs same-session reconnects.
+  const reconnectAttemptsRef   = useRef(0);
+  const lastPongRef            = useRef(Date.now());
+  const confirmedSessionIdRef  = useRef<string | null>(null);
+  const prevWsUrlRef           = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -3075,33 +3252,95 @@ function AgentPage() {
     await startBzHubSSE('sync', { cwd, appId });
   }, [startBzHubSSE]);
 
-  // WebSocket — reconnects whenever wsUrl changes (new session selected)
+  // WebSocket — reconnects whenever wsUrl changes (new session) or wsKey increments (reconnect).
   useEffect(() => {
     if (!wsUrl) return;
 
-    // Reset conversation state for the new session
-    setItems([]);
+    // Only reset conversation state when switching to a genuinely new session URL.
+    // Pure reconnects (same URL, wsKey bumped) preserve items so history isn't wiped
+    // mid-session and the user doesn't see a blank screen during the reconnect window.
+    const isNewSession = wsUrl !== prevWsUrlRef.current;
+    prevWsUrlRef.current = wsUrl;
+
+    if (isNewSession) {
+      setItems([]);
+      setStickyMsgIdx(-1);
+      setSessionTitle('');
+      setIsEditingTitle(false);
+      setSessionUnavailable(false);
+    }
+    // Always reset stream/status state on any connect attempt.
     setStreamingBlocks([]);
     setIsStreaming(false);
-    setStickyMsgIdx(-1);
     setConnStatus('connecting');
-    setSessionTitle('');
-    setIsEditingTitle(false);
     streamingBlocksRef.current.clear();
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => setConnStatus('connected');
+    let intentionalClose = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    ws.onopen = () => {
+      setConnStatus('connected');
+      reconnectAttemptsRef.current = 0;   // reset backoff on successful open
+      lastPongRef.current = Date.now();   // baseline for pong timeout
+    };
     ws.onerror = () => setConnStatus('error');
-    ws.onclose = () => setConnStatus('disconnected');
+    ws.onclose = () => {
+      setConnStatus('disconnected');
+      if (!intentionalClose) {
+        const MAX_RECONNECT = 5;
+        // Exponential backoff: 2s → 4s → 8s → 16s → 30s (cap).
+        // Prevents hammering the server/proxy on repeated failures.
+        const attempt = reconnectAttemptsRef.current;
+        if (attempt >= MAX_RECONNECT) {
+          setSessionUnavailable(true);
+          return;
+        }
+        reconnectAttemptsRef.current = attempt + 1;
+        const delay = Math.min(2_000 * Math.pow(2, attempt), 30_000);
+        const confirmedSid = confirmedSessionIdRef.current;
+        reconnectTimer = setTimeout(() => {
+          if (confirmedSid && confirmedSid !== activeSessionId) {
+            // Session ID drifted — server assigned a different ID than we requested.
+            // Updating activeSessionId changes wsUrl, which triggers the effect directly
+            // (no wsKey increment needed to avoid a double-reconnect).
+            setActiveSessionId(confirmedSid);
+          } else {
+            setWsKey(k => k + 1);
+          }
+        }, delay);
+      }
+    };
+
+    // Keepalive ping every 15s — server replies with pong so reverse proxies
+    // see bidirectional traffic and don't hit their idle-timeout threshold.
+    // Also acts as a dead-connection detector: if no pong arrives for 35s
+    // (> 2 ping intervals) the socket is considered zombie and force-closed.
+    const pingInterval = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const elapsed = Date.now() - lastPongRef.current;
+      if (elapsed > 35_000) {
+        // No pong for 35s — proxy or server silently dropped the connection.
+        // Force-close so onclose fires and the auto-reconnect kicks in.
+        ws.close();
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }, 15_000);
 
     ws.onmessage = (event: MessageEvent<string>) => {
       let msg: Record<string, unknown>;
       try { msg = JSON.parse(event.data) as Record<string, unknown>; } catch { return; }
       const type = msg['type'] as string;
 
+      if (type === 'pong') { lastPongRef.current = Date.now(); return; }
+
       if (type === 'session') {
+        if (Array.isArray(msg['messages']) && (msg['messages'] as unknown[]).length > 0) {
+          console.log('[session resume] first bzcode line:', event.data);
+        }
         setConnStatus('connected');
         // Re-sync bzcode session mode after every (re)connect.
         // bzcode always starts in 'default' — we must push the current mode back.
@@ -3125,14 +3364,8 @@ function AgentPage() {
         }
         if (msg['sessionId']) {
           const sid = msg['sessionId'] as string;
-          setCurrentSessionId(sid);
-          // Persist the mode for this session so it's restored on reload
+          confirmedSessionIdRef.current = sid;
           localStorage.setItem(modeLSKey(sid), agentMode);
-          // Update URL so a refresh resumes this exact session.
-          // Do NOT call setActiveSessionId here — that would change wsUrl
-          // and trigger the useEffect to tear down and rebuild the WebSocket,
-          // causing the visible connect/disconnect flicker.
-          void navigate({ to: '/agent', search: { cwd: activeCwd, sessionId: sid, mode: agentMode }, replace: true });
           // Load custom/auto title for this session from server
           fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
             .then(r => r.json())
@@ -3144,12 +3377,25 @@ function AgentPage() {
         }
         if (Array.isArray(msg['modes'])) setAvailableModes(msg['modes'] as SessionMode[]);
         if (Array.isArray(msg['commands'])) setAvailableCommands(msg['commands'] as Array<{name:string;description:string;aliases?:string[]}>);
-        const history = msg['messages'] as Array<{ role: string; content: unknown }> | undefined;
+        const history = msg['messages'] as Array<{ role: string; content: unknown; isMeta?: boolean }> | undefined;
         if (history?.length) {
+          // Trim the internal handshake preamble: skip everything up to (but not including)
+          // the first real user message. "Real" = not isMeta AND not the handshake greeting.
+          const HANDSHAKE_TEXT = 'Hi, hand shake, say yes';
+          const firstRealIdx = history.findIndex(m =>
+            m.role === 'user' &&
+            !m.isMeta &&
+            typeof m.content === 'string' &&
+            m.content !== HANDSHAKE_TEXT
+          );
+          // conversationHistory is the slice we actually render; fall back to empty if
+          // the session only contains the handshake (no real user messages yet).
+          const conversationHistory = firstRealIdx >= 0 ? history.slice(firstRealIdx) : [];
+
           // Pre-pass: build toolUseId → output map from user toolResult messages
           // bzcode protocol uses camelCase: toolResult, toolUseId, isError
           const toolResultMap = new Map<string, { content: string; isError: boolean }>();
-          for (const m of history) {
+          for (const m of conversationHistory) {
             if (m.role !== 'user' || !Array.isArray(m.content)) continue;
             for (const block of m.content as Array<Record<string, unknown>>) {
               if (block['type'] === 'toolResult' && typeof block['toolUseId'] === 'string') {
@@ -3168,7 +3414,8 @@ function AgentPage() {
           }
 
           const restored: DisplayItem[] = [];
-          for (const m of history) {
+          for (const m of conversationHistory) {
+            if (m.isMeta) continue;
             if (m.role === 'user') {
               if (typeof m.content !== 'string') continue; // toolResult batches already mapped above
               const text = m.content;
@@ -3198,10 +3445,10 @@ function AgentPage() {
               }
             }
           }
-          setItems(restored);
+          if (restored.length) setItems(restored);
 
           // Detect interrupted turn: last message is a user toolResult (agent was mid-loop)
-          const last = history[history.length - 1];
+          const last = conversationHistory[conversationHistory.length - 1];
           const lastIsToolResult = last?.role === 'user' && Array.isArray(last.content) &&
             (last.content as Array<Record<string,unknown>>).some(b => b['type'] === 'toolResult');
           if (lastIsToolResult) {
@@ -3338,20 +3585,31 @@ function AgentPage() {
         }
       }
 
+      else if (type === 'auth_error') {
+        // Save current URL so login can redirect back and restore the session.
+        sessionStorage.setItem('bz:returnUrl', window.location.href);
+        intentionalClose = true;
+        ws.close();
+        window.location.href = '/login';
+      }
       else if (type === 'result') {
         if (msg['usage']) setTokenUsage(msg['usage'] as TokenUsage);
         if (msg['status'] === 'success' && msg['output']) {
           setItems(prev => [...prev, { id: uid(), kind: 'assistant', blocks: [{ type: 'text', text: msg['output'] as string }] }]);
         }
-        // Reload editor file in case the agent modified it
         if (msg['status'] === 'success') {
           setEditorRefreshKey(k => k + 1);
-          setCanvasRefreshKey(k => k + 1);  // reload canvas — agent may have deployed a widget
+          canvasPanelRef.current?.reload();
         }
       }
     };
 
-    return () => ws.close();
+    return () => {
+      intentionalClose = true;
+      clearInterval(pingInterval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws.close();
+    };
   }, [wsUrl, wsKey]);
 
   const handlePermission = useCallback((requestId: string, behavior: 'allow' | 'deny' | 'always') => {
@@ -3377,14 +3635,14 @@ function AgentPage() {
 
   const saveTitle = useCallback((title: string) => {
     const trimmed = title.trim();
-    if (!trimmed || !currentSessionId) return;
+    if (!trimmed || !activeSessionId) return;
     setSessionTitle(trimmed);
     setIsEditingTitle(false);
-    fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(currentSessionId)}/title`, {
+    fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(activeSessionId)}/title`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: trimmed }),
     }).catch(() => null);
-  }, [currentSessionId]);
+  }, [activeSessionId]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -3445,12 +3703,12 @@ function AgentPage() {
 
   const handleSubmit = useCallback(() => {
     const text = inputValue.trim();
-    if ((!text && attachments.length === 0) || isStreaming) return;
+    if ((!text && attachments.length === 0) || isStreaming || isCompacting) return;
     triggerLiveLearnJob();
     setInputValue('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    // Auto-set title from first user message (matches VS Code plugin behaviour)
-    if (!sessionTitle && text && items.length === 0) {
+    // Auto-set title from first real user message — skip the handshake message
+    if (!sessionTitle && text && text.trim() !== 'Hi, hand shake, say yes') {
       const auto = text.length > 60 ? `${text.slice(0, 57)}…` : text;
       setSessionTitle(auto);
     }
@@ -3619,24 +3877,73 @@ function AgentPage() {
           onSelect={(sessionId, cwd) => openSession(cwd, sessionId)}
           onNew={(cwd) => setPendingNewCwd(cwd)}
         />
-        {pendingNewCwd && (
+        {(pendingNewCwd || sessionCreating || sessionCreateError) && (
           <div className="new-session-overlay">
             <div className="new-session-panel">
-              <div className="new-session-header">
-                <span className="new-session-title">Choose a mode</span>
-                <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
-              </div>
-              <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
-              <ModeSelector
-                selected={agentMode}
-                onSelect={m => {
-                  setPendingNewCwd(null);
-                  openSession(pendingNewCwd, null, m);
-                }}
-              />
-              <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
-                Cancel
-              </button>
+              {sessionCreating && (
+                <>
+                  <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
+                  <p className="new-session-title">Starting session…</p>
+                  <p className="new-session-hint">Verifying agent is ready. This takes a few seconds.</p>
+                  {showApiKeyPrompt && (
+                    <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
+                      <input
+                        type="password"
+                        className="conv-search-input"
+                        placeholder="Paste API key…"
+                        value={apiKeyValue}
+                        onChange={e => setApiKeyValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="new-session-cancel"
+                        disabled={apiKeySaving || !apiKeyValue.trim()}
+                        onClick={handleSaveApiKey}
+                        style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
+                      >
+                        {apiKeySaving ? 'Saving…' : 'Save & restart'}
+                      </button>
+                    </div>
+                  )}
+                  <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
+                </>
+              )}
+              {sessionCreateError && !sessionCreating && (
+                <SessionCreateErrorPanel
+                  error={sessionCreateError}
+                  apiKeyValue={apiKeyValue}
+                  apiKeySaving={apiKeySaving}
+                  onApiKeyValueChange={setApiKeyValue}
+                  onSaveApiKey={handleSaveApiKey}
+                  onRetry={retrySessionCreate}
+                  onSignOut={handleSignOut}
+                  onBack={() => { setSessionCreateError(null); setPendingNewCwd(null); }}
+                />
+              )}
+              {pendingNewCwd && !sessionCreating && !sessionCreateError && (
+                <>
+                  <div className="new-session-header">
+                    <span className="new-session-title">Choose a mode</span>
+                    <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
+                  </div>
+                  <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
+                  <ModeSelector
+                    selected={agentMode}
+                    onSelect={m => {
+                      const cwd = pendingNewCwd;
+                      setPendingNewCwd(null);
+                      void startNewSession(cwd, m);
+                    }}
+                  />
+                  <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -3815,13 +4122,34 @@ function AgentPage() {
               </>
             ) : null}
 
-            {/* Error / disconnected */}
-            {(connStatus === 'error' || connStatus === 'disconnected') && (
+            {/* Error / disconnected (transient — still retrying) */}
+            {!sessionUnavailable && (connStatus === 'error' || connStatus === 'disconnected') && (
               <>
                 <BoltzbitLogo size={40} />
                 <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
                   {connStatus === 'error' ? 'Connection failed' : 'Disconnected'}
                 </p>
+              </>
+            )}
+
+            {/* Session permanently unavailable — stop retrying, show clear error */}
+            {sessionUnavailable && (
+              <>
+                <BoltzAgentMark size={36} color="var(--text-tertiary)" />
+                <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
+                  This session is unavailable
+                </p>
+                <p className="chat-loading-label" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  bzcode may be unreachable or the session was deleted.
+                </p>
+                <button
+                  type="button"
+                  className="new-session-cancel"
+                  style={{ marginTop: 12 }}
+                  onClick={goToList}
+                >
+                  Back to sessions
+                </button>
               </>
             )}
           </div>
@@ -3871,9 +4199,7 @@ function AgentPage() {
                                       key={id}
                                       type="button"
                                       className="agent-doc-open-btn"
-                                      onClick={() => {
-                                        setCanvasRefreshKey(k => k + 1);
-                                      }}
+                                      onClick={() => {}}
                                     >
                                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                                       View on canvas
@@ -3940,9 +4266,25 @@ function AgentPage() {
               }
 
               if (item.kind === 'tool') {
-                if (agentMode !== 'widget') return <ToolCard key={item.id} item={item} />;
-                if (item.name === 'Skill') return <WidgetSkillBadge key={item.id} item={item} />;
-                return null;
+                if (agentMode === 'widget') {
+                  if (item.name === 'Skill') return <WidgetSkillBadge key={item.id} item={item} />;
+                  return null;
+                }
+                if (agentMode === 'worker' && ['Bash', 'Read', 'Write', 'Edit', 'NotebookEdit'].includes(item.name)) {
+                  const label: Record<string, string> = { Bash: 'Ran command', Read: 'Read file', Write: 'Wrote file', Edit: 'Edited file', NotebookEdit: 'Edited notebook' };
+                  const icon = item.name === 'Bash' ? '⚡' : '📄';
+                  const statusColor = item.status === 'error' ? 'var(--accent-red)' : item.status === 'running' ? 'var(--text-tertiary)' : 'var(--text-tertiary)';
+                  return (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', fontSize: 11, color: statusColor, opacity: 0.7 }}>
+                      <span>{icon}</span>
+                      <span>{label[item.name] ?? item.name}</span>
+                      {item.status === 'running' && <span style={{ color: 'var(--accent-blue)' }}>…</span>}
+                      {item.status === 'error' && <span style={{ color: 'var(--accent-red)' }}>✗</span>}
+                      {item.status === 'done' && !item.isError && <span>✓</span>}
+                    </div>
+                  );
+                }
+                return <ToolCard key={item.id} item={item} />;
               }
               if (item.kind === 'push-progress')   return <PushProgressCard key={item.id} item={item} />;
               if (item.kind === 'sync-progress')   return <SyncProgressCard key={item.id} item={item} />;
@@ -3995,7 +4337,7 @@ function AgentPage() {
             type="button"
             className="auth-expired-btn"
             onClick={() => {
-              // Clear expired token on server, then redirect to login
+              sessionStorage.setItem('bz:returnUrl', window.location.href);
               fetch(`${HTTP_BASE}/auth/logout`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ authUrl: 'https://boltzhub.com' }),
@@ -4063,6 +4405,11 @@ function AgentPage() {
       )}
 
       <div className="agent-input-bar">
+        {/* Working indicator — floats above input box when agent is running in float-prompt mode */}
+        {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat && isStreaming && (
+          <BoltzingIndicator variant="float" />
+        )}
+
         {/* Show-chat button — floats above input box, visible only when prompt is floating */}
         {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat && (
           <button
@@ -4138,8 +4485,24 @@ function AgentPage() {
             placeholder={isStreaming ? 'bzcode is running — click ■ to stop' : 'Ask the agent…'}
             value={inputValue}
             rows={1}
-            disabled={isStreaming || isCompacting}
+            disabled={isStreaming || sessionUnavailable}
             onChange={e => { setInputValue(e.target.value); setSlashMenuDismissed(false); setSlashMenuIdx(0); }}
+            onPaste={e => {
+              const text = e.clipboardData.getData('text/plain');
+              if (!text) return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              const start = el.selectionStart ?? el.value.length;
+              const end   = el.selectionEnd   ?? el.value.length;
+              const next  = inputValue.slice(0, start) + text + inputValue.slice(end);
+              setInputValue(next);
+              setSlashMenuDismissed(false);
+              requestAnimationFrame(() => {
+                if (textareaRef.current) {
+                  textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + text.length;
+                }
+              });
+            }}
             onKeyDown={handleKeyDown}
           />
 
@@ -4240,7 +4603,7 @@ function AgentPage() {
 
       {agentMode === 'widget' && (
         <div className="agent-widget-canvas-wrap">
-          <CanvasPanel cwd={activeCwd} sessionId={activeSessionId} refreshKey={canvasRefreshKey} />
+          <CanvasPanel ref={canvasPanelRef} cwd={activeCwd} sessionId={activeSessionId} />
         </div>
       )}
       {(agentMode === 'worker' || agentMode === 'coder') && (
@@ -4248,6 +4611,7 @@ function AgentPage() {
           cwd={activeCwd}
           codeMode={agentMode === 'coder'}
           refreshKey={editorRefreshKey}
+          sessionId={activeSessionId}
         />
       )}
     </div>
@@ -4296,24 +4660,73 @@ function AgentPage() {
     )}
 
     {/* Mode selector — shown when user clicks "+" to create a new session */}
-    {pendingNewCwd && (
+    {(pendingNewCwd || sessionCreating || sessionCreateError) && (
       <div className="new-session-overlay">
         <div className="new-session-panel">
-          <div className="new-session-header">
-            <span className="new-session-title">Choose a mode</span>
-            <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
-          </div>
-          <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
-          <ModeSelector
-            selected={agentMode}
-            onSelect={m => {
-              setPendingNewCwd(null);
-              openSession(pendingNewCwd, null, m);
-            }}
-          />
-          <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
-            Cancel
-          </button>
+          {sessionCreating && (
+            <>
+              <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
+              <p className="new-session-title">Starting session…</p>
+              <p className="new-session-hint">Verifying agent is ready. This takes a few seconds.</p>
+              {showApiKeyPrompt && (
+                <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
+                  <input
+                    type="password"
+                    className="conv-search-input"
+                    placeholder="Paste API key…"
+                    value={apiKeyValue}
+                    onChange={e => setApiKeyValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="new-session-cancel"
+                    disabled={apiKeySaving || !apiKeyValue.trim()}
+                    onClick={handleSaveApiKey}
+                    style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
+                  >
+                    {apiKeySaving ? 'Saving…' : 'Save & restart'}
+                  </button>
+                </div>
+              )}
+              <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
+            </>
+          )}
+          {sessionCreateError && !sessionCreating && (
+            <SessionCreateErrorPanel
+              error={sessionCreateError}
+              apiKeyValue={apiKeyValue}
+              apiKeySaving={apiKeySaving}
+              onApiKeyValueChange={setApiKeyValue}
+              onSaveApiKey={handleSaveApiKey}
+              onRetry={retrySessionCreate}
+              onSignOut={handleSignOut}
+              onBack={() => { setSessionCreateError(null); setPendingNewCwd(null); }}
+            />
+          )}
+          {pendingNewCwd && !sessionCreating && !sessionCreateError && (
+            <>
+              <div className="new-session-header">
+                <span className="new-session-title">Choose a mode</span>
+                <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
+              </div>
+              <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
+              <ModeSelector
+                selected={agentMode}
+                onSelect={m => {
+                  const cwd = pendingNewCwd;
+                  setPendingNewCwd(null);
+                  void startNewSession(cwd, m);
+                }}
+              />
+              <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
+                Cancel
+              </button>
+            </>
+          )}
         </div>
       </div>
     )}

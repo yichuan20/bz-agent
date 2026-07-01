@@ -4,6 +4,26 @@ All notable changes to the bz-agent server are documented here.
 
 ---
 
+## [0.1.7] - 2026-06-30
+
+### Added
+- **Widget working indicator** — when the agent is running in float-prompt mode (chat panel hidden), a pill with animated bouncing dots and a "Working…" label appears above the floating input bar, giving clear visual feedback that the agent is active.
+- **`POST /db/widget/{id}/schema`** — new endpoint so agent-written widgets can call `db.ensure(columns)` to declare their schema before inserting rows. Previously returned 405. Additive/non-destructive: new columns are merged into the stored schema, existing data is untouched. Added matching `GET /db/widget/{id}/schema` for inspection.
+- **bzcode crash notification** — when the bzcode subprocess exits with a non-zero code, the server sends a `system` message to the client ("⚠ bzcode process exited unexpectedly (code N). Reconnecting…") before closing the WebSocket, replacing the previous silent disconnect.
+- **`drain_bzcode_stderr` wired with queue in app.py** — auth-error keywords detected in bzcode stderr (e.g. "401", "invalid_token") are now forwarded to the client in `app.py` as well as `server.py`.
+
+### Fixed
+- **WebSocket stability — exponential backoff** — reconnect delays are now 2 s → 4 s → 8 s → 16 s → 30 s (capped), preventing rapid hammering of the server/proxy on repeated failures. Previously always retried after a flat 2 s.
+- **WebSocket stability — dead connection detector** — if no pong is received for 35 s (more than two ping intervals), the client force-closes the socket so `onclose` fires and the auto-reconnect kicks in. Handles the case where a proxy silently drops the TCP connection without sending a close frame.
+- **WebSocket stability — pong handler** — server pong messages (`{"type":"pong"}`) are now consumed and used to update the liveness timestamp; previously they were passed to the rest of the message handler and logged as unknown types.
+- **WebSocket stability — session ID drift** — on reconnect, if the server assigned a different session ID than the one requested (e.g. the session file was not found and a fresh ID was generated), `activeSessionId` is updated before the next connection attempt so subsequent reconnects use the correct ID instead of an invalid stale one.
+- **WebSocket stability — no state wipe on same-session reconnect** — `setItems([])` and session title/index reset are only called when switching to a genuinely new session URL. Pure reconnects (same URL, `wsKey` bump) preserve the displayed history so the user doesn't see a blank screen during the brief reconnect window.
+- **WebSocket stability — reconnect timer cleanup** — the pending reconnect `setTimeout` is now cancelled in the effect cleanup function, preventing a stale timer from firing a spurious reconnect after an intentional session switch.
+- **Session restoration after re-login** — before redirecting to `/login` on `auth_error` or from the "Sign in" banner, the current URL (including `?sessionId=…&cwd=…`) is saved to `sessionStorage`. After entering the API key, the login page navigates back to that URL, restoring the exact previous session instead of opening a blank agent.
+- **Reverse-proxy keepalive** — server now replies `{"type":"pong"}` to client pings so nginx/load-balancers see bidirectional traffic and don't close the connection due to one-sided idle. Ping interval reduced from 25 s to 15 s.
+
+---
+
 ## [0.1.0] - 2026-06-27
 
 ### Changed

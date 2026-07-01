@@ -14,7 +14,6 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import ColorPickerTooltip from './ColorPickerTooltip';
 import { CalculateIcon } from './Icons';
-import LabelPicker from './LabelPicker';
 
 export const DraggableToolbarContainer = ({children, $docked, $top, $left, $dragging, style={}, ...p}) => <ToolbarContainer style={{position:$docked?'static':'fixed',top:$docked?undefined:$top,left:$docked?undefined:$left,cursor:$dragging?'grabbing':'grab',zIndex:$docked?98:1000,boxShadow:$docked?'none':'0 8px 32px rgba(0,0,0,0.5)',border:$docked?'none':'1px solid var(--border-default)',borderRadius:$docked?8:10,background:$docked?'var(--bg-secondary)':'var(--bg-elevated,var(--bg-primary))',padding:$docked?'4px 8px':'5px 8px',userSelect:'none',display:'flex',alignItems:'center',gap:2,flexWrap:'nowrap',...style}} {...p}>{children}</ToolbarContainer>;
 
@@ -688,13 +687,6 @@ const ExcelToolbar = ({
         accept="image/*"
         style={{ display: 'none' }}
         onChange={handleImageUploadChange}
-      />
-
-      <LabelPicker
-        labels={labels}
-        currentSelection={currentSelection}
-        onUpdateLabels={onSaveLabel}
-        extraLabels={extraLabels}
       />
 
       <VerticalLine />

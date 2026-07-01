@@ -17,15 +17,66 @@ import {
   SunIcon,
   SignOutIcon,
 } from '@phosphor-icons/react';
-import { BoltzbitLogo }  from '#/components/BoltzbitLogo';
-import { useState, useEffect } from 'react';
+import { BoltzAgentMark } from '#/components/BoltzAgentMark';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { clearAccessToken } from '#/auth-store';
+
+const AGENT_HTTP =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+
+type TokenStatus = 'checking' | 'valid' | 'invalid';
+
+function useTokenStatus() {
+  const [status, setStatus] = useState<TokenStatus>('checking');
+  const [reason, setReason] = useState('');
+
+  const check = useCallback(async () => {
+    try {
+      const res = await fetch(`${AGENT_HTTP}/auth/status`);
+      if (!res.ok) { setStatus('invalid'); setReason('server error'); return; }
+      const data = await res.json() as { valid: boolean; reason: string };
+      setStatus(data.valid ? 'valid' : 'invalid');
+      setReason(data.reason);
+    } catch {
+      setStatus('invalid');
+      setReason('unreachable');
+    }
+  }, []);
+
+  useEffect(() => {
+    void check();
+    const id = setInterval(() => void check(), 30_000);
+    return () => clearInterval(id);
+  }, [check]);
+
+  return { status, reason };
+}
+
+function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: string }) {
+  const color = status === 'valid' ? '#22c55e' : status === 'invalid' ? '#ef4444' : '#6b7280';
+  const label = status === 'valid' ? 'Token valid' : status === 'invalid' ? `Token invalid: ${reason}` : 'Checking…';
+  return (
+    <div
+      title={label}
+      style={{
+        width: 8, height: 8,
+        borderRadius: '50%',
+        background: color,
+        flexShrink: 0,
+        boxShadow: status === 'valid' ? `0 0 6px ${color}` : 'none',
+        cursor: 'default',
+      }}
+    />
+  );
+}
 import { getCurrentMode, applyTheme } from '#/design-tokens';
 
 const TopBar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(getCurrentMode);
+  const { status: tokenStatus, reason: tokenReason } = useTokenStatus();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,8 +93,16 @@ const TopBar: React.FC = () => {
   }
 
   function handleLogout() {
-    clearAccessToken();
-    void navigate({ to: '/login' });
+    const httpBase = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+      || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+    const authUrl  = (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
+    fetch(`${httpBase}/auth/logout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authUrl }),
+    }).finally(() => {
+      clearAccessToken();
+      void navigate({ to: '/login' });
+    });
   }
 
   /* ── icon button shared style ── */
@@ -73,7 +132,7 @@ const TopBar: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {/* Logo mark + app name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BoltzbitLogo size={22} />
+          <BoltzAgentMark size={22} color="#51D390" />
           <span style={{
             fontSize: 15, fontWeight: 700,
             color: 'var(--text-primary)',
@@ -117,8 +176,9 @@ const TopBar: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Right: theme + logout ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      {/* ── Right: token status + theme + logout ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <TokenStatusDot status={tokenStatus} reason={tokenReason} />
         <button
           type="button"
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}

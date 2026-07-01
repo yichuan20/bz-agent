@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.1.0"
+BACKEND_VERSION = "0.2.4.1"
 
 import asyncio
 import json
@@ -17,7 +17,7 @@ import sys
 import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 try:
     import websockets  # kept for legacy compatibility; WS now runs inside aiohttp
@@ -94,7 +94,7 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     # the config dir (e.g. cozy-hopping-comet.jsonl, tool-results/).  They are
     # not part of our config and prevent bzcode from resuming cleanly.
     _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills", "scripts",
-                    "custom_widgets", "widget_data", ".bzcanvas.json"}
+                    "templates", "custom_widgets", "widget_data", ".bzcanvas.json"}
     for item in list(cfg_dir.iterdir()):
         if item.name not in _OWNED_NAMES:
             if item.is_dir():
@@ -124,19 +124,18 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
 
     # Copy agent scripts into the session config dir so the agent can reference
     # them by a stable, deployment-agnostic path rather than an absolute one.
-    # The session config dir is always at ~/.boltzbit/sessions/{id}/ regardless
-    # of where bz-agent is installed.
+    # The session config dir lives at $BZ_HOME/sessions/{id}/
     _server_dir = Path(__file__).resolve().parent
-    src_scripts = _server_dir / "bzcode" / "scripts"
-    # Fallback: also check CWD/bzcode/scripts in case server.py is run from a
+    src_scripts = _server_dir / "bzcode_assets" / "scripts"
+    # Fallback: also check CWD/bzcode_assets/scripts in case server.py is run from a
     # different directory than where it lives (e.g. some workspace deployments).
     if not src_scripts.is_dir():
-        _cwd_candidate = Path.cwd() / "bzcode" / "scripts"
+        _cwd_candidate = Path.cwd() / "bzcode_assets" / "scripts"
         if _cwd_candidate.is_dir():
             src_scripts = _cwd_candidate
         else:
             print(
-                f"[session] WARNING: bzcode/scripts not found at {src_scripts} "
+                f"[session] WARNING: bzcode_assets/scripts not found at {src_scripts} "
                 f"or {_cwd_candidate} — agent scripts will be unavailable",
                 file=sys.stderr,
             )
@@ -149,6 +148,21 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
         if not dest.exists() or script.stat().st_mtime > dest.stat().st_mtime:
             _sh.copy2(script, dest)
     print(f"[session] scripts: {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)", file=sys.stderr)
+
+    # Copy templates directory so bzcode can find templates/index.json on remote.
+    src_templates = _server_dir / "bzcode_assets" / "templates"
+    if not src_templates.is_dir():
+        _cwd_tmpl = Path.cwd() / "bzcode_assets" / "templates"
+        if _cwd_tmpl.is_dir():
+            src_templates = _cwd_tmpl
+    if src_templates.is_dir():
+        dst_templates = cfg_dir / "templates"
+        if dst_templates.exists():
+            _shutil.rmtree(dst_templates)
+        _sh.copytree(src_templates, dst_templates)
+        print(f"[session] templates: {src_templates} → {dst_templates}", file=sys.stderr)
+    else:
+        print(f"[session] WARNING: bzcode_assets/templates not found at {src_templates}", file=sys.stderr)
 
     # {scripts_path} resolves to the session-local scripts directory.
     # Using the session config dir means no absolute paths leak into templates.
@@ -206,8 +220,8 @@ DB_CONFIG = {
 # § 2 · IN-MEMORY STATE
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Bzcode session files (written by bzcode itself — location is fixed)
-SESSIONS_DIR  = Path.home() / ".boltzbit" / "sessions"
+# Bzcode session files live under BZ_HOME/sessions/
+SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit") / "sessions"
 
 # Per-file cursor positions: abs_path -> {selStart, selEnd}
 # Stored in-memory (survives tab switches, cleared on server restart).
@@ -346,8 +360,11 @@ def _read_session_file(path: Path) -> Optional[dict]:
                             if isinstance(block, dict) and block.get("type") == "text":
                                 text = block.get("text", "")
                                 break
-                    if not title and text:
-                        title = text[:60]
+                    _t = text.strip()
+                    if (not title and _t
+                            and _t != "Hi, hand shake, say yes"
+                            and not _t.startswith("<system-reminder>")):
+                        title = _t[:60]
                     if text:
                         last_preview = text[:150]
             except json.JSONDecodeError:
@@ -396,8 +413,8 @@ def _write_bzcode_credentials(
     expires_at=None,
     auth_url: str = "https://boltzhub.com",
 ) -> None:
-    """Write access token to ~/.boltzbit/credentials.json in the format bzcode expects."""
-    creds_dir  = Path.home() / ".boltzbit"
+    """Write access token to $BZ_HOME/credentials.json in the format bzcode expects."""
+    creds_dir  = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
     creds_file = creds_dir / "credentials.json"
     creds_dir.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
@@ -437,7 +454,22 @@ def _write_bzcode_credentials(
     existing[auth_url] = entry
     with open(creds_file, "w") as f:
         json.dump(existing, f, indent=2)
-    print(f"[auth] credentials written for {auth_url}", file=sys.stderr)
+    print(f"[auth] credentials written to {creds_file} for {auth_url}", file=sys.stderr)
+
+
+def _read_api_keys() -> dict:
+    """Return only BZ_API_KEY from BZ_HOME/api_keys.json.
+    No other keys are passed to bzcode spawns — this is intentional."""
+    keys_file = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit") / "api_keys.json"
+    if not keys_file.exists():
+        return {}
+    try:
+        with open(keys_file) as f:
+            data = json.load(f)
+        val = data.get("BZ_API_KEY", "")
+        return {"BZ_API_KEY": val} if val and isinstance(val, str) else {}
+    except Exception:
+        return {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -557,16 +589,18 @@ class _WASess:
         self._buf: list  = []
         self._done       = asyncio.Event()
         self._msg_lock   = asyncio.Lock()
+        import hashlib as _hl
+        self.session_id = f"wa-{_hl.md5(phone.encode()).hexdigest()[:12]}"
 
     async def _start(self) -> None:
         """Spawn (or restart) the bzcode process."""
         self.proc = await asyncio.create_subprocess_exec(
-            self.bzcode_path, "--stdio", "--continue",
+            self.bzcode_path, "--stdio", "--resume", self.session_id,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=self.cwd,
-            env={**os.environ, "BZ_PYTHON": sys.executable},
+            env={**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable},
             limit=16 * 1024 * 1024,
         )
         asyncio.create_task(self._read_loop())
@@ -647,10 +681,43 @@ _PUSH_EXCLUDE  = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "ven
 def _boltzhub_token() -> Optional[str]:
     try:
         import json as _json
-        creds = _json.loads((Path.home() / ".boltzbit" / "credentials.json").read_text())
+        bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
+        creds = _json.loads((bz_home / "credentials.json").read_text())
         return creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
     except Exception:
         return None
+
+
+def _credentials_valid() -> Tuple[bool, str]:
+    """Return (ok, reason). Accepts BZ_API_KEY in api_keys.json or a valid credentials.json."""
+    import time as _time
+    bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
+    # BZ_API_KEY is sufficient — no OAuth credentials needed
+    api_keys = _read_api_keys()
+    if api_keys.get("BZ_API_KEY"):
+        return True, ""
+    creds_file = bz_home / "credentials.json"
+    if not creds_file.exists():
+        return False, f"credentials.json not found in {bz_home}"
+    try:
+        creds = json.loads(creds_file.read_text())
+    except Exception as e:
+        return False, f"credentials.json is unreadable: {e}"
+    entry = creds.get(BOLTZHUB_AUTH, {})
+    token = entry.get("accessToken", "")
+    if not token:
+        return False, "no accessToken in credentials.json"
+    if not entry.get("refreshToken", ""):
+        return False, "no refreshToken in credentials.json — please log in again"
+    expires_at = entry.get("expiresAt")
+    if expires_at:
+        ms = int(expires_at)
+        # expiresAt may be in seconds or milliseconds
+        if ms < 10_000_000_000:
+            ms *= 1000
+        if ms < _time.time() * 1000:
+            return False, "accessToken is expired — please log in again"
+    return True, ""
 
 
 def _read_app_config(cwd: str) -> Optional[dict]:
@@ -710,16 +777,18 @@ class _BatchItem:
         self.status = "running"
         _running_cwds.add(self.cwd)
         try:
-            cmd = [self.bzcode_path, "--stdio"]
-            if self.resume_session_id:
-                cmd += ["--resume", self.resume_session_id]
+            if not self.resume_session_id:
+                import secrets as _sec
+                self.resume_session_id = f"bz-{_sec.token_hex(6)}"
+                self.session_id = self.resume_session_id
+            cmd = [self.bzcode_path, "--stdio", "--resume", self.resume_session_id]
             self._proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
                 cwd=self.cwd,
-                env={**os.environ, "BZ_PYTHON": sys.executable},
+                env={**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable},
                 limit=16 * 1024 * 1024,
             )
             asyncio.create_task(self._read_loop())
@@ -1304,7 +1373,17 @@ async def read_bzcode_stdout(
 ) -> None:
     try:
         while True:
-            line = await proc.stdout.readline()
+            try:
+                line = await proc.stdout.readline()
+            except ValueError:
+                # Single output line exceeded the 16 MB StreamReader limit.
+                # Drain until the next newline so the stream stays healthy.
+                print("[ws] bzcode emitted an oversized output line (>16 MB) — skipping", file=sys.stderr)
+                while True:
+                    chunk = await proc.stdout.read(1 << 20)
+                    if not chunk or b"\n" in chunk:
+                        break
+                continue
             if not line:
                 break
             raw = line.decode().rstrip("\n")
@@ -1382,6 +1461,13 @@ async def relay_client_messages(
     async for msg in ws:
         if msg.type == aiohttp.WSMsgType.TEXT:
             raw: str = msg.data
+            # Keepalive ping — reply with pong so the reverse proxy sees bidirectional activity.
+            try:
+                if json.loads(raw).get("type") == "ping":
+                    await ws.send_str('{"type":"pong"}')
+                    continue
+            except Exception:
+                pass
             if not raw.endswith("\n"):
                 raw += "\n"
             proc.stdin.write(raw.encode())
@@ -1406,20 +1492,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     # Determine mode.
     req_mode = params.get("mode") or _load_mode_config().get("default", "general")
 
-    # Validate any requested session ID — if its .jsonl is missing, treat as new.
-    if req_session_id:
-        session_file = SESSIONS_DIR / f"{req_session_id}.jsonl"
-        if not session_file.exists():
-            print(
-                f"[ws] session file not found for {req_session_id!r} — starting fresh",
-                file=sys.stderr,
-            )
-            req_session_id = None
-
-    # If no session ID, generate one now (before spawning) so we can write the
-    # config directory first.  bzcode starts a fresh session when it sees no
-    # existing .jsonl, but it DOES load the config directory — so the identity
-    # and tool settings take effect from the very first message.
+    # Generate a session ID if none was provided — bzcode accepts any ID.
     if not req_session_id:
         import secrets as _secrets
         req_session_id = f"bz-{_secrets.token_hex(6)}"
@@ -1443,7 +1516,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=effective_cwd,
-            env={**os.environ, "BZ_PYTHON": sys.executable},
+            env={**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable},
             limit=16 * 1024 * 1024,  # 16 MB — large sessions can emit long lines
         )
     except FileNotFoundError:
@@ -1456,6 +1529,11 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
 
     out_queue   = asyncio.Queue()
     ready_event = asyncio.Event()
+
+    if req_mode == 'widget':
+        proc.stdin.write(b'{"type":"setMode","mode":"yolo"}\n')
+        await proc.stdin.drain()
+
     try:
         await asyncio.gather(
             read_bzcode_stdout(proc, out_queue, ready_event,
@@ -1468,7 +1546,21 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
         pass
     finally:
         _active_cwds.discard(effective_cwd)
-        print(f"[ws] disconnect  pid={proc.pid}", file=sys.stderr)
+        # Check exit code — if bzcode crashed (non-zero), notify the client before
+        # the handler returns so the frontend shows a meaningful error instead of a
+        # silent disconnect.
+        exit_code = proc.returncode
+        if exit_code not in (None, 0):
+            print(f"[ws] bzcode exited with code {exit_code}  pid={proc.pid}", file=sys.stderr)
+            try:
+                await ws.send_str(json.dumps({
+                    "type": "system",
+                    "message": f"⚠ bzcode process exited unexpectedly (code {exit_code}). Reconnecting…",
+                }))
+            except Exception:
+                pass
+        else:
+            print(f"[ws] disconnect  pid={proc.pid}", file=sys.stderr)
         # Process may have already exited (e.g. crashed) — ignore lookup errors
         try:
             proc.terminate()

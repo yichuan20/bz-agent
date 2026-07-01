@@ -57,8 +57,16 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
   }
 
   function handleLogout() {
-    clearAccessToken();
-    void navigate({ to: '/login' });
+    const httpBase = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+      || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+    const authUrl  = (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
+    fetch(`${httpBase}/auth/logout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authUrl }),
+    }).finally(() => {
+      clearAccessToken();
+      void navigate({ to: '/login' });
+    });
   }
 
   return (

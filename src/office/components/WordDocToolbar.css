@@ -24,7 +24,7 @@
   display: block; background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-default, var(--border-primary));
   /* overflow: visible so dropdown menus can flow below the toolbar bar */
-  overflow: visible; position: sticky; top: 0; z-index: 9999;
+  overflow: visible; position: sticky; top: 0; z-index: 10;
 }
 /* The FloatingToolbar scrolls horizontally inside the container.
    We use padding-bottom + margin-bottom to create space for dropdown menus

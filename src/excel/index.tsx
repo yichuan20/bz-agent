@@ -25,45 +25,6 @@ export interface ExcelEditorProps {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SheetData = Record<string, any>;
 
-/** Simple client-side Excel formula evaluator for common cases. */
-function evalFormula(formula: string, cells: Record<string, any>): number | string | null {
-  if (!formula.startsWith('=')) return null;
-  const expr = formula.slice(1).trim().toUpperCase();
-
-  const cellVal = (id: string): number => {
-    const v = cells[id.toUpperCase()]?.value;
-    if (v == null || v === '') return 0;
-    const n = Number(v);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const expandRange = (range: string): string[] => {
-    const m = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-    if (!m) return [range];
-    const colStart = m[1]!, rowStart = parseInt(m[2]!);
-    const colEnd   = m[3]!, rowEnd   = parseInt(m[4]!);
-    const colIdx = (s: string) => s.split('').reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0);
-    const colLet = (n: number) => { let s = ''; while (n > 0) { s = String.fromCharCode(((n - 1) % 26) + 65) + s; n = Math.floor((n - 1) / 26); } return s; };
-    const result: string[] = [];
-    for (let r = rowStart; r <= rowEnd; r++)
-      for (let c = colIdx(colStart); c <= colIdx(colEnd); c++)
-        result.push(`${colLet(c)}${r}`);
-    return result;
-  };
-
-  try {
-    let m: RegExpMatchArray | null;
-    if ((m = expr.match(/^SUM\(([^)]+)\)$/)))    return expandRange(m[1]!.trim()).reduce((s, id) => s + cellVal(id), 0);
-    if ((m = expr.match(/^AVERAGE\(([^)]+)\)$/))) { const vs = expandRange(m[1]!.trim()); return vs.reduce((s, id) => s + cellVal(id), 0) / (vs.length || 1); }
-    if ((m = expr.match(/^MIN\(([^)]+)\)$/)))    return Math.min(...expandRange(m[1]!.trim()).map(cellVal));
-    if ((m = expr.match(/^MAX\(([^)]+)\)$/)))    return Math.max(...expandRange(m[1]!.trim()).map(cellVal));
-    if ((m = expr.match(/^COUNT\(([^)]+)\)$/)))  return expandRange(m[1]!.trim()).filter(id => cells[id]?.value != null && cells[id]?.value !== '').length;
-    // Arithmetic with cell refs: replace A1-style refs with values then eval
-    const arith = expr.replace(/([A-Z]+\d+)/g, ref => String(cellVal(ref)));
-    if (/^[\d\s.+\-*/()]+$/.test(arith)) return Function('"use strict"; return (' + arith + ')')() as number;
-  } catch { /* fall through */ }
-  return null;
-}
 
 export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
   const [data,          setData]          = useState<any>(null);
@@ -81,28 +42,8 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
       .then(r => r.json())
       .then((d: any) => {
         if (d.error) { setError(d.error); setLoading(false); return; }
-        // Client-side fallback: evaluate any formula cells the server couldn't compute
-        // (e.g. formulas library unavailable or unsupported function).
-        // Only runs for cells that are still missing a value after server evaluation.
-        const evaluated = {
-          ...d,
-          sheets: d.sheets?.map((s: any) => {
-            const cells = { ...s.cells };
-            for (let pass = 0; pass < 4; pass++) {
-              for (const [cellId, cd] of Object.entries(cells)) {
-                const formulaStr = (cd as any)?.formula;
-                if (typeof formulaStr === 'string' && formulaStr.startsWith('=')
-                    && (cd as any)?.value == null) {
-                  const result = evalFormula(formulaStr, cells);
-                  if (result !== null) cells[cellId] = { ...(cd as any), value: result };
-                }
-              }
-            }
-            return { ...s, cells };
-          }),
-        };
-        setData(evaluated);
-        setSelectedSheet(evaluated.sheets?.[0]?.sheetName ?? '');
+        setData(d);
+        setSelectedSheet(d.sheets?.[0]?.sheetName ?? '');
         setLoading(false);
       })
       .catch(e => { setError(String(e)); setLoading(false); });
@@ -112,53 +53,47 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
 
   const handleCellPatch = useCallback((cellUpdates: Record<string, any>) => {
     if (!sheet) return;
-    const currentCells = sheet.cells ?? {};
 
-    // 1. Apply the incoming updates (evaluate any formulas in the patch itself)
-    const patched: Record<string, any> = { ...currentCells };
-    for (const [cellId, cd] of Object.entries(cellUpdates)) {
-      const formula = (cd as any)?.formula;
-      const raw = (cd as any)?.value;
-      const formulaStr = (typeof formula === 'string' && formula.startsWith('=')) ? formula
-        : (typeof raw === 'string' && raw.startsWith('=')) ? raw : null;
-      if (formulaStr) {
-        const evalResult = evalFormula(formulaStr, { ...patched, [cellId]: cd });
-        patched[cellId] = evalResult !== null
-          ? { ...(cd as any), value: evalResult, formula: formulaStr }
-          : cd;
-      } else {
-        patched[cellId] = cd;
-      }
+    // Optimistic update for immediate UI feedback
+    const mergedCells: Record<string, any> = { ...sheet.cells };
+    for (const [ref, cd] of Object.entries(cellUpdates)) {
+      mergedCells[ref] = { ...(mergedCells[ref] ?? {}), ...cd };
+    }
+    setData((prev: any) => ({
+      ...prev,
+      sheets: prev.sheets.map((s: any) =>
+        s.sheetName === selectedSheet ? { ...s, cells: mergedCells } : s
+      ),
+    }));
+
+    // Convert API format {value, formula, fontBold, bgColor, color, align}
+    // to sidecar format {v, f, s} for the PATCH endpoint
+    const sidecarCells: Record<string, any> = {};
+    for (const [ref, cd] of Object.entries(cellUpdates)) {
+      const sc: Record<string, any> = {};
+      if ('value'   in cd) sc.v = cd.value;
+      if ('formula' in cd) sc.f = cd.formula;
+      const style: Record<string, any> = {};
+      if (cd.fontBold  !== undefined) style.bold   = cd.fontBold;
+      if (cd.fontItalic !== undefined) style.italic = cd.fontItalic;
+      if (cd.color     !== undefined) style.fg     = cd.color;
+      if (cd.bgColor   !== undefined) style.bg     = cd.bgColor;
+      if (cd.align     !== undefined) style.align  = cd.align;
+      if (Object.keys(style).length) sc.s = style;
+      sidecarCells[ref] = sc;
     }
 
-    // 2. Re-evaluate ALL formula cells in the sheet so dependents update too
-    const recalculated = { ...patched };
-    for (const [cellId, cd] of Object.entries(recalculated)) {
-      const formulaStr = (cd as any)?.formula;
-      if (typeof formulaStr === 'string' && formulaStr.startsWith('=')) {
-        const evalResult = evalFormula(formulaStr, recalculated);
-        if (evalResult !== null) {
-          recalculated[cellId] = { ...(cd as any), value: evalResult };
-        }
-      }
-    }
-
-    setData((prev: any) => {
-      const sheets = prev.sheets.map((s: any) =>
-        s.sheetName === selectedSheet
-          ? { ...s, cells: recalculated }
-          : s
-      );
-      return { ...prev, sheets };
-    });
-    // Persist to server — send recalculated so formula strings are included
-    fetch(`${HTTP_BASE}/api/excel/save`, {
+    fetch(`${HTTP_BASE}/api/excel/patch`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, sheets: [{
-        sheetName: selectedSheet,
-        cells: recalculated,
-      }] }),
-    }).catch(() => null);
+      body: JSON.stringify({ path: filePath, sheet: selectedSheet, cells: sidecarCells }),
+    })
+      .then(r => r.json())
+      .then((d: any) => {
+        if (!d.sheets) return;
+        // Replace full state with server response (contains recalculated formula values)
+        setData(d);
+      })
+      .catch(() => null);
   }, [filePath, selectedSheet, sheet]);
 
   const handleGridChange = useCallback((grid: any) => {
@@ -169,7 +104,50 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         s.sheetName === selectedSheet ? { ...s, ...grid } : s
       ),
     }));
-  }, [selectedSheet, sheet]);
+    fetch(`${HTTP_BASE}/api/excel/grid`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: filePath, sheet: selectedSheet,
+        columnIndexToWidth: grid.columnIndexToWidth ?? {},
+        rowIndexToHeight:   grid.rowIndexToHeight   ?? {},
+      }),
+    }).catch(() => null);
+  }, [filePath, selectedSheet, sheet]);
+
+  const handleRenameSheet = useCallback((oldName: string, newName: string) => {
+    setData((prev: any) => ({
+      ...prev,
+      sheets: prev.sheets.map((s: any) =>
+        s.sheetName === oldName ? { ...s, sheetName: newName } : s
+      ),
+    }));
+    if (selectedSheet === oldName) setSelectedSheet(newName);
+    fetch(`${HTTP_BASE}/api/excel/renamesheet`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, oldName, newName }),
+    }).catch(() => null);
+  }, [filePath, selectedSheet]);
+
+  const handleAddSheet = useCallback(() => {
+    if (!data) return;
+    const existing = new Set(data.sheets.map((s: any) => s.sheetName));
+    let n = (data.sheets.length as number) + 1;
+    while (existing.has(`Sheet${n}`)) n++;
+    const newName = `Sheet${n}`;
+    setData((prev: any) => ({
+      ...prev,
+      sheets: [...prev.sheets, {
+        sheetName: newName, cells: {},
+        columnIndexToWidth: {}, rowIndexToHeight: {},
+        images: [], hiddenColIndices: [], hiddenRowIndices: [], mergedCellIndices: [],
+      }],
+    }));
+    setSelectedSheet(newName);
+    fetch(`${HTTP_BASE}/api/excel/addsheet`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, sheetName: newName }),
+    }).catch(() => null);
+  }, [data, filePath]);
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', fontSize: 13 }}>
@@ -218,6 +196,8 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
           sheetNames={sheetNames}
           selectedSheetName={selectedSheet}
           onSheetSelect={setSelectedSheet}
+          onAddSheet={handleAddSheet}
+          onRenameSheet={handleRenameSheet}
         />
       </React.Suspense>
     </div>

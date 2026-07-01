@@ -123,7 +123,7 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     tableInfo: null,
   });
   const [caretVisible, setCaretVisible] = useState(true);
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'light');
 
   const canvasRef = useRef();
   const caretBlinkRef = useRef();
@@ -158,15 +158,13 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     return () => observer.disconnect();
   }, [canvasRef]);
 
-  // Listen for theme changes to re-render canvas
+  // Listen for theme changes (data-theme attribute on <html>) to re-render canvas
   useEffect(() => {
-    const handleStorage = e => {
-      if (e.key === 'theme') {
-        setTheme(e.newValue || 'dark');
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
   }, []);
 
   // Set up image load callback to trigger redraw

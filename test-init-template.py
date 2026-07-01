@@ -18,7 +18,7 @@ import sys
 import tempfile
 import urllib.parse
 
-CREDS_FILE = os.path.expanduser("~/.boltzbit/credentials.json")
+CREDS_FILE = os.path.join(os.environ.get("BZ_HOME") or "/usr/local/boltzbit", "credentials.json")
 
 
 def load_creds():

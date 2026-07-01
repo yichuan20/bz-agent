@@ -46,9 +46,8 @@ def make_workbook(data: dict, out_path: Path) -> tuple[int, int]:
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    HEADER_FILL = PatternFill("solid", fgColor="1473DF")
+    HEADER_FILL = PatternFill("solid", fgColor="1473DF", bgColor="1473DF")
     HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
-    ALT_FILL    = PatternFill("solid", fgColor="F0F4FF")
     BORDER_SIDE = Side(style="thin", color="D0D0D0")
     CELL_BORDER = Border(
         left=BORDER_SIDE, right=BORDER_SIDE,
@@ -57,6 +56,9 @@ def make_workbook(data: dict, out_path: Path) -> tuple[int, int]:
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)  # remove default blank sheet
+    wb.calculation.calcMode = 'auto'
+    wb.calculation.calcOnSave = True
+    wb.calculation.fullCalcOnLoad = True
 
     total_rows = 0
     for sheet_def in data.get("sheets", []):
@@ -77,12 +79,9 @@ def make_workbook(data: dict, out_path: Path) -> tuple[int, int]:
 
         # Write data rows
         for r_idx, row in enumerate(rows, 2):
-            fill = ALT_FILL if r_idx % 2 == 0 else None
             for c_idx, val in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=val)
                 cell.border = CELL_BORDER
-                if fill:
-                    cell.fill = fill
             total_rows += 1
 
         # Apply formulas (overwrite cell values)
@@ -102,9 +101,6 @@ def make_workbook(data: dict, out_path: Path) -> tuple[int, int]:
         if headers:
             ws.freeze_panes = "A2"
 
-        # Auto-filter
-        if headers:
-            ws.auto_filter.ref = ws.dimensions
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(str(out_path))

@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
-import { clamp, cloneDeep, inRange, isNil, last, merge } from 'lodash';
-import { useState, useRef, useEffect } from 'react';
+import { cloneDeep, inRange, last } from 'lodash';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 // ── inline uuidv4 ──────────────────────────────────────────────────────────
 const uuidv4 = () =>
@@ -26,27 +26,30 @@ const FONT_SIZE = 16;
 const LINE_HEIGHT = 16 * 1.2;
 export const CANVAS_WIDTH = 896;
 export const CANVAS_HEIGHT = 504;
+const PPTX_PT_SCALE = CANVAS_WIDTH / 720;
 const GRAB_DISTANCE = 10;
+const SEL_COLOR = '#1a73e8';
+const SEL_BORDER_W = 2;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const isBase64Image = text => typeof text === 'string' && text.startsWith('data:image');
-
 const isShapeConfig = text => typeof text === 'string' && text.startsWith('shape:');
-
 const parseShapeConfig = text => {
   if (!isShapeConfig(text)) return null;
   try { return JSON.parse(text.slice(6)); } catch { return null; }
 };
 
-// ── config mutation helpers (pure functions) ───────────────────────────────
+// ── config mutation helpers ────────────────────────────────────────────────
 const onSetSelectedBox = (boxId, config, setConfig) => {
-  const newConfig = cloneDeep(config);
-  newConfig.boxes = newConfig.boxes.map(box => ({
-    ...box,
-    styles: (box.styles || []).filter(s => !s.isSelection),
-    isSelected: box.id === boxId,
-  }));
-  setConfig(newConfig);
+  const nc = cloneDeep(config);
+  nc.boxes = nc.boxes.map(b => ({ ...b, isSelected: b.id === boxId }));
+  setConfig(nc);
+};
+
+const clearSelection = (config, setConfig) => {
+  const nc = cloneDeep(config);
+  nc.boxes.forEach(b => { b.isSelected = false; });
+  setConfig(nc);
 };
 
 const onMoveSelectedBox = (dx, dy, config, setConfig) => {
@@ -103,76 +106,6 @@ const onAddNewBox = (x, y, text, config, setConfig) => {
   setConfig(nc);
 };
 
-const updateCursor = (dCursor = {}, config, setConfig) => {
-  const nc = cloneDeep(config);
-  const sel = nc.boxes.find(b => b.isSelected);
-  const ss = sel?.styles?.find(s => s.isSelection);
-  let newStart = (dCursor.start ?? ss?.start ?? 0) + (dCursor.dStart ?? 0);
-  let newEnd   = (dCursor.end   ?? ss?.end   ?? 0) + (dCursor.dEnd   ?? 0);
-  newStart = clamp(newStart, 0, sel?.text?.length ?? 0);
-  newEnd   = clamp(newEnd,   0, sel?.text?.length ?? 0);
-  sel.styles = sel.styles.filter(s => !s.isSelection);
-  sel.styles.push({ isSelection: true, start: newStart, end: newEnd });
-  setConfig(nc);
-};
-
-const clearSelection = (config, setConfig) => {
-  const nc = cloneDeep(config);
-  nc.boxes.forEach(b => { b.isSelected = false; b.styles = (b.styles || []).filter(s => !s.isSelection); });
-  setConfig(nc);
-};
-
-const updateCursorSelectWord = (charIndex, config, setConfig) => {
-  const nc = cloneDeep(config);
-  const sel = nc.boxes.find(b => b.isSelected);
-  let s = charIndex; while (s >= 0 && sel.text[s] !== ' ') s--;
-  let e = charIndex; while (e < sel.text?.length && sel.text[e] !== ' ') e++;
-  sel.styles = sel.styles.filter(st => !st.isSelection);
-  sel.styles.push({ isSelection: true, start: s + 1, end: e - 1 });
-  setConfig(nc);
-};
-
-const updateCursorSelectAll = (config, setConfig) => {
-  const nc = cloneDeep(config);
-  const sel = nc.boxes.find(b => b.isSelected);
-  if (!sel?.text) return;
-  sel.styles = sel.styles.filter(st => !st.isSelection);
-  sel.styles.push({ isSelection: true, start: 0, end: sel.text.length - 1 });
-  setConfig(nc);
-};
-
-const insertTextAtSelection = (text, config, setConfig) => {
-  const nc = cloneDeep(config);
-  const sel = nc.boxes?.find(b => b.isSelected);
-  const ss = sel?.styles?.find(s => s.isSelection)?.start;
-  if (isNil(ss)) return;
-  sel.text = (sel.text?.slice(0, ss) ?? '') + text + (sel.text?.slice(ss) ?? '');
-  sel.styles = sel.styles.map(s => ({
-    ...s,
-    start: ss <= s.start ? s.start + text.length : s.start,
-    end:   ss <= s.end   ? s.end   + text.length : s.end,
-  }));
-  setConfig(nc);
-};
-
-const deleteTextSelection = (config, setConfig) => {
-  const nc = cloneDeep(config);
-  const sel = nc.boxes.find(b => b.isSelected);
-  const ss = sel.styles.find(s => s.isSelection)?.start;
-  const se = sel.styles.find(s => s.isSelection)?.end;
-  if (isNil(ss)) return;
-  const span = ss === se ? -1 : se - ss + 1;
-  const before = sel.text?.slice(0, ss + (span < 0 ? span : 0)) ?? '';
-  const after  = sel.text?.slice(ss + (span < 0 ? 0 : span))   ?? '';
-  sel.text = before + after;
-  sel.styles = sel.styles.map(s => ({
-    ...s,
-    start: ss <= s.start ? s.start - Math.abs(span) : s.start,
-    end:   ss <= s.end   ? s.end   - Math.abs(span) : s.end,
-  }));
-  setConfig(nc);
-};
-
 const toDataURL = url =>
   fetch(url).then(r => r.blob()).then(blob => new Promise((res, rej) => {
     const reader = new FileReader();
@@ -195,61 +128,229 @@ const insertBoxesFromHtml = async (htmlStr, config, setConfig) => {
   };
 };
 
+// ── image cache ────────────────────────────────────────────────────────────
+const _imgCache = new Map();
+
 // ── drawing helpers ────────────────────────────────────────────────────────
 const drawResizeHandles = (ctx, config) => {
   if (!config.isSelected) return;
-  const hs = 8 * SF;
   const isImg = !!config.canvasImage || isBase64Image(config.text);
   const corners = [
     { x: config.x, y: config.y }, { x: config.x + config.w, y: config.y },
     { x: config.x, y: config.y + config.h }, { x: config.x + config.w, y: config.y + config.h },
   ];
   const edges = [
-    { x: config.x + config.w / 2, y: config.y }, { x: config.x + config.w / 2, y: config.y + config.h },
-    { x: config.x, y: config.y + config.h / 2 }, { x: config.x + config.w, y: config.y + config.h / 2 },
+    { x: config.x + config.w / 2, y: config.y,               horiz: true  },
+    { x: config.x + config.w / 2, y: config.y + config.h,    horiz: true  },
+    { x: config.x,                y: config.y + config.h / 2, horiz: false },
+    { x: config.x + config.w,     y: config.y + config.h / 2, horiz: false },
   ];
-  const handles = isImg ? corners : [...corners, ...edges];
-  handles.forEach(h => {
-    ctx.beginPath(); ctx.rect(h.x - hs / 2, h.y - hs / 2, hs, hs);
-    ctx.fillStyle = '#a0a0a0'; ctx.fill();
-    ctx.lineWidth = 1 * SF; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  corners.forEach(h => {
+    ctx.beginPath(); ctx.arc(h.x, h.y, 5 * SF, 0, Math.PI * 2);
+    ctx.fillStyle = SEL_COLOR; ctx.fill();
+    ctx.lineWidth = 2 * SF; ctx.strokeStyle = '#ffffff'; ctx.stroke();
   });
-  const rhy = config.y - 30 * SF, rhx = config.x + config.w / 2;
-  ctx.beginPath(); ctx.moveTo(rhx, config.y); ctx.lineTo(rhx, rhy + hs / 2);
-  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * SF; ctx.stroke();
-  ctx.beginPath(); ctx.rect(rhx - hs / 2, rhy - hs / 2, hs, hs);
-  ctx.fillStyle = '#a0a0a0'; ctx.fill(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * SF; ctx.stroke();
+  if (!isImg) {
+    edges.forEach(h => {
+      const rx = h.horiz ? 7 * SF : 4 * SF;
+      const ry = h.horiz ? 4 * SF : 7 * SF;
+      ctx.beginPath(); ctx.ellipse(h.x, h.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.lineWidth = 2 * SF; ctx.strokeStyle = SEL_COLOR; ctx.stroke();
+    });
+  }
+  const rhx = config.x + config.w / 2, rhy = config.y - 28 * SF;
+  ctx.beginPath(); ctx.moveTo(rhx, config.y); ctx.lineTo(rhx, rhy + 8 * SF);
+  ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = 1.5 * SF; ctx.stroke();
+  ctx.beginPath(); ctx.arc(rhx, rhy, 8 * SF, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff'; ctx.fill();
+  ctx.lineWidth = 2 * SF; ctx.strokeStyle = SEL_COLOR; ctx.stroke();
+  ctx.beginPath(); ctx.arc(rhx, rhy, 4 * SF, -Math.PI * 0.9, Math.PI * 0.25);
+  ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = 1.5 * SF; ctx.stroke();
+  const aEnd = Math.PI * 0.25, ar = 4 * SF;
+  const ax = rhx + Math.cos(aEnd) * ar, ay = rhy + Math.sin(aEnd) * ar;
+  const perp = aEnd + Math.PI / 2;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(ax + Math.cos(perp - 0.5) * 3.5 * SF, ay + Math.sin(perp - 0.5) * 3.5 * SF);
+  ctx.lineTo(ax + Math.cos(perp + 0.5) * 3.5 * SF, ay + Math.sin(perp + 0.5) * 3.5 * SF);
+  ctx.closePath(); ctx.fillStyle = SEL_COLOR; ctx.fill();
 };
 
-const drawTextBox = (ctx, config, isHovered = false) => {
-  ctx.beginPath();
-  const { fontSize, fontWeight, color, lineWidth, type, lineEnd } = config.boxStyle || {};
-  ctx.strokeStyle = 'transparent';
-  if (lineWidth) { ctx.lineWidth = lineWidth; ctx.strokeStyle = color || '#000000'; }
-  else ctx.lineWidth = 2;
-  if (config.isSelected) ctx.strokeStyle = 'rgba(160,160,160,0.7)';
+// editState = { caretPos: number, caretVisible: boolean } | null
+// When editState is non-null this box is in text-editing mode.
+const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, editState = null) => {
+  const { x, y, w, h } = config;
+  const { type: lineType, lineEnd, lineWidth: lineW, color: lineColor } = config.boxStyle || {};
 
-  if (type === 'line') {
-    ctx.moveTo(config.x, config.y); ctx.lineTo(config.x + config.w, config.y + config.h); ctx.stroke();
+  if (lineType === 'line') {
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + w, y + h);
+    ctx.strokeStyle = lineColor || '#000000'; ctx.lineWidth = lineW || 2;
+    ctx.stroke();
     if (lineEnd === 'arrow') {
-      const angle = Math.atan2(config.h, config.w);
-      const len = Math.sqrt(config.w ** 2 + config.h ** 2) * 0.9;
+      const angle = Math.atan2(h, w);
+      const len = Math.sqrt(w ** 2 + h ** 2) * 0.9;
       [angle + 0.05, angle - 0.05].forEach(a => {
-        ctx.beginPath(); ctx.moveTo(config.x + Math.cos(a) * len, config.y + Math.sin(a) * len);
-        ctx.lineTo(config.x + config.w, config.y + config.h); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+        ctx.lineTo(x + w, y + h); ctx.stroke();
       });
     }
     return;
   }
 
-  const hasImage = config.canvasImage || isBase64Image(config.text);
-  if (hasImage) {
+  const rotation = config.rotation || 0;
+  if (rotation) {
+    ctx.save();
+    ctx.translate(x + w / 2, y + h / 2);
+    ctx.rotate(rotation * Math.PI / 180);
+    ctx.translate(-(x + w / 2), -(y + h / 2));
+  }
+
+  const buildPath = () => {
+    ctx.beginPath();
+    const st = config.shapeType || 'rect';
+    if (st === 'ellipse') {
+      ctx.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
+    } else if (st === 'roundRect' && (config.cornerRadius || 0) > 0) {
+      const r = Math.min(Math.abs(w), Math.abs(h)) / 2 * ((config.cornerRadius || 0) / 100);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
+        ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+      }
+    } else if (st === 'triangle' || st === 'isoscelesTri') {
+      ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'rtTriangle') {
+      ctx.moveTo(x, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'diamond') {
+      ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w, y + h / 2); ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x, y + h / 2); ctx.closePath();
+    } else if (st === 'parallelogram') {
+      const sk = w * 0.2;
+      ctx.moveTo(x + sk, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - sk, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'trapezoid') {
+      const sk = w * 0.2;
+      ctx.moveTo(x + sk, y); ctx.lineTo(x + w - sk, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'pentagon') {
+      const pts = [
+        [x + w / 2, y], [x + w, y + h * 0.38], [x + w * 0.81, y + h], [x + w * 0.19, y + h], [x, y + h * 0.38],
+      ];
+      ctx.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => ctx.lineTo(p[0], p[1])); ctx.closePath();
+    } else if (st === 'hexagon') {
+      const q = w / 4;
+      ctx.moveTo(x + q, y); ctx.lineTo(x + w - q, y); ctx.lineTo(x + w, y + h / 2);
+      ctx.lineTo(x + w - q, y + h); ctx.lineTo(x + q, y + h); ctx.lineTo(x, y + h / 2); ctx.closePath();
+    } else if (st === 'plus' || st === 'mathPlus') {
+      const aw = w / 3, ah = h / 3;
+      ctx.moveTo(x + aw, y); ctx.lineTo(x + 2 * aw, y);
+      ctx.lineTo(x + 2 * aw, y + ah); ctx.lineTo(x + w, y + ah);
+      ctx.lineTo(x + w, y + 2 * ah); ctx.lineTo(x + 2 * aw, y + 2 * ah);
+      ctx.lineTo(x + 2 * aw, y + h); ctx.lineTo(x + aw, y + h);
+      ctx.lineTo(x + aw, y + 2 * ah); ctx.lineTo(x, y + 2 * ah);
+      ctx.lineTo(x, y + ah); ctx.lineTo(x + aw, y + ah); ctx.closePath();
+    } else if (st === 'mathMinus') {
+      ctx.rect(x, y + h * 0.35, w, h * 0.3);
+    } else if (st === 'mathMultiply') {
+      const t = Math.min(w, h) * 0.18;
+      ctx.moveTo(x, y + t); ctx.lineTo(x + t, y); ctx.lineTo(x + w / 2, y + h / 2 - t);
+      ctx.lineTo(x + w - t, y); ctx.lineTo(x + w, y + t); ctx.lineTo(x + w / 2 + t, y + h / 2);
+      ctx.lineTo(x + w, y + h - t); ctx.lineTo(x + w - t, y + h); ctx.lineTo(x + w / 2, y + h / 2 + t);
+      ctx.lineTo(x + t, y + h); ctx.lineTo(x, y + h - t); ctx.lineTo(x + w / 2 - t, y + h / 2); ctx.closePath();
+    } else if (st === 'rightArrow' || st === 'curvedRightArrow' || st === 'bentArrow') {
+      const sw2 = h * 0.32, nx = x + w * 0.58;
+      ctx.moveTo(x, y + h / 2 - sw2); ctx.lineTo(nx, y + h / 2 - sw2);
+      ctx.lineTo(nx, y); ctx.lineTo(x + w, y + h / 2); ctx.lineTo(nx, y + h);
+      ctx.lineTo(nx, y + h / 2 + sw2); ctx.lineTo(x, y + h / 2 + sw2); ctx.closePath();
+    } else if (st === 'leftArrow') {
+      const sw2 = h * 0.32, nx = x + w * 0.42;
+      ctx.moveTo(x + w, y + h / 2 - sw2); ctx.lineTo(nx, y + h / 2 - sw2);
+      ctx.lineTo(nx, y); ctx.lineTo(x, y + h / 2); ctx.lineTo(nx, y + h);
+      ctx.lineTo(nx, y + h / 2 + sw2); ctx.lineTo(x + w, y + h / 2 + sw2); ctx.closePath();
+    } else if (st === 'upArrow') {
+      const sw2 = w * 0.32, ny = y + h * 0.42;
+      ctx.moveTo(x + w / 2 - sw2, y + h); ctx.lineTo(x + w / 2 - sw2, ny);
+      ctx.lineTo(x, ny); ctx.lineTo(x + w / 2, y); ctx.lineTo(x + w, ny);
+      ctx.lineTo(x + w / 2 + sw2, ny); ctx.lineTo(x + w / 2 + sw2, y + h); ctx.closePath();
+    } else if (st === 'downArrow') {
+      const sw2 = w * 0.32, ny = y + h * 0.58;
+      ctx.moveTo(x + w / 2 - sw2, y); ctx.lineTo(x + w / 2 - sw2, ny);
+      ctx.lineTo(x, ny); ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x + w, ny);
+      ctx.lineTo(x + w / 2 + sw2, ny); ctx.lineTo(x + w / 2 + sw2, y); ctx.closePath();
+    } else if (st === 'chevron') {
+      const tip = w * 0.25;
+      ctx.moveTo(x, y); ctx.lineTo(x + w - tip, y); ctx.lineTo(x + w, y + h / 2);
+      ctx.lineTo(x + w - tip, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x + tip, y + h / 2); ctx.closePath();
+    } else if (st === 'can') {
+      const ry = Math.min(h * 0.12, w * 0.25);
+      ctx.moveTo(x, y + ry);
+      ctx.ellipse(x + w / 2, y + ry, w / 2, ry, 0, Math.PI, 0);
+      ctx.lineTo(x + w, y + h - ry);
+      ctx.ellipse(x + w / 2, y + h - ry, w / 2, ry, 0, 0, Math.PI);
+      ctx.closePath();
+    } else if (st === 'cube') {
+      const d = Math.min(w, h) * 0.22;
+      ctx.moveTo(x, y + d); ctx.lineTo(x + d, y); ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + h - d); ctx.lineTo(x + w - d, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'snip1Rect') {
+      const cr2 = Math.min(w, h) * 0.25;
+      ctx.moveTo(x, y); ctx.lineTo(x + w - cr2, y); ctx.lineTo(x + w, y + cr2);
+      ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    } else if (st === 'round2SameRect') {
+      const r2 = Math.min(w, h) * 0.15;
+      ctx.moveTo(x + r2, y); ctx.lineTo(x + w - r2, y);
+      ctx.arcTo(x + w, y, x + w, y + r2, r2); ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h); ctx.lineTo(x, y + r2);
+      ctx.arcTo(x, y, x + r2, y, r2); ctx.closePath();
+    } else if (st === 'round2DiagRect') {
+      const r2 = Math.min(w, h) * 0.15;
+      ctx.moveTo(x + r2, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - r2);
+      ctx.arcTo(x + w, y + h, x + w - r2, y + h, r2); ctx.lineTo(x, y + h);
+      ctx.lineTo(x, y + r2); ctx.arcTo(x, y, x + r2, y, r2); ctx.closePath();
+    } else if (st === 'star5') {
+      const cx2 = x + w / 2, cy2 = y + h / 2, ro = Math.min(w, h) / 2, ri = ro * 0.382;
+      for (let i = 0; i < 10; i++) {
+        const a = (i * Math.PI / 5) - Math.PI / 2, r2 = i % 2 === 0 ? ro : ri;
+        i === 0 ? ctx.moveTo(cx2 + r2 * Math.cos(a), cy2 + r2 * Math.sin(a))
+                : ctx.lineTo(cx2 + r2 * Math.cos(a), cy2 + r2 * Math.sin(a));
+      }
+      ctx.closePath();
+    } else if (st === 'star4') {
+      const cx2 = x + w / 2, cy2 = y + h / 2, ro = Math.min(w, h) / 2, ri = ro * 0.5;
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI / 4) - Math.PI / 4, r2 = i % 2 === 0 ? ro : ri;
+        i === 0 ? ctx.moveTo(cx2 + r2 * Math.cos(a), cy2 + r2 * Math.sin(a))
+                : ctx.lineTo(cx2 + r2 * Math.cos(a), cy2 + r2 * Math.sin(a));
+      }
+      ctx.closePath();
+    } else {
+      ctx.rect(x, y, w, h);
+    }
+  };
+
+  if (config.imageData) {
+    if (!_imgCache.has(config.id)) {
+      const img = new Image(); img.src = config.imageData;
+      _imgCache.set(config.id, img);
+    }
+    try { ctx.drawImage(_imgCache.get(config.id), x, y, w, h); } catch {}
+    if (isHovered && !config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = 'rgba(26,115,232,0.35)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
+    if (config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = SEL_BORDER_W * SF; ctx.stroke(); drawResizeHandles(ctx, config); }
+    if (rotation) ctx.restore();
+    return;
+  }
+
+  if (config.canvasImage || isBase64Image(config.text)) {
     let img = config.canvasImage;
     if (!img && isBase64Image(config.text)) { img = new Image(); img.src = config.text; }
-    if (img) { try { ctx.drawImage(img, config.x, config.y, config.w, config.h); } catch {} }
-    if (isHovered && !config.isSelected) { ctx.beginPath(); ctx.rect(config.x, config.y, config.w, config.h); ctx.strokeStyle = 'rgba(160,160,160,0.4)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
-    if (config.isSelected) { ctx.beginPath(); ctx.rect(config.x, config.y, config.w, config.h); ctx.strokeStyle = 'rgba(160,160,160,0.7)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
-    drawResizeHandles(ctx, config);
+    if (img) { try { ctx.drawImage(img, x, y, w, h); } catch {} }
+    if (isHovered && !config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = 'rgba(26,115,232,0.35)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
+    if (config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = SEL_BORDER_W * SF; ctx.stroke(); drawResizeHandles(ctx, config); }
+    if (rotation) ctx.restore();
     return;
   }
 
@@ -258,66 +359,225 @@ const drawTextBox = (ctx, config, isHovered = false) => {
     ctx.fillStyle = sc.bgColor || '#1473df'; ctx.strokeStyle = sc.borderColor || '#0d5bb5';
     ctx.lineWidth = (sc.borderWidth || 2) * SF;
     if (sc.type === 'circle') {
-      ctx.beginPath(); ctx.ellipse(config.x + config.w / 2, config.y + config.h / 2, config.w / 2, config.h / 2, 0, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
-    } else { ctx.fillRect(config.x, config.y, config.w, config.h); ctx.strokeRect(config.x, config.y, config.w, config.h); }
-    if (isHovered && !config.isSelected) { ctx.strokeStyle = 'rgba(160,160,160,0.4)'; ctx.lineWidth = 1 * SF; ctx.strokeRect(config.x, config.y, config.w, config.h); }
-    if (config.isSelected) { ctx.strokeStyle = 'rgba(160,160,160,0.7)'; ctx.lineWidth = 1 * SF; ctx.strokeRect(config.x, config.y, config.w, config.h); }
-    drawResizeHandles(ctx, config);
+    } else { ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); }
+    if (isHovered && !config.isSelected) { ctx.strokeStyle = 'rgba(26,115,232,0.35)'; ctx.lineWidth = 1 * SF; ctx.strokeRect(x, y, w, h); }
+    if (config.isSelected) { ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = SEL_BORDER_W * SF; ctx.strokeRect(x, y, w, h); drawResizeHandles(ctx, config); }
+    if (rotation) ctx.restore();
     return;
   }
 
-  const bgColor = config.boxStyle?.bgColor || 'transparent';
+  // ── Normal text / PPTX-imported shape ─────────────────────────────────────
+  const fill = config.fill;
+  const bgGrad = config.boxStyle?.bgGradient;
+  const bgColor = (fill?.type === 'solid' && fill.color) ? fill.color : (config.boxStyle?.bgColor || 'transparent');
+  if (bgGrad && bgGrad.stops && bgGrad.stops.length >= 2) {
+    buildPath();
+    const rad2 = bgGrad.angle * Math.PI / 180;
+    const cx2 = x + w / 2, cy2 = y + h / 2;
+    const len2 = Math.sqrt(w * w + h * h) / 2;
+    const lg = ctx.createLinearGradient(cx2 - Math.cos(rad2) * len2, cy2 - Math.sin(rad2) * len2,
+                                        cx2 + Math.cos(rad2) * len2, cy2 + Math.sin(rad2) * len2);
+    bgGrad.stops.forEach(s => lg.addColorStop(s.pos, s.color));
+    ctx.fillStyle = lg; ctx.fill();
+  } else if (bgColor && bgColor !== 'transparent') {
+    buildPath();
+    const fillOpacity = fill?.opacity ?? 1;
+    if (fillOpacity < 1) { ctx.save(); ctx.globalAlpha = fillOpacity; }
+    ctx.fillStyle = bgColor; ctx.fill();
+    if (fillOpacity < 1) ctx.restore();
+  }
+
   const borderColor = config.boxStyle?.borderColor || 'transparent';
   const borderWidth = (config.boxStyle?.borderWidth || 0) * SF;
-  ctx.fillStyle = bgColor; ctx.fillRect(config.x, config.y, config.w, config.h);
-  if (borderColor !== 'transparent' && borderWidth > 0) { ctx.strokeStyle = borderColor; ctx.lineWidth = borderWidth; ctx.strokeRect(config.x, config.y, config.w, config.h); }
-  if (isHovered && !config.isSelected) { ctx.strokeStyle = 'rgba(160,160,160,0.4)'; ctx.lineWidth = 1 * SF; ctx.strokeRect(config.x, config.y, config.w, config.h); }
-  if (config.isSelected) { ctx.strokeStyle = 'rgba(160,160,160,0.7)'; ctx.lineWidth = 1 * SF; ctx.strokeRect(config.x, config.y, config.w, config.h); }
-  drawResizeHandles(ctx, config);
+  if (borderColor !== 'transparent' && borderWidth > 0) {
+    buildPath(); ctx.strokeStyle = borderColor; ctx.lineWidth = borderWidth; ctx.stroke();
+  }
 
-  const lineHeight = fontSize * 1.2 || LINE_HEIGHT;
-  ctx.fillStyle = color || '#000000';
-  const fontStr = `${fontWeight || 400} ${fontSize * SF || FONT_SIZE * SF}px Montserrat, sans-serif`;
-  ctx.font = fontStr; ctx.textBaseline = 'top';
+  if (isHovered && !config.isSelected) { buildPath(); ctx.strokeStyle = 'rgba(26,115,232,0.35)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
+  if (config.isSelected) { buildPath(); ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = SEL_BORDER_W * SF; ctx.stroke(); drawResizeHandles(ctx, config); }
+
+  // ── Cylinder top-cap accent ────────────────────────────────────────────────
+  if ((config.shapeType || 'rect') === 'can') {
+    const ry2 = Math.min(h * 0.12, w * 0.25);
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + ry2, w / 2, ry2, 0, 0, Math.PI * 2);
+    if (bgColor && bgColor !== 'transparent') { ctx.fillStyle = bgColor; ctx.fill(); }
+    if (borderColor !== 'transparent' && borderWidth > 0) { ctx.strokeStyle = borderColor; ctx.lineWidth = borderWidth; ctx.stroke(); }
+  }
+
+  // ── Cube face-edge lines ───────────────────────────────────────────────────
+  if ((config.shapeType || 'rect') === 'cube') {
+    const d2 = Math.min(w, h) * 0.22;
+    const lc = borderColor !== 'transparent' ? borderColor : 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(x, y + d2); ctx.lineTo(x + w - d2, y + d2); ctx.lineTo(x + w, y);
+    ctx.moveTo(x + w - d2, y + d2); ctx.lineTo(x + w - d2, y + h);
+    ctx.strokeStyle = lc; ctx.lineWidth = Math.max(1, borderWidth || 1 * SF); ctx.stroke();
+  }
+
+  // ── Text rendering ─────────────────────────────────────────────────────────
   const pad = 10 * SF;
-  let ci = 0, cx = config.x + pad, cy = config.y + pad;
-  const sStart = config.styles?.find(s => s.isSelection)?.start;
+  const maxW = w - pad * 2;
+  ctx.textBaseline = 'top';
 
-  while (ci < config.text?.length) {
-    if (ci === sStart) {
-      const lw = ctx.lineWidth, ss = ctx.strokeStyle;
-      ctx.lineWidth = 3; ctx.strokeStyle = 'black';
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + lineHeight * SF); ctx.stroke();
-      ctx.lineWidth = lw; ctx.strokeStyle = ss;
+  // Rich paragraph mode — only when NOT in edit mode (editState is null)
+  const hasParagraphs = config.paragraphs && config.paragraphs.length > 0 && !editState;
+
+  if (hasParagraphs) {
+    const defFF = config.boxStyle?.fontFamily || 'Montserrat';
+    const defFS = (config.boxStyle?.fontSize || 16) * ptScale * SF;
+    const defColor = config.boxStyle?.color || '#000000';
+    const defAlign = config.boxStyle?.textAlign || 'left';
+    const doAllCaps = config.boxStyle?.allCaps;
+    const textAnchor = config.boxStyle?.textAnchor || 't';
+
+    const _runFont = run => {
+      const fs = (run.fontSize || config.boxStyle?.fontSize || 16) * ptScale * SF;
+      const ff = run.fontFamily || defFF;
+      const fw = run.bold || config.boxStyle?.fontWeight === 'bold' ? 'bold' : 'normal';
+      const fi = run.italic ? 'italic' : 'normal';
+      return { fs, ff, fw, fi, lh: fs * 1.2 };
+    };
+    const _runText = run => (doAllCaps || run.allCaps) ? run.text.toUpperCase() : run.text;
+
+    let totalH = 0;
+    if (textAnchor !== 't') {
+      for (const para of config.paragraphs) {
+        totalH += ((para.spaceBefore || 0) * ptScale) * SF;
+        if (!para.runs || para.runs.length === 0) { totalH += defFS * 1.2 * 0.5; continue; }
+        for (const run of para.runs) {
+          if (!run.text) continue;
+          const { fs, ff, fw, fi, lh } = _runFont(run);
+          ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+          for (const paraLine of _runText(run).split('\n')) {
+            const words = paraLine.split(' ');
+            let line = '';
+            for (const word of words) {
+              const test = line ? line + ' ' + word : word;
+              if (ctx.measureText(test).width > maxW && line) { totalH += lh; line = word; }
+              else line = test;
+            }
+            if (line) totalH += lh;
+          }
+        }
+      }
     }
-    if (cx > config.x + config.w - pad - FONT_SIZE * SF || config.text[ci] === '\n') {
-      cy += lineHeight * SF; cx = config.x + pad;
+
+    let ry = textAnchor === 'b' ? y + h - pad - totalH
+           : textAnchor === 'ctr' ? y + pad + (h - pad * 2 - totalH) / 2
+           : y + pad;
+
+    for (const para of config.paragraphs) {
+      const align = para.align || defAlign;
+      ry += ((para.spaceBefore || 0) * ptScale) * SF;
+      if (!para.runs || para.runs.length === 0) { ry += defFS * 1.2 * 0.5; continue; }
+      for (const run of para.runs) {
+        if (!run.text) continue;
+        const { fs, ff, fw, fi, lh } = _runFont(run);
+        ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+        ctx.fillStyle = run.color || defColor;
+        for (const paraLine of _runText(run).split('\n')) {
+          const words = paraLine.split(' ');
+          let line = '';
+          for (const word of words) {
+            const test = line ? line + ' ' + word : word;
+            if (ctx.measureText(test).width > maxW && line) {
+              const lw2 = ctx.measureText(line).width;
+              const dx = align === 'center' ? x + w / 2 - lw2 / 2 : align === 'right' ? x + w - pad - lw2 : x + pad;
+              ctx.fillText(line, dx, ry); ry += lh; line = word;
+            } else line = test;
+          }
+          if (line) {
+            const lw2 = ctx.measureText(line).width;
+            const dx = align === 'center' ? x + w / 2 - lw2 / 2 : align === 'right' ? x + w - pad - lw2 : x + pad;
+            ctx.fillText(line, dx, ry); ry += lh;
+          }
+        }
+      }
     }
-    const charStyles = (config.styles || []).filter(s => s.start <= ci && s.end >= ci);
-    const charStyle = merge({}, ...cloneDeep(charStyles));
-    ctx.font = fontStr;
-    if (charStyle.fontWeight) ctx.font = `${charStyle.fontWeight} ${fontSize * SF}px Montserrat, sans-serif`;
-    const prevFill = ctx.fillStyle;
-    if (charStyle.color) ctx.fillStyle = charStyle.color;
-    let ch = config.text[ci];
-    if (ch === '\n') ch = '';
-    if (charStyle.isSelection && charStyle.start !== charStyle.end) {
-      ctx.fillStyle = '#0000ff22';
-      ctx.fillRect(cx, cy, ctx.measureText(ch).width, lineHeight * SF);
-      ctx.fillStyle = charStyle.color || color || '#000000';
+  } else {
+    // Flat text — used for all user-created boxes and while editing
+    const { fontSize, fontWeight, color } = config.boxStyle || {};
+    const fontFamily = config.boxStyle?.fontFamily || 'Montserrat';
+    const scaledFS = (fontSize || FONT_SIZE) * ptScale * SF;
+    const lineHeight = scaledFS * 1.2;
+    // Per-range styles (from toolbar bold/italic/etc applied to selections)
+    const rangeStyles = (config.styles || []).filter(s => !s.isSelection);
+    const getCharStyle = ci => {
+      const active = rangeStyles.filter(s => s.start <= ci && ci < s.end);
+      return active.length ? Object.assign({}, ...active) : {};
+    };
+    const makeFont = (cs) => {
+      const fw = cs.fontWeight || fontWeight || 400;
+      const fi = cs.fontStyle || 'normal';
+      return `${fi} ${fw} ${scaledFS}px '${fontFamily}', Montserrat, sans-serif`;
+    };
+    ctx.fillStyle = color || '#000000';
+    ctx.font = makeFont({});
+
+    const caretPos = editState?.caretPos ?? -1;
+    const caretVis = editState?.caretVisible ?? false;
+    const selAnchor = editState?.selAnchor ?? caretPos;
+    const selStart = Math.min(caretPos, selAnchor);
+    const selEnd   = Math.max(caretPos, selAnchor);
+    const hasSel   = selStart < selEnd;
+
+    const drawCaret = (cx, cy) => {
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#111111';
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + lineHeight); ctx.stroke();
+      ctx.restore();
+    };
+
+    let ci = 0, cx = x + pad, cy = y + pad;
+    const text = config.text || '';
+    // Clip to box so text doesn't overflow into neighbouring elements
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    while (ci < text.length) {
+      // Cursor always at caretPos (whether or not there's a selection)
+      if (ci === caretPos && caretVis) drawCaret(cx, cy);
+
+      const isNl = text[ci] === '\n';
+      if (isNl) {
+        // Newline: draw small selection rect at current pos, then wrap
+        if (hasSel && ci >= selStart && ci < selEnd) {
+          ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, scaledFS * 0.35, lineHeight); ctx.restore();
+        }
+        cy += lineHeight; cx = x + pad; ci++; continue;
+      }
+      // Word-wrap on overflow
+      if (cx > x + w - pad - scaledFS) { cy += lineHeight; cx = x + pad; }
+      const ch = text[ci];
+      const cs = getCharStyle(ci);
+      const chFont = makeFont(cs);
+      if (ctx.font !== chFont) ctx.font = chFont;
+      ctx.fillStyle = cs.color || color || '#000000';
+      const chW = ctx.measureText(ch).width;
+      // Selection highlight behind character
+      if (hasSel && ci >= selStart && ci < selEnd) {
+        ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, chW, lineHeight); ctx.restore();
+        ctx.fillStyle = cs.color || color || '#000000';
+      }
+      ctx.fillText(ch, cx, cy);
+      // Underline
+      if (cs.textDecoration === 'underline') {
+        ctx.save(); ctx.strokeStyle = cs.color || color || '#000000'; ctx.lineWidth = Math.max(1, scaledFS * 0.05);
+        ctx.beginPath(); ctx.moveTo(cx, cy + scaledFS * 1.05); ctx.lineTo(cx + chW, cy + scaledFS * 1.05); ctx.stroke();
+        ctx.restore();
+      }
+      cx += chW;
+      ci++;
     }
-    if (cy > config.y + config.h - pad - lineHeight * SF) break;
-    ctx.fillText(ch, cx, cy); ctx.fillStyle = prevFill;
-    cx += ctx.measureText(ch).width; ci++;
+    // Cursor at end of text
+    if (ci === caretPos && caretVis) drawCaret(cx, cy);
+    ctx.restore();
   }
 
-  if (ci === sStart) {
-    const lw = ctx.lineWidth, ss = ctx.strokeStyle;
-    ctx.lineWidth = 3; ctx.strokeStyle = 'black';
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + lineHeight * SF); ctx.stroke();
-    ctx.lineWidth = lw; ctx.strokeStyle = ss;
-  }
+  if (rotation) ctx.restore();
 };
 
 const scale = config => ({
@@ -325,21 +585,40 @@ const scale = config => ({
   boxes: (config.boxes || []).map(b => ({ ...b, x: b.x * SF, y: b.y * SF, w: b.w * SF, h: b.h * SF })),
 });
 
-export const drawConfig = (ctx, config, dragOffset = { x: 0, y: 0 }, isPresentationMode = false, hoveredBoxId = null) => {
+// editState = { boxId, caretPos, caretVisible } | null
+export const drawConfig = (ctx, config, dragOffset = { x: 0, y: 0 }, isPresentationMode = false, hoveredBoxId = null, editState = null) => {
   ctx.clearRect(0, 0, CANVAS_WIDTH * SF, CANVAS_HEIGHT * SF);
-  ctx.fillStyle = config?.bgColor || 'transparent'; ctx.fillRect(0, 0, CANVAS_WIDTH * SF, CANVAS_HEIGHT * SF);
+  const W = CANVAS_WIDTH * SF, H = CANVAS_HEIGHT * SF;
+  const grad = config?.bgGradient;
+  if (grad && grad.stops && grad.stops.length >= 2) {
+    const rad = grad.angle * Math.PI / 180;
+    const cx = W / 2, cy = H / 2;
+    const len = Math.sqrt(W * W + H * H) / 2;
+    const lg = ctx.createLinearGradient(cx - Math.cos(rad) * len, cy - Math.sin(rad) * len,
+                                        cx + Math.cos(rad) * len, cy + Math.sin(rad) * len);
+    grad.stops.forEach(s => lg.addColorStop(s.pos, s.color));
+    ctx.fillStyle = lg;
+  } else {
+    ctx.fillStyle = config?.bgColor || 'transparent';
+  }
+  ctx.fillRect(0, 0, W, H);
+  const _ptScale = config?.slideWidthPt ? CANVAS_WIDTH / config.slideWidthPt : PPTX_PT_SCALE;
   const sc = scale(config);
   const isDragging = dragOffset.x !== 0 || dragOffset.y !== 0;
   sc.boxes.forEach(box => {
-    if (isPresentationMode) { drawTextBox(ctx, { ...box, isSelected: false }, false); return; }
+    const boxEdit = editState?.boxId === box.id ? editState : null;
+    if (isPresentationMode) { drawTextBox(ctx, { ...box, isSelected: false }, false, _ptScale, null); return; }
     if (box.isSelected && isDragging) {
-      ctx.save(); ctx.globalAlpha = 0.3; drawTextBox(ctx, { ...box, isSelected: false }, false); ctx.restore();
-      ctx.save(); ctx.globalAlpha = 0.7; drawTextBox(ctx, { ...box, x: box.x + dragOffset.x * SF, y: box.y + dragOffset.y * SF }, false); ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.3; drawTextBox(ctx, { ...box, isSelected: false }, false, _ptScale, null); ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.7; drawTextBox(ctx, { ...box, x: box.x + dragOffset.x * SF, y: box.y + dragOffset.y * SF }, false, _ptScale, boxEdit); ctx.restore();
     } else {
-      drawTextBox(ctx, box, box.id === hoveredBoxId && !box.isSelected);
+      drawTextBox(ctx, box, box.id === hoveredBoxId && !box.isSelected, _ptScale, boxEdit);
     }
   });
 };
+
+// Legacy export — no longer stores cursor in config
+export const isEditingText = () => null;
 
 const getLocationForBox = (mouseX, mouseY, box) => {
   const { x, y, w, h } = box;
@@ -356,8 +635,11 @@ const getLocationForBox = (mouseX, mouseY, box) => {
 };
 
 const getBoxUnderMouse = (e, config, ctx) => {
-  const { offsetX, offsetY } = e.nativeEvent || e;
-  const [mx, my] = [offsetX * SF, offsetY * SF];
+  const raw = e.nativeEvent || e;
+  const { offsetX, offsetY } = raw;
+  const cssW = raw.target?.offsetWidth || CANVAS_WIDTH;
+  const cs = CANVAS_WIDTH / cssW;
+  const [mx, my] = [offsetX * cs * SF, offsetY * cs * SF];
   const sc = scale(config);
   const sel = sc.boxes.find(b => b.isSelected);
   if (sel) {
@@ -389,8 +671,6 @@ const getBoxUnderMouse = (e, config, ctx) => {
   return [hit, loc, ci];
 };
 
-export const isEditingText = config => config?.boxes?.find(b => b.isSelected)?.styles?.find(s => s.isSelection);
-
 const locationToCursor = {
   topLeftCorner: 'nwse-resize', topRightCorner: 'nesw-resize',
   bottomLeftCorner: 'nesw-resize', bottomRightCorner: 'nwse-resize',
@@ -411,8 +691,6 @@ const CtxItem = ({ children, disabled, style, ...p }) => (
 );
 const CtxShortcut = ({ children }) => <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 20 }}>{children}</span>;
 const CtxDivider = () => <div style={{ height: 1, background: 'var(--border-default)', margin: '4px 0' }} />;
-
-// Submenu with hover-controlled visibility using state
 const CtxSubmenu = ({ label, children }) => {
   const [open, setOpen] = useState(false);
   return (
@@ -434,6 +712,8 @@ const Slide = ({
   config = { boxes: [] },
   setConfig = () => {},
   onSave = () => {},
+  onEditEnd = null,
+  onEditStateChange = null,
   isPresentationMode = false,
   defaultCursor = 'default',
   activeTool = null,
@@ -445,64 +725,266 @@ const Slide = ({
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
   const [clipboard, setClipboard] = useState(null);
   const [hoveredBoxId, setHoveredBoxId] = useState(null);
+
+  // Clean text-editing state — cursor lives here, NOT in config/box.styles
+  const [editBoxId, setEditBoxId] = useState(null);
+  const [caretPos, setCaretPos] = useState(0);
+  const [selAnchor, setSelAnchor] = useState(0); // selection anchor; caretPos is the active end
+  const [caretVisible, setCaretVisible] = useState(true);
+  const caretBlinkRef = useRef(null);
+
+  // Refs for stale-closure-safe event handlers
+  const configRef = useRef(config);
+  const editBoxIdRef = useRef(null);
+  const caretPosRef = useRef(0);
+  const selAnchorRef = useRef(0);
+  const clipboardRef = useRef(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const isDraggingRef = useRef(false);
 
-  useClickOutside(canvasRef, () => { clearSelection(config, setConfig); setContextMenu({ visible: false, x: 0, y: 0 }); });
-  useClickOutside(contextMenuRef, () => setContextMenu({ visible: false, x: 0, y: 0 }));
+  // Keep refs in sync with latest state every render
+  useEffect(() => { configRef.current = config; });
+  useEffect(() => {
+    editBoxIdRef.current = editBoxId;
+    caretPosRef.current = caretPos;
+    selAnchorRef.current = selAnchor;
+  }, [editBoxId, caretPos, selAnchor]);
+  useEffect(() => { clipboardRef.current = clipboard; }, [clipboard]);
+
+  // Notify parent of edit/selection state for toolbar integration
+  useEffect(() => {
+    if (!onEditStateChange) return;
+    if (!editBoxId) { onEditStateChange(null); return; }
+    const selStart = Math.min(caretPos, selAnchor);
+    const selEnd   = Math.max(caretPos, selAnchor);
+    onEditStateChange({ boxId: editBoxId, selStart, selEnd });
+  }, [editBoxId, caretPos, selAnchor, onEditStateChange]);
+
+  const stopBlink = useCallback(() => {
+    clearInterval(caretBlinkRef.current);
+    caretBlinkRef.current = null;
+  }, []);
+
+  const startBlink = useCallback(() => {
+    stopBlink();
+    setCaretVisible(true);
+    caretBlinkRef.current = setInterval(() => setCaretVisible(v => !v), 530);
+  }, [stopBlink]);
+
+  const exitEdit = useCallback(() => {
+    stopBlink();
+    setEditBoxId(null);
+    setCaretPos(0);
+    setSelAnchor(0);
+    editBoxIdRef.current = null;
+    caretPosRef.current = 0;
+    selAnchorRef.current = 0;
+  }, [stopBlink]);
 
   const selectedBox = config.boxes?.find(b => b.isSelected);
 
-  const handleCut    = () => { if (selectedBox) { setClipboard(cloneDeep(selectedBox)); onDeleteSelectedBox(config, setConfig); } setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handleCopy   = () => { if (selectedBox) setClipboard(cloneDeep(selectedBox)); setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handlePaste  = () => {
-    if (clipboard) {
-      const nc = cloneDeep(config);
-      const nb = { ...cloneDeep(clipboard), id: uuidv4(), x: clipboard.x + 20, y: clipboard.y + 20, isSelected: true };
-      nc.boxes.forEach(b => { b.isSelected = false; }); nc.boxes.push(nb); setConfig(nc);
+  const handleCut = useCallback(() => {
+    const sel = configRef.current.boxes?.find(b => b.isSelected);
+    if (sel) { setClipboard(cloneDeep(sel)); onDeleteSelectedBox(configRef.current, setConfig); }
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  }, [setConfig]);
+
+  const handleCopy = useCallback(() => {
+    const sel = configRef.current.boxes?.find(b => b.isSelected);
+    if (sel) setClipboard(cloneDeep(sel));
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  }, []);
+
+  const handlePaste = useCallback(() => {
+    const cb = clipboardRef.current;
+    if (cb) {
+      const nc = cloneDeep(configRef.current);
+      const nb = { ...cloneDeep(cb), id: uuidv4(), x: cb.x + 20, y: cb.y + 20, isSelected: true };
+      nc.boxes.forEach(b => { b.isSelected = false; });
+      nc.boxes.push(nb);
+      setConfig(nc);
     }
     setContextMenu({ visible: false, x: 0, y: 0 });
-  };
-  const handleDelete = () => { onDeleteSelectedBox(config, setConfig); setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handleBringToFront = () => { if (selectedBox) { const nc = cloneDeep(config); const i = nc.boxes.findIndex(b => b.id === selectedBox.id); if (i !== -1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.push(box); setConfig(nc); } } setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handleSendToBack   = () => { if (selectedBox) { const nc = cloneDeep(config); const i = nc.boxes.findIndex(b => b.id === selectedBox.id); if (i !== -1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.unshift(box); setConfig(nc); } } setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handleBringForward = () => { if (selectedBox) { const nc = cloneDeep(config); const i = nc.boxes.findIndex(b => b.id === selectedBox.id); if (i !== -1 && i < nc.boxes.length - 1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.splice(i + 1, 0, box); setConfig(nc); } } setContextMenu({ visible: false, x: 0, y: 0 }); };
-  const handleSendBackward = () => { if (selectedBox) { const nc = cloneDeep(config); const i = nc.boxes.findIndex(b => b.id === selectedBox.id); if (i > 0) { const [box] = nc.boxes.splice(i, 1); nc.boxes.splice(i - 1, 0, box); setConfig(nc); } } setContextMenu({ visible: false, x: 0, y: 0 }); };
+  }, [setConfig]);
 
-  const onKeyDown = e => {
-    if (e.key === 'ArrowRight') updateCursor({ dStart: 1, dEnd: 1 }, config, setConfig);
-    if (e.key === 'ArrowLeft')  updateCursor({ dStart: -1, dEnd: -1 }, config, setConfig);
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) insertTextAtSelection(e.key, config, setConfig);
-    if (e.key === 'Enter') insertTextAtSelection('\n', config, setConfig);
-    if (e.key === 'Backspace' && !isEditingText(config)) onDeleteSelectedBox(config, setConfig);
-    if (e.key === 'Backspace' && isEditingText(config)) deleteTextSelection(config, setConfig);
-    if (e.key === 'Delete' && !isEditingText(config)) onDeleteSelectedBox(config, setConfig);
-    if ((e.metaKey || e.ctrlKey) && e.key === 'x' && !isEditingText(config)) { e.preventDefault(); handleCut(); }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'c' && !isEditingText(config)) { e.preventDefault(); handleCopy(); }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'v' && !isEditingText(config) && clipboard) { e.preventDefault(); handlePaste(); }
-  };
+  const handleDelete       = useCallback(() => { onDeleteSelectedBox(configRef.current, setConfig); setContextMenu({ visible: false, x: 0, y: 0 }); }, [setConfig]);
+  const handleBringToFront = useCallback(() => { const nc = cloneDeep(configRef.current); const i = nc.boxes.findIndex(b => b.isSelected); if (i !== -1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.push(box); setConfig(nc); } setContextMenu({ visible: false, x: 0, y: 0 }); }, [setConfig]);
+  const handleSendToBack   = useCallback(() => { const nc = cloneDeep(configRef.current); const i = nc.boxes.findIndex(b => b.isSelected); if (i !== -1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.unshift(box); setConfig(nc); } setContextMenu({ visible: false, x: 0, y: 0 }); }, [setConfig]);
+  const handleBringForward = useCallback(() => { const nc = cloneDeep(configRef.current); const i = nc.boxes.findIndex(b => b.isSelected); if (i !== -1 && i < nc.boxes.length - 1) { const [box] = nc.boxes.splice(i, 1); nc.boxes.splice(i + 1, 0, box); setConfig(nc); } setContextMenu({ visible: false, x: 0, y: 0 }); }, [setConfig]);
+  const handleSendBackward = useCallback(() => { const nc = cloneDeep(configRef.current); const i = nc.boxes.findIndex(b => b.isSelected); if (i > 0) { const [box] = nc.boxes.splice(i, 1); nc.boxes.splice(i - 1, 0, box); setConfig(nc); } setContextMenu({ visible: false, x: 0, y: 0 }); }, [setConfig]);
 
-  const onPaste = e => {
-    e.preventDefault();
-    const html = e.clipboardData.getData('text/html');
-    if (html?.includes('<img')) { insertBoxesFromHtml(html, config, setConfig); return; }
-    insertTextAtSelection(e.clipboardData.getData('text/plain'), config, setConfig);
-  };
+  // Helper: collapse selection to a point and update both state + refs
+  const setCaret = useCallback((pos, anchor) => {
+    const a = anchor ?? pos;
+    setCaretPos(pos); setSelAnchor(a);
+    caretPosRef.current = pos; selAnchorRef.current = a;
+  }, []);
 
+  // Keyboard + paste handlers — registered once, use refs to avoid stale closures
+  useEffect(() => {
+    const onKeyDown = e => {
+      const eid = editBoxIdRef.current;
+      const cp  = caretPosRef.current;
+      const sa  = selAnchorRef.current;
+      const cfg = configRef.current;
+
+      if (eid) {
+        const nc  = cloneDeep(cfg);
+        const box = nc.boxes.find(b => b.id === eid);
+        if (!box) return;
+        const text = box.text || '';
+        const sStart = Math.min(cp, sa), sEnd = Math.max(cp, sa);
+        const hasSel = sStart < sEnd;
+
+        if (e.key === 'Escape') { exitEdit(); return; }
+
+        // Cmd/Ctrl+A — select all
+        if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+          e.preventDefault();
+          setCaretPos(text.length); setSelAnchor(0);
+          caretPosRef.current = text.length; selAnchorRef.current = 0;
+          return;
+        }
+
+        // Arrow keys
+        if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            const np = Math.max(0, cp - 1);
+            setCaretPos(np); caretPosRef.current = np; // selAnchor stays
+          } else {
+            const np = hasSel ? sStart : Math.max(0, cp - 1);
+            setCaretPos(np); setSelAnchor(np); caretPosRef.current = np; selAnchorRef.current = np;
+          }
+          return;
+        }
+        if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            const np = Math.min(text.length, cp + 1);
+            setCaretPos(np); caretPosRef.current = np;
+          } else {
+            const np = hasSel ? sEnd : Math.min(text.length, cp + 1);
+            setCaretPos(np); setSelAnchor(np); caretPosRef.current = np; selAnchorRef.current = np;
+          }
+          return;
+        }
+
+        // Backspace — delete selection or char before cursor
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (hasSel) {
+            box.text = text.slice(0, sStart) + text.slice(sEnd);
+            setCaretPos(sStart); setSelAnchor(sStart);
+            caretPosRef.current = sStart; selAnchorRef.current = sStart;
+          } else {
+            if (cp === 0) return;
+            box.text = text.slice(0, cp - 1) + text.slice(cp);
+            const np = cp - 1;
+            setCaretPos(np); setSelAnchor(np); caretPosRef.current = np; selAnchorRef.current = np;
+          }
+          setConfig(nc); return;
+        }
+
+        // Delete — delete selection or char after cursor
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          if (hasSel) {
+            box.text = text.slice(0, sStart) + text.slice(sEnd);
+            setCaretPos(sStart); setSelAnchor(sStart);
+            caretPosRef.current = sStart; selAnchorRef.current = sStart;
+          } else {
+            box.text = text.slice(0, cp) + text.slice(cp + 1);
+          }
+          setConfig(nc); return;
+        }
+
+        // Enter / printable characters — replace selection then insert
+        if (e.key === 'Enter' || (e.key.length === 1 && !e.ctrlKey && !e.metaKey)) {
+          e.preventDefault();
+          const ch = e.key === 'Enter' ? '\n' : e.key;
+          box.text = text.slice(0, sStart) + ch + text.slice(sEnd);
+          const np = sStart + 1;
+          setCaretPos(np); setSelAnchor(np); caretPosRef.current = np; selAnchorRef.current = np;
+          setConfig(nc); return;
+        }
+
+        return; // consume all other keys while editing
+      }
+
+      // Non-editing shortcuts
+      if (e.key === 'Backspace' || e.key === 'Delete') onDeleteSelectedBox(cfg, setConfig);
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x') { e.preventDefault(); handleCut(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') { e.preventDefault(); handleCopy(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboardRef.current) { e.preventDefault(); handlePaste(); }
+    };
+
+    const onPaste = e => {
+      e.preventDefault();
+      const eid = editBoxIdRef.current;
+      const cp  = caretPosRef.current;
+      const sa  = selAnchorRef.current;
+      const cfg = configRef.current;
+      const html = e.clipboardData.getData('text/html');
+      if (!eid && html?.includes('<img')) { insertBoxesFromHtml(html, cfg, setConfig); return; }
+      if (eid) {
+        const txt = e.clipboardData.getData('text/plain');
+        if (!txt) return;
+        const nc  = cloneDeep(cfg);
+        const box = nc.boxes.find(b => b.id === eid);
+        if (!box) return;
+        const t = box.text || '';
+        const sStart = Math.min(cp, sa), sEnd = Math.max(cp, sa);
+        box.text = t.slice(0, sStart) + txt + t.slice(sEnd);
+        const np = sStart + txt.length;
+        setCaretPos(np); setSelAnchor(np); caretPosRef.current = np; selAnchorRef.current = np;
+        setConfig(nc);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('paste', onPaste);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('paste', onPaste);
+    };
+  }, [exitEdit, handleCut, handleCopy, handlePaste, setConfig]);
+
+  // Canvas draw — reruns on any config/edit/blink change
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) drawConfig(ctx, config, dragOffsetRef.current, isPresentationMode, hoveredBoxId);
-    document.addEventListener('paste', onPaste);
-    document.addEventListener('keydown', onKeyDown);
-    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('paste', onPaste); };
-  }, [JSON.stringify(config), setConfig, isPresentationMode, hoveredBoxId]);
+    if (!ctx) return;
+    const editState = editBoxId ? { boxId: editBoxId, caretPos, caretVisible, selAnchor } : null;
+    drawConfig(ctx, config, dragOffsetRef.current, isPresentationMode, hoveredBoxId, editState);
+  }, [JSON.stringify(config), isPresentationMode, hoveredBoxId, editBoxId, caretPos, caretVisible, selAnchor]);
+
+  // Thumbnail — capture when not editing and nothing is selected
+  useEffect(() => {
+    if (editBoxId || !onEditEnd || isPresentationMode || !canvasRef.current) return;
+    if (config.boxes?.some(b => b.isSelected)) return;
+    const canvas = canvasRef.current;
+    const rafId = requestAnimationFrame(() => { try { onEditEnd(canvas.toDataURL('image/jpeg', 0.5)); } catch {} });
+    return () => cancelAnimationFrame(rafId);
+  }, [editBoxId, JSON.stringify(config), isPresentationMode]);
+
+  // Cleanup blink timer on unmount
+  useEffect(() => () => clearInterval(caretBlinkRef.current), []);
+
+  const clickOutsideCb = useCallback(() => {
+    if (editBoxIdRef.current) exitEdit();
+    clearSelection(configRef.current, setConfig);
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  }, [exitEdit, setConfig]);
+
+  useClickOutside(canvasRef, clickOutsideCb);
+  useClickOutside(contextMenuRef, () => setContextMenu({ visible: false, x: 0, y: 0 }));
 
   const ctx = canvasRef.current?.getContext('2d');
 
   return (
     <div style={isPresentationMode ? { display: 'block', width: '100%', height: '100%', position: 'relative' } : { display: 'grid', position: 'relative' }}>
       <canvas
-        style={{ background: config?.bgColor || '#ffffff', width: isPresentationMode ? '100%' : CANVAS_WIDTH, height: isPresentationMode ? '100%' : 'auto', marginLeft: 'auto', marginRight: 'auto', transformOrigin: 'top center', border: isPresentationMode ? 'none' : '1px solid var(--border-default)', display: 'block' }}
+        style={{ background: (() => { const g = config?.bgGradient; if (g && g.stops && g.stops.length >= 2) { const stops = g.stops.map(s => `${s.color} ${Math.round(s.pos * 100)}%`).join(', '); return `linear-gradient(${g.angle + 90}deg, ${stops})`; } return config?.bgColor || '#ffffff'; })(), width: '100%', height: isPresentationMode ? '100%' : 'auto', display: 'block' }}
         width={CANVAS_WIDTH * SF}
         height={CANVAS_HEIGHT * SF}
         ref={canvasRef}
@@ -513,13 +995,20 @@ const Slide = ({
           if (nid !== hoveredBoxId) setHoveredBoxId(nid);
           const isImg = !!box?.canvasImage || isBase64Image(box?.text);
           canvasRef.current.style.cursor = (isImg && loc === 'inside') ? 'move' : (locationToCursor[loc] || defaultCursor);
+          // Drag-to-select while in text edit mode
+          if (e.buttons === 1 && editBoxId) {
+            const [,, ci] = getBoxUnderMouse(e, config, ctx);
+            if (ci !== caretPosRef.current) { setCaretPos(ci); caretPosRef.current = ci; }
+            return;
+          }
           if (e.buttons !== 1) return;
-          if (isEditingText(config)) { const [,,ci] = getBoxUnderMouse(e, config, ctx); updateCursor({ end: ci }, config, setConfig); return; }
           const { movementX, movementY, offsetX, offsetY } = e.nativeEvent;
+          const cssW = canvasRef.current?.offsetWidth || CANVAS_WIDTH;
+          const cs = CANVAS_WIDTH / cssW;
           const resizes = ['topLeftCorner','topRightCorner','bottomLeftCorner','bottomRightCorner','leftEdge','rightEdge','topEdge','bottomEdge'];
           if ((resizes.includes(loc) || currentAction === 'resizing') && currentAction !== 'moving' && !isDraggingRef.current) {
             const h = currentAction === 'resizing' ? resizeHandle : loc;
-            onResizeSelectedBox(offsetX * SF, offsetY * SF, h, config, setConfig);
+            onResizeSelectedBox(offsetX * cs * SF, offsetY * cs * SF, h, config, setConfig);
             setCurrentAction('resizing');
             if (!resizeHandle) setResizeHandle(loc);
             canvasRef.current.style.cursor = locationToCursor[h] || 'nwse-resize';
@@ -527,38 +1016,55 @@ const Slide = ({
           }
           if (loc === 'inside' || loc === 'border' || currentAction === 'moving') {
             isDraggingRef.current = true;
-            dragOffsetRef.current = { x: dragOffsetRef.current.x + movementX, y: dragOffsetRef.current.y + movementY };
+            dragOffsetRef.current = { x: dragOffsetRef.current.x + movementX * cs, y: dragOffsetRef.current.y + movementY * cs };
             const c = canvasRef.current?.getContext('2d');
-            if (c) drawConfig(c, config, dragOffsetRef.current, isPresentationMode, hoveredBoxId);
+            if (c) drawConfig(c, config, dragOffsetRef.current, isPresentationMode, hoveredBoxId, null);
             canvasRef.current.style.cursor = 'move';
             setCurrentAction('moving');
           }
         }}
         onMouseDown={e => {
           if (isPresentationMode) return;
-          const [box, loc, ci] = getBoxUnderMouse(e, config, ctx);
+          const [box, loc] = getBoxUnderMouse(e, config, ctx);
           if (!box) {
+            const _cssW = canvasRef.current?.offsetWidth || CANVAS_WIDTH;
+            const _cs = CANVAS_WIDTH / _cssW;
             if (activeTool === 'shape') {
               const { offsetX, offsetY } = e.nativeEvent;
               const size = 100;
               const nc = cloneDeep(config); nc.boxes?.forEach(b => { b.isSelected = false; });
               if (!nc.boxes) nc.boxes = [];
-              nc.boxes.push({ id: uuidv4(), x: offsetX - size / 2, y: offsetY - size / 2, w: size, h: size, text: `shape:${JSON.stringify({ type: 'circle', bgColor: '#1473df', borderColor: '#0d5bb5', borderWidth: 2 })}`, styles: [], boxStyle: {}, isSelected: true });
+              nc.boxes.push({ id: uuidv4(), x: offsetX * _cs - size / 2, y: offsetY * _cs - size / 2, w: size, h: size, shapeType: 'ellipse', fill: { type: 'solid', color: '#1473df' }, text: '', styles: [], boxStyle: { borderColor: '#0d5bb5', borderWidth: 2, bgColor: 'transparent' }, isSelected: true });
               onSave(nc); return;
             }
-            if (activeTool === 'text') { onAddNewBox(e.nativeEvent.offsetX / SF, e.nativeEvent.offsetY / SF, 'Add text here', config, setConfig); return; }
+            if (activeTool === 'text') { onAddNewBox(e.nativeEvent.offsetX * _cs, e.nativeEvent.offsetY * _cs, 'Add text here', config, setConfig); return; }
+            if (editBoxId) exitEdit();
             clearSelection(config, setConfig); return;
           }
           if (e.detail >= 2) e.stopPropagation();
           const curSel = config.boxes.find(b => b.isSelected);
-          if (curSel?.id !== box.id) { onSetSelectedBox(box.id, config, setConfig); return; }
+          if (curSel?.id !== box.id) {
+            if (editBoxId) exitEdit();
+            onSetSelectedBox(box.id, config, setConfig); return;
+          }
           if (loc === 'border') return;
           if (['topLeftCorner','topRightCorner','bottomLeftCorner','bottomRightCorner','leftEdge','rightEdge','topEdge','bottomEdge'].includes(loc)) return;
           if (!!box.canvasImage || isBase64Image(box.text)) return;
           if (loc !== 'inside') return;
-          if (e.detail === 3) { updateCursorSelectAll(config, setConfig); return; }
-          if (e.detail === 2) { updateCursorSelectWord(ci, config, setConfig); return; }
-          updateCursor({ start: ci, end: ci }, config, setConfig);
+          // Reposition caret / selection while editing this box
+          if (editBoxId === box.id) {
+            const [,, ci] = getBoxUnderMouse(e, config, ctx);
+            if (e.detail >= 3) {
+              // Triple-click: select all
+              const t = box.text || '';
+              setCaretPos(t.length); setSelAnchor(0);
+              caretPosRef.current = t.length; selAnchorRef.current = 0;
+            } else {
+              // Single/double-click mousedown: collapse cursor (word-select fires in onDoubleClick)
+              setCaret(ci);
+            }
+            return;
+          }
         }}
         onMouseUp={() => {
           if (isDraggingRef.current && (dragOffsetRef.current.x || dragOffsetRef.current.y)) {
@@ -570,9 +1076,44 @@ const Slide = ({
         onDoubleClick={e => {
           if (isPresentationMode) return;
           e.stopPropagation();
-          const [box, , ci] = getBoxUnderMouse(e, config, ctx);
-          if (!box || isEditingText(config)) return;
-          updateCursor({ start: ci, end: ci }, config, setConfig);
+          const [box] = getBoxUnderMouse(e, config, ctx);
+          if (!box) return;
+          if (box.imageData || isBase64Image(box.text) || box.canvasImage || isShapeConfig(box.text)) return;
+
+          // Already editing: select word at cursor
+          if (editBoxId === box.id) {
+            const text = box.text || '';
+            const pos = caretPosRef.current;
+            const isWord = c => /\w/.test(c);
+            let ws = pos, we = pos;
+            while (ws > 0 && isWord(text[ws - 1])) ws--;
+            while (we < text.length && isWord(text[we])) we++;
+            setCaretPos(we); setSelAnchor(ws);
+            caretPosRef.current = we; selAnchorRef.current = ws;
+            return;
+          }
+
+          if (box.paragraphs?.length) {
+            // Flatten PPTX rich-text to editable flat text
+            const nc = cloneDeep(config);
+            const b = nc.boxes.find(b2 => b2.id === box.id);
+            const flatText = box.paragraphs.map(p => (p.runs || []).map(r => r.text || '').join('')).join('\n');
+            if (b) { b.text = flatText; delete b.paragraphs; }
+            setConfig(nc);
+            setEditBoxId(box.id);
+            setCaretPos(flatText.length);
+            editBoxIdRef.current = box.id;
+            caretPosRef.current = flatText.length;
+            startBlink();
+            return;
+          }
+
+          const pos = box.text?.length ?? 0;
+          setEditBoxId(box.id);
+          setCaretPos(pos);
+          editBoxIdRef.current = box.id;
+          caretPosRef.current = pos;
+          startBlink();
         }}
         onContextMenu={e => {
           e.preventDefault();

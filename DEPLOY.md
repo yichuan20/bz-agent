@@ -1,241 +1,419 @@
-# Deploying BoltzAgent to a VM / LXC
+# BoltzAgent — Remote Deployment Guide
 
-The server is a single aiohttp process that serves the API, WebSocket bridge, and
-the built frontend on **one port (18789)**. No Docker, no nginx — just Python.
-
----
-
-## Prerequisites (on the VM)
-
-```bash
-# Ubuntu / Debian LXC
-apt update && apt install -y python3 python3-venv python3-pip rsync
-
-# Python ≥ 3.10 is required (3.11+ recommended)
-python3 --version
-```
-
-Place the `bzcode` binary at `/opt/boltzagent/bzcode` (or set `BZCODE_PATH` to
-wherever it lives).
+The server is a single **FastAPI / uvicorn** process that serves the API, WebSocket
+bridge, and built frontend on **one port (default 18789)**. No Docker, no nginx — just
+Python.
 
 ---
 
-## One-line deploy from your local machine
+## 1. Prerequisites on the remote machine
+
+### System packages (Ubuntu / Debian)
 
 ```bash
-./scripts/deploy.sh ubuntu@<vm-ip>
+apt update && apt install -y \
+  python3 python3-venv python3-pip \
+  rsync unzip curl
 ```
 
-That single command:
-
-1. Runs `pnpm build` locally → produces `dist/` (design tokens are compiled in)
-2. Rsyncs **only the required files** to `/opt/boltzagent/` on the VM:
-
-   | File / directory | Purpose |
-   |---|---|
-   | `app.py` | aiohttp entry point |
-   | `server.py` | All business logic & API routes |
-   | `agent_modes.json` | Agent mode identities, tool config, identity prompts |
-   | `requirements.txt` | Python dependency list |
-   | `dist/` | Built frontend SPA (all JS/CSS baked in) |
-   | `bzcode` | AI agent binary |
-   | `bzcode/scripts/` | Helper Python scripts used by the agent |
-   | `server_data/` | Widget definitions & per-deployment config |
-   | `scripts/` | Deploy script + systemd unit |
-
-   Source (`src/`), `design_tokens/`, `node_modules/`, `.venv/`, and dev
-   tooling are **not** copied.
-
-3. Creates `.venv` on the VM and runs `pip install -r requirements.txt`
-4. Restarts the systemd service if installed, otherwise prints the manual start command
-
-**Custom remote directory:**
+**Python 3.10 or higher is required** (3.11+ recommended for performance).
 
 ```bash
-./scripts/deploy.sh root@192.168.1.50 /srv/boltzagent
+python3 --version    # must be ≥ 3.10
 ```
 
-Make the script executable if needed:
+If the system Python is older (e.g. Ubuntu 20.04 ships 3.8), install a newer version:
 
 ```bash
-chmod +x scripts/deploy.sh
+add-apt-repository ppa:deadsnakes/ppa
+apt install python3.11 python3.11-venv python3.11-distutils
+```
+
+Then substitute `python3.11` wherever `python3` is used below.
+
+### Node / pnpm (build machine only — not needed on the remote)
+
+The frontend is built **locally** and only the compiled `dist/` is copied to the server.
+You do not need Node on the remote machine.
+
+---
+
+## 2. Remote directory layout
+
+All server files live under `/opt/boltzagent/` by convention:
+
+```
+/opt/boltzagent/
+├── app.py                  ← FastAPI entry point  (the only file you run)
+├── server.py               ← Business logic, routes, WebSocket bridge
+├── agent_modes.json        ← Agent mode definitions (General / Widget / Worker / Coder)
+├── requirements.txt        ← Python dependency list
+├── bzcode_assets/
+│   ├── scripts/            ← Python helper scripts called by bzcode
+│   └── templates/          ← Document/slide templates used by bzcode
+├── dist/                   ← Built frontend SPA (JS + CSS, no Node needed at runtime)
+├── server_data/
+│   ├── widgets/            ← Widget JSON definitions
+│   └── credentials.json    ← API keys & secrets (never commit, set manually on server)
+├── scripts/
+│   ├── boltzagent.service  ← systemd unit (copy to /etc/systemd/system/)
+│   ├── build-deploy.sh     ← Local helper: build + zip for upload
+│   └── build-and-serve.sh  ← Local dev helper (not used in production)
+└── .venv/                  ← Python virtualenv (created on the server, not synced)
+
+/usr/local/bin/bzcode       ← bzcode binary (installed separately — see §3d)
+```
+
+**User workspace** (where sessions create files — must be writable by the service user):
+
+```
+/home/boltzagent/workspace/   ← set via BZCODE_CWD env var
 ```
 
 ---
 
-## File system permissions (important)
+## 3. First-time server setup
 
-The server process must have **write access** to `BZCODE_CWD` — this is where users create folders, save documents, and run agent sessions. Creating new folders will silently fail with a 403 if the server user can't write there.
-
-**Recommended setup:**
+### 3a. Create a service user
 
 ```bash
-# Create a dedicated service user with a home directory
 useradd -m -s /bin/bash boltzagent
-
-# Create a writable workspace
-mkdir -p /home/boltzagent/workspace
-chown boltzagent:boltzagent /home/boltzagent/workspace
-
-# /opt/boltzagent holds the app files (can be root-owned, server only reads these)
-# The .venv and server_data must be readable by the service user
-chown -R boltzagent:boltzagent /opt/boltzagent/.venv
-chown -R boltzagent:boltzagent /opt/boltzagent/server_data
-
-# Make bzcode executable
-chmod +x /opt/boltzagent/bzcode
 ```
 
-Then set in `boltzagent.service`:
-```ini
-User=boltzagent
-Environment=BZCODE_CWD=/home/boltzagent/workspace
-```
-
-> **Do NOT set `BZCODE_CWD=/opt/boltzagent`** — that directory is owned by root and the service user cannot create folders inside it.
-
----
-
-## Python dependencies
-
-All installed automatically from `requirements.txt`:
-
-| Package | Version | Purpose |
-|---|---|---|
-| `fastapi` / `aiohttp` | latest | HTTP server & routing |
-| `uvicorn[standard]` | ≥0.33 | ASGI runner |
-| `asyncpg` | ≥0.30 | PostgreSQL async driver |
-| `pypdf` | ≥4.0 | PDF parsing |
-| `python-docx` | ≥1.1 | Word (`.docx`) read/write |
-| `openpyxl` | ≥3.1 | Excel (`.xlsx`) read/write |
-| `python-pptx` | ≥0.6 | PowerPoint (`.pptx`) read/write |
-| `formulas` | ≥1.3 | Server-side Excel formula evaluation |
-
----
-
-## First-time systemd setup (run once on the VM)
+### 3b. Create the app directory
 
 ```bash
-sudo cp /opt/boltzagent/scripts/boltzagent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now boltzagent
-
-# Verify
-sudo systemctl status boltzagent
-journalctl -u boltzagent -f          # tail live logs
+mkdir -p /opt/boltzagent
 ```
 
-After this, every `./scripts/deploy.sh` automatically restarts the service.
+### 3c. Upload the deployment package
 
----
+Build and zip locally first:
 
-## Manual start (without systemd)
+```bash
+# On your local machine — inside bz-agent/
+./scripts/build-deploy.sh          # produces deploy.zip
+# or with a version label:
+./scripts/build-deploy.sh bz-agent-v1.3
+```
+
+Then copy to the server:
+
+```bash
+scp deploy.zip ubuntu@<server-ip>:/opt/boltzagent/
+ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o deploy.zip"
+```
+
+### 3d. Install the bzcode binary
+
+The `bzcode_assets/` directory in the zip holds Python helper scripts and templates — **not** the binary. Install the binary separately so it is on the system `PATH`:
+
+```bash
+# Copy the Linux bzcode binary (obtained from the Boltzbit team) to a system path:
+cp bzcode-linux /usr/local/bin/bzcode
+chmod +x /usr/local/bin/bzcode
+
+# Verify it is on PATH:
+bzcode --version
+```
+
+The server calls `bzcode` by name and resolves it via `PATH` automatically — no path configuration needed as long as the binary is in a standard location like `/usr/local/bin/`.
+
+### 3e. Create the Python virtualenv and install dependencies
 
 ```bash
 cd /opt/boltzagent
-BZCODE_PATH=./bzcode .venv/bin/python server.py
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
 ```
 
-> **Important:** Use a single process — the server holds in-memory state
-> (`_active_cwds`, `_batch_store`, etc.) that is not shared across workers.
+### 3f. Set file permissions
+
+```bash
+# App files can be root-owned (server only reads them)
+chown -R root:root /opt/boltzagent
+
+# .venv and server_data must be readable by the service user
+chown -R boltzagent:boltzagent /opt/boltzagent/.venv
+chown -R boltzagent:boltzagent /opt/boltzagent/server_data
+
+# bzcode binary (installed in §3d) must be executable
+chmod +x /usr/local/bin/bzcode
+
+# Create a writable workspace and BZ_HOME for the service user
+mkdir -p /home/boltzagent/workspace
+mkdir -p /usr/local/boltzbit
+chown -R boltzagent:boltzagent /home/boltzagent/workspace
+chown -R boltzagent:boltzagent /usr/local/boltzbit
+```
+
+> **Important:** Do NOT set `BZCODE_CWD=/opt/boltzagent`. That directory is
+> root-owned and the service user cannot write there. User file operations
+> (upload, create folder, save documents) will silently fail.
+
+### 3g. Set up credentials
+
+```bash
+# Edit server_data/credentials.json on the server directly
+# (never include secrets in the zip / git)
+nano /opt/boltzagent/server_data/credentials.json
+```
 
 ---
 
-## Environment variables
+## 4. Environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `BZCODE_PATH` | `./bzcode` | Path to the `bzcode` binary |
-| `BZCODE_CWD` | current dir | Default working directory for new sessions |
-| `PORT` | `18789` | HTTP + WebSocket port |
-| `BZCODE_DIST` | `./dist` (auto) | Vite `dist/` folder to serve as the SPA |
+Set these in the systemd unit file or export them before the manual start command.
 
-Set these in `/etc/systemd/system/boltzagent.service` under `[Service]` or in a
-`.env.production` file (not copied to the VM — set them directly on the system).
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `BZCODE_CWD` | process cwd | **yes** | Default working directory for sessions (must be writable) |
+| `BZ_HOME` | `/usr/local/boltzbit` | **yes** | bzcode home — stores credentials, sessions, and settings. Must be writable by the service user. |
+| `PORT` | `18789` | no | HTTP + WebSocket port |
+
+`BZCODE_PATH` is not needed — the server resolves `bzcode` from `PATH` automatically.
+
+The server is started with CLI flags, not env vars, when running `app.py` directly:
+
+```bash
+.venv/bin/python app.py \
+  --cwd  /home/boltzagent/workspace \
+  --dist /opt/boltzagent/dist
+```
+
+When using **uvicorn** (systemd), set both `BZCODE_CWD` and `BZ_HOME`:
+
+```ini
+Environment=BZCODE_CWD=/home/boltzagent/workspace
+Environment=BZ_HOME=/usr/local/boltzbit
+```
 
 ---
 
-## Firewall
+## 5. systemd service (recommended)
+
+### Install the unit
+
+```bash
+cp /opt/boltzagent/scripts/boltzagent.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now boltzagent
+```
+
+### Unit file reference (`scripts/boltzagent.service`)
+
+```ini
+[Unit]
+Description=BoltzAgent FastAPI server
+After=network.target
+
+[Service]
+Type=simple
+User=boltzagent
+Group=boltzagent
+
+WorkingDirectory=/opt/boltzagent
+ExecStart=/opt/boltzagent/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 18789
+Restart=on-failure
+RestartSec=5
+
+Environment=BZCODE_CWD=/home/boltzagent/workspace
+Environment=BZ_HOME=/usr/local/boltzbit
+Environment=PORT=18789
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=boltzagent
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Useful commands
+
+```bash
+systemctl status boltzagent           # check running state
+systemctl restart boltzagent          # restart after a deploy
+journalctl -u boltzagent -f           # tail live logs
+journalctl -u boltzagent --since "5m ago"   # last 5 minutes
+```
+
+---
+
+## 6. Manual start (without systemd)
+
+```bash
+cd /opt/boltzagent
+.venv/bin/python app.py \
+  --cwd  /home/boltzagent/workspace \
+  --dist ./dist
+```
+
+> **Single process only.** The server holds in-memory state (`_active_cwds`,
+> `_batch_store`, WebSocket connections) that is not shared across workers.
+> Do **not** run with `--workers N` or behind gunicorn multi-worker.
+
+To keep it running after logout:
+
+```bash
+nohup .venv/bin/python app.py \
+  --cwd  /home/boltzagent/workspace \
+  --dist ./dist \
+  > /var/log/boltzagent.log 2>&1 &
+echo $! > /var/run/boltzagent.pid
+```
+
+---
+
+## 7. Firewall
 
 ```bash
 # ufw (Ubuntu)
 ufw allow 18789/tcp
+ufw reload
 
-# or iptables
+# iptables
 iptables -A INPUT -p tcp --dport 18789 -j ACCEPT
 ```
 
 ---
 
-## Verify the deployment
+## 8. Python dependencies (`requirements.txt`)
+
+All installed automatically via `pip install -r requirements.txt`.
+
+| Package | Version pin | Purpose |
+|---|---|---|
+| `fastapi` | `0.124.4` | HTTP framework & route declarations |
+| `uvicorn[standard]` | `0.33.0` | ASGI server (production runner) |
+| `aiohttp` | `3.10.11` | Outgoing HTTP (BoltzHub, WhatsApp integrations) |
+| `websockets` | `13.1` | WebSocket bridge to bzcode |
+| `pydantic` | `2.10.6` | Request/response validation |
+| `python-multipart` | `≥0.0.9` | Multipart file upload parsing |
+| `pypdf` | `≥4.0` | PDF text extraction |
+| `python-docx` | `≥1.1` | Word `.docx` read/write |
+| `openpyxl` | `≥3.1` | Excel `.xlsx` read/write |
+| `python-pptx` | `≥0.6` | PowerPoint `.pptx` read/write (slide JSON conversion) |
+| `formulas` | `≥1.3` | Server-side Excel formula evaluation |
+
+`asyncpg` is **not** in requirements — the server connects to Postgres if available but
+continues without it (logs a warning). Add it manually if you need DB persistence:
 
 ```bash
-curl http://<vm-ip>:18789/agent-modes        # API — returns agent mode list
-curl http://<vm-ip>:18789/api/excel/load     # Excel endpoint (should 400 — needs ?path)
-open http://<vm-ip>:18789/                   # Frontend SPA
+.venv/bin/pip install asyncpg>=0.30
 ```
 
 ---
 
-## API surface (new endpoints since last release)
-
-### Office file viewer/editor
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/doc/parse` | Parse PDF / DOCX / PPTX / XLSX → JSON |
-| `PUT` | `/api/doc/save` | Save Word (Block[]) or markdown back to DOCX |
-| `GET` | `/api/excel/load?path=` | Load XLSX → cell JSON (formulas evaluated) |
-| `PUT` | `/api/excel/save` | Save cell JSON → XLSX (preserves formulas) |
-| `GET` | `/api/ppt/load?path=` | Load PPTX → slide JSON |
-| `PUT` | `/api/ppt/save` | Save slide JSON → PPTX |
-
-### File tree operations
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/file?path=` | Read a file as text |
-| `PUT` | `/api/file` | Write text content to a file |
-| `POST` | `/api/file/rename` | Rename a file or directory `{ path, newName }` |
-| `POST` | `/api/file/duplicate` | Duplicate a file (creates `name copy.ext`) `{ path }` |
-| `GET` | `/api/file/download?path=` | Download a file as binary attachment |
-
----
-
-## What's new since last deploy checkpoint
-
-### Agent modes & UI
-- Four agent modes: **General**, **Widget**, **Worker**, **Coder**
-- Each mode auto-collapses the side nav and starts with an identity prompt
-- Widget mode: canvas-only view with floating prompt bar; chat panel toggle button
-- Nav bar collapses by default for all agent modes (not just widget)
-- Session creation now requires mode selection upfront
-
-### Worker file editor
-- Full VS Code-style editor panel with syntax highlighting
-- **Word** (`.docx`): canvas-based rich editor (ported from bz-office)
-- **Excel** (`.xlsx`): canvas-based spreadsheet with toolbar, formula bar, sheet tabs
-  - Client + server-side formula evaluation (`formulas` library)
-  - Formula persistence: formulas saved as formula strings, not values
-  - Dependency recalculation on every cell edit
-- **PowerPoint** (`.pptx`): canvas-based slide editor with thumbnail panel
-  - Toolbar: select / text / shape / line / image tools, text formatting
-  - Fullscreen presentation mode (browser Fullscreen API, arrow-key navigation)
-  - Server-side PPTX ↔ slide JSON conversion via `python-pptx`
-- File tree right-click context menu: **Open**, **Rename**, **Duplicate**, **Download**
-- Chat "Open" button now routes `.docx`/`.pptx`/`.xlsx` to the editor panel
-
-### Design system
-- Design tokens (`design_tokens/boltzhub-tokens.css`) compiled into the build
-- Dark/light mode CSS variables: `--border-default`, `--bg-elevated`, `--bg-hover`, `--accent-blue-light`
-- Excel canvas theme-aware: clears CSS var cache on theme toggle
-
----
-
-## Subsequent updates
+## 9. Subsequent deploys
 
 ```bash
-./scripts/deploy.sh ubuntu@<vm-ip>
+# 1. Build + zip locally
+./scripts/build-deploy.sh
+
+# 2. Upload and extract
+scp deploy.zip ubuntu@<server-ip>:/opt/boltzagent/
+ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o deploy.zip"
+
+# 3. Reinstall Python deps if requirements.txt changed
+ssh ubuntu@<server-ip> "cd /opt/boltzagent && .venv/bin/pip install -r requirements.txt -q"
+
+# 4. Restart
+ssh ubuntu@<server-ip> "systemctl restart boltzagent"
 ```
 
-No manual SSH required — the script handles build, sync, and restart in one command.
+---
+
+## 10. Verification
+
+```bash
+# Health check — returns {"backend": "0.1.0"}
+curl http://<server-ip>:18789/api/version
+
+# Agent modes list
+curl http://<server-ip>:18789/agent-modes
+
+# File tree — returns directory listing for cwd
+curl "http://<server-ip>:18789/files?path=/home/boltzagent/workspace"
+
+# Frontend SPA
+open http://<server-ip>:18789/
+```
+
+---
+
+## 11. Complete API reference
+
+### WebSocket
+
+| Endpoint | Description |
+|---|---|
+| `ws://<host>:18789/ws` | bzcode agent bridge — all chat/agent traffic |
+
+### Session management
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/sessions` | List sessions |
+| `POST` | `/sessions` | Create session |
+| `GET` | `/sessions/{id}` | Get session |
+| `DELETE` | `/sessions/{id}` | Delete session |
+| `GET` | `/agent-modes` | List available agent modes |
+
+### File system
+
+| Method | Path | Body / params | Description |
+|---|---|---|---|
+| `GET` | `/files` | `?path=` | List directory entries |
+| `GET` | `/api/file` | `?path=` | Read a file as text |
+| `PUT` | `/api/file` | `{path, content}` | Write text content to a file |
+| `POST` | `/api/file/rename` | `{path, newName}` | Rename a file or folder |
+| `POST` | `/api/file/duplicate` | `{path}` | Duplicate a file (auto-names `copy`) |
+| `GET` | `/api/file/download` | `?path=` | Download binary file |
+| `POST` | `/api/file/upload` | multipart `file` + `dir` | Upload one or more files to a directory |
+| `POST` | `/api/file/mkdir` | `{path}` | Create a directory (including parents) |
+| `DELETE` | `/api/file` | `?path=` | Delete a file or directory (recursive) |
+
+### Office document parsing & editing
+
+| Method | Path | Body / params | Description |
+|---|---|---|---|
+| `POST` | `/api/doc/parse` | `{path}` or multipart | Parse PDF / DOCX / PPTX → JSON |
+| `PUT` | `/api/doc/save` | `{path, blocks}` or `{path, content}` | Save Word doc (Block[]) or markdown |
+| `GET` | `/api/doc/cursor` | `?path=` | Get last cursor position for a doc |
+| `PUT` | `/api/doc/cursor` | `{path, selStart, selEnd}` | Save cursor position |
+| `GET` | `/api/excel/load` | `?path=` | Load XLSX → evaluated cell JSON |
+| `PUT` | `/api/excel/save` | `{path, sheets}` | Save cell JSON → XLSX (preserves formulas) |
+| `GET` | `/api/ppt/load` | `?path=` | Load PPTX → slide JSON (backgrounds, boxes, images) |
+| `PUT` | `/api/ppt/save` | `{path, slides}` | Save slide JSON → PPTX |
+
+### Dev server (Coder mode)
+
+| Method | Path | Body | Description |
+|---|---|---|---|
+| `POST` | `/api/dev-server/start` | `{cwd}` | Start a local dev server, returns `{url}` |
+| `POST` | `/api/dev-server/stop` | `{cwd}` | Stop a running dev server |
+
+### Misc
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/version` | Returns `{backend: "x.y.z"}` |
+| `POST` | `/auth/logout` | Clear session token |
+| `GET` | `/api/file/download` | Download any file as binary attachment |
+
+---
+
+## 12. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `Permission denied` on file upload / new folder | `BZCODE_CWD` is not writable by service user | `chown boltzagent /home/boltzagent/workspace` |
+| `ModuleNotFoundError: No module named 'pptx'` | pip install missed | `cd /opt/boltzagent && .venv/bin/pip install -r requirements.txt` |
+| Server starts but frontend is blank | `--dist` path wrong or `dist/` not uploaded | check `dist/index.html` exists; re-run `unzip -o deploy.zip` |
+| `bzcode: Permission denied` | binary not executable | `chmod +x /usr/local/bin/bzcode` |
+| `bzcode binary not found` | binary not installed or `BZCODE_PATH` wrong | ensure bzcode is installed and on PATH (e.g. `which bzcode` should succeed) |
+| Port 18789 not reachable | firewall blocking | `ufw allow 18789/tcp && ufw reload` |
+| `address already in use` on restart | old process still running | `pkill -f 'app.py'` or `systemctl restart boltzagent` |
+| `[db] connection failed` in logs | no Postgres running | safe to ignore — server continues without DB |

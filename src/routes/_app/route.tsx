@@ -16,17 +16,28 @@ import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/rea
 import { useState, useEffect } from 'react';
 import Sidebar from '#/components/Sidebar';
 import TopBar  from '#/components/TopBar';
-import { isLoggedIn, useIsLoggedIn } from '#/auth-store';
+import { isLoggedIn } from '#/auth-store';
+
+const AGENT_HTTP =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 export const Route = createFileRoute('/_app')({
-  beforeLoad: () => {
-    if (!isLoggedIn()) throw redirect({ to: '/marketing' });
+  beforeLoad: async () => {
+    if (isLoggedIn()) return; // frontend JWT present — let through
+    try {
+      const res = await fetch(`${AGENT_HTTP}/auth/status`);
+      if (res.ok) {
+        const data = await res.json() as { valid: boolean };
+        if (data.valid) return; // server has valid BZ_HOME credentials — let through
+      }
+    } catch {}
+    throw redirect({ to: '/login' });
   },
   component: AppLayout,
 });
 
 function AppLayout() {
-  const loggedIn  = useIsLoggedIn();
   const pathname  = useRouterState({ select: s => s.location.pathname });
   const onAgent   = pathname === '/agent';
 
@@ -38,8 +49,6 @@ function AppLayout() {
     setSidebarOpen(!onAgent);
     setHoveredOpen(false);
   }, [onAgent]);
-
-  if (!loggedIn) return null;
 
   const navOpen = sidebarOpen || hoveredOpen;
 

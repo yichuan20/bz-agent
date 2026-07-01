@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Read(//Users/yichuan20/Documents/cambridge/private_code/boltzbit/boltzvibe/lingma-app-design/apps/databricks/src/pages/dashboard-editor/**)",
       "Read(//Users/yichuan20/Documents/cambridge/private_code/boltzbit/boltzvibe/lingma-app-design/apps/databricks/src/pages/dashboard-editor/components/**)",

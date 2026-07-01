@@ -358,8 +358,12 @@ const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
   if (excelHorizAlign === 'RIGHT') {
     ctxTextAlign = 'right';
   }
-  if (excelHorizAlign === 'GENERAL') {
-    if (cell?.dataType === 'NUMERIC' || cell?.dataType === 'FORMULA') {
+  if (!excelHorizAlign || excelHorizAlign === 'GENERAL') {
+    if (
+      cell?.dataType === 'NUMERIC' ||
+      cell?.dataType === 'FORMULA' ||
+      typeof cell?.value === 'number'
+    ) {
       ctxTextAlign = 'right';
     }
   }
@@ -1081,6 +1085,7 @@ const ExcelViewSheetArea = ({
   const gridCanvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
   const containerRef = useRef(null);
+  const rootRef = useRef(null);
   // Offscreen canvas for double-buffering to prevent blinking
   const offscreenCanvasRef = useRef(null);
 
@@ -1469,12 +1474,26 @@ const ExcelViewSheetArea = ({
     });
   };
 
-  // Update valueToEdit when selected cell changes (edit state is reset synchronously in onCanvasMouseDown)
+  // Deselect cell when user clicks outside the Excel component entirely
+  useEffect(() => {
+    const handleOutsideClick = e => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) {
+        setSelectedCellLocation('');
+        setIsEditing(false);
+        setDragStartLocation('');
+        setDragEndLocation('');
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Reset valueToEdit whenever selected cell changes — prevents carryover of previous typed value
   useEffect(() => {
     setValueToEdit(
       cells?.[selectedCellLocation]?.formula || cells?.[selectedCellLocation]?.value || '',
     );
-  }, [cells?.[selectedCellLocation]]);
+  }, [selectedCellLocation]);
 
   // Drawing useEffect - should NOT affect edit state
   // Uses double-buffering to prevent canvas blinking during resize
@@ -1854,18 +1873,17 @@ const ExcelViewSheetArea = ({
       return;
     }
 
-    // Custom double-click detection (more reliable than onDoubleClick event)
+    // Enter edit mode on double-click OR when clicking an already-selected cell
     const now = Date.now();
     const isDoubleClick =
       now - lastClickRef.current.time < 300 && lastClickRef.current.location === mouseLocation;
+    const isReClickOnSelected = !isEditing && mouseLocation === selectedCellLocation;
 
-    if (isDoubleClick) {
-      // Double click detected - enter edit mode
+    if (isDoubleClick || isReClickOnSelected) {
       setIsEditing(true);
-      setDragEndLocation(''); // Clear any drag selection when entering edit mode
-      lastClickRef.current = { time: 0, location: '' }; // Reset to prevent triple-click issues
+      setDragEndLocation('');
+      lastClickRef.current = { time: 0, location: '' };
     } else {
-      // Single click - reset edit state if switching cells
       if (mouseLocation !== selectedCellLocation) {
         setIsEditing(false);
       }
@@ -1881,7 +1899,7 @@ const ExcelViewSheetArea = ({
       let newGrid = getResizedColumnGrid({
         grid,
         columnResizeIndex,
-        columnResizeAmount: columnResizeAmount / SF,
+        columnResizeAmount,
       });
 
       // Clear cache because column width change affects wrap text calculation for all rows
@@ -1903,7 +1921,7 @@ const ExcelViewSheetArea = ({
       const newGrid = getResizedRowGrid({
         grid,
         rowResizeIndex,
-        rowResizeAmount: rowResizeAmount / SF,
+        rowResizeAmount,
       });
       onNewGrid(newGrid);
     }
@@ -1980,7 +1998,7 @@ const ExcelViewSheetArea = ({
 
       drawVerticalLine({
         ctx: overlayCanvasRef.current.getContext('2d'),
-        x: boundaryX + newResizeAmount,
+        x: boundaryX + newResizeAmount * SF,
       });
     }
 
@@ -2000,7 +2018,7 @@ const ExcelViewSheetArea = ({
 
       drawHorizontalLine({
         ctx: overlayCanvasRef.current.getContext('2d'),
-        y: boundaryY + newResizeAmount,
+        y: boundaryY + newResizeAmount * SF,
       });
     }
 
@@ -2018,12 +2036,18 @@ const ExcelViewSheetArea = ({
   };
 
   const onKeyDown = e => {
+    // Don't intercept keypresses that belong to other inputs (e.g. chat prompt)
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl !== document.body && !rootRef.current?.contains(activeEl)) {
+      return;
+    }
+
     if (isEditing && e.key === 'Escape') {
       setIsEditing(false);
       return;
     }
 
-    if (e.key.length === 1 && !isEditing) {
+    if (e.key.length === 1 && !isEditing && selectedCellLocation) {
       setIsEditing(true);
       return;
     }
@@ -2233,7 +2257,7 @@ const ExcelViewSheetArea = ({
   };
 
   return (
-    <Container>
+    <Container ref={rootRef}>
       {showToolbar && (
         <ExcelToolbar
           selectedCell={selectedCell}
@@ -2341,7 +2365,7 @@ const ExcelViewSheetArea = ({
               width: 'fit-content',
             }}
             cellWidth={cellWidth}
-            autoFocus={document?.activeElement?.tagName !== 'INPUT'}
+            autoFocus
             onMouseDown={e => e.stopPropagation()}
           />
         )}

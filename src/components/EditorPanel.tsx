@@ -9,7 +9,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
-import { FileIcon, FolderIcon, FolderOpenIcon, XIcon } from '@phosphor-icons/react';
+import { FileIcon, FolderIcon, FolderOpenIcon, UploadSimpleIcon, XIcon } from '@phosphor-icons/react';
 import { WordDocEditor, type Block } from '#/office';
 import { ExcelEditor } from '#/excel';
 import { PptEditor } from '#/ppt';
@@ -20,7 +20,7 @@ const PPT_EXTS    = new Set(['ppt','pptx']);
 function isDocExt(name: string)   { return DOC_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
 function isExcelExt(name: string) { return EXCEL_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
 function isPptExt(name: string)   { return PPT_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
-const DOC_ICONS: Record<string, string> = { pdf:'📄', docx:'📝', doc:'📝', xlsx:'📊', xls:'📊', pptx:'📑' };
+const DOC_ICONS: Record<string, string> = { pdf:'📄', docx:'📝', doc:'📝', xlsx:'📊', xls:'📊', pptx:'📑', excel:'📊', ppt:'📑' };
 
 const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
@@ -135,7 +135,8 @@ function HighlightLayer({ content, filename }: { content: string; filename: stri
 // ── File tree ─────────────────────────────────────────────────────────────────
 type FsEntry = { name: string; path: string; isDir: boolean };
 
-interface CtxMenu { x: number; y: number; entry: FsEntry }
+// entry=null means the user right-clicked on empty space; targetDir is the directory to act on
+interface CtxMenu { x: number; y: number; entry: FsEntry | null; targetDir: string }
 
 function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renamingPath, onRenameCommit, onRefresh }: {
   entry: FsEntry; depth: number; selected: string | null;
@@ -236,19 +237,15 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
 // ── Editor panel ──────────────────────────────────────────────────────────────
 interface Tab {
   path: string; name: string; content: string; dirty: boolean;
-  // Set for all document files (pdf/pptx) — markdown text
+  // 'word'|'docx'|'doc' for Word docs (blocks), 'excel' for spreadsheets, 'ppt' for presentations, 'pdf' for PDFs
   docType?: string; docPages?: number; docWordCount?: number; docTruncated?: boolean;
-  // Set for Word files (docx/doc) — bz-office Block[] format
+  // Word files only — bz-office Block[] format
   blocks?: Block[];
-  // Set for Excel files — handled by ExcelEditor directly (data loaded from server)
-  isExcel?: boolean;
-  // Set for PPT files — handled by PptEditor directly
-  isPpt?: boolean;
 }
 
-interface Props { cwd: string; codeMode: boolean; refreshKey?: number }
+interface Props { cwd: string; codeMode: boolean; refreshKey?: number; sessionId?: string | null }
 
-export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
+export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
   const [tabs,         setTabs]         = useState<Tab[]>([]);
   const [activeTab,    setActiveTab]    = useState<string | null>(null);
   const [saving,       setSaving]       = useState(false);
@@ -262,7 +259,16 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
   const [treeVersion,  setTreeVersion]  = useState(0);
   const [cursors,      setCursors]      = useState<Record<string, { selStart: number; selEnd: number }>>({});
   const cursorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [uploading, setUploading] = useState(false);
+  const [newFolderDir, setNewFolderDir] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState('');
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const uploadDirRef = useRef<string>(cwd);
+  const newFolderInputRef = useRef<HTMLInputElement>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
+  const lastRestoredSession = useRef<string | null>(null);
+  const isRestoringRef = useRef(false);
+  const pptSaveRef = useRef<(() => void) | null>(null);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -273,10 +279,34 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('dir', uploadDirRef.current);
+        await fetch(`${HTTP_BASE}/api/file/upload`, { method: 'POST', body: fd });
+      }
+      setTreeVersion(v => v + 1);
+    } finally {
+      setUploading(false);
+      if (uploadRef.current) uploadRef.current.value = '';
+    }
+  }, []);
+
   const handleCtxMenu = useCallback((e: React.MouseEvent, entry: FsEntry) => {
     e.preventDefault();
-    setCtxMenu({ x: e.clientX, y: e.clientY, entry });
-  }, []);
+    const targetDir = entry.isDir ? entry.path : entry.path.replace(/\/[^/]+$/, '') || cwd;
+    setCtxMenu({ x: e.clientX, y: e.clientY, entry, targetDir });
+  }, [cwd]);
+
+  const handleTreeBgCtxMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, entry: null, targetDir: cwd });
+  }, [cwd]);
 
   const handleRenameCommit = useCallback(async (entry: FsEntry, newName: string) => {
     setRenamingPath(null);
@@ -292,23 +322,43 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     if (activeTab === entry.path) setActiveTab(newPath);
   }, [activeTab]);
 
-  const doCtxAction = useCallback(async (action: string, entry: FsEntry) => {
+  const doCtxAction = useCallback(async (action: string, menu: CtxMenu) => {
     setCtxMenu(null);
-    if (action === 'open') { if (!entry.isDir) openFile(entry.path); }
-    else if (action === 'rename') { setRenamingPath(entry.path); }
+    const { entry, targetDir } = menu;
+    if (action === 'open') { if (entry && !entry.isDir) openFile(entry.path); }
+    else if (action === 'rename') { if (entry) setRenamingPath(entry.path); }
     else if (action === 'duplicate') {
+      if (!entry) return;
       await fetch(`${HTTP_BASE}/api/file/duplicate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: entry.path }),
       }).catch(() => null);
       setTreeVersion(v => v + 1);
     } else if (action === 'download') {
+      if (!entry) return;
       const a = document.createElement('a');
       a.href = `${HTTP_BASE}/api/file/download?path=${encodeURIComponent(entry.path)}`;
       a.download = entry.name;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    } else if (action === 'upload') {
+      uploadDirRef.current = targetDir;
+      uploadRef.current?.click();
+    } else if (action === 'new-folder') {
+      setNewFolderDir(targetDir);
+      setNewFolderName('');
+      setTimeout(() => newFolderInputRef.current?.focus(), 50);
+    } else if (action === 'delete') {
+      const label = entry ? entry.name : targetDir.split('/').pop() ?? targetDir;
+      if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
+      const deletePath = entry ? entry.path : targetDir;
+      await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(deletePath)}`, { method: 'DELETE' }).catch(() => null);
+      setTreeVersion(v => v + 1);
+      if (entry && !entry.isDir) {
+        setTabs(prev => prev.filter(t => t.path !== entry.path));
+        if (activeTab === entry.path) setActiveTab(null);
+      }
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The outer scrollable div — both highlight and textarea scroll with it
   const scrollRef   = useRef<HTMLDivElement>(null);
@@ -333,7 +383,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     if (existing) {
       // Excel/PPT tabs load data from the server — close and reopen to get fresh data
       // (avoids showing stale error state after server restart)
-      if (existing.isExcel || existing.isPpt) {
+      if (existing.docType === 'excel' || existing.docType === 'ppt') {
         setTabs(prev => prev.filter(t => t.path !== filePath));
         // fall through to reopen below
       } else {
@@ -347,13 +397,12 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     try {
       // Excel files: ExcelEditor loads data internally — just open a tab with the path
       if (isExcelExt(name)) {
-        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, isExcel: true }]);
+        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, docType: 'excel' }]);
         setActiveTab(filePath);
         return;
       }
-      // PPT files: PptEditor loads data internally
       if (isPptExt(name)) {
-        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, isPpt: true }]);
+        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, docType: 'ppt' }]);
         setActiveTab(filePath);
         return;
       }
@@ -381,6 +430,33 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
       setActiveTab(filePath);
     } catch (e) { setError(String(e)); }
   }
+
+  // Persist open tabs to localStorage whenever tabs or activeTab change
+  useEffect(() => {
+    if (!sessionId || isRestoringRef.current) return;
+    if (tabs.length === 0) return; // don't overwrite saved state with empty
+    localStorage.setItem(`bz-editor-tabs-${sessionId}`, JSON.stringify({ paths: tabs.map(t => t.path), activeTab }));
+  }, [tabs, activeTab, sessionId]);
+
+  // Restore open tabs when sessionId changes (including initial mount)
+  useEffect(() => {
+    if (!sessionId || lastRestoredSession.current === sessionId) return;
+    lastRestoredSession.current = sessionId;
+    isRestoringRef.current = true;
+    setTabs([]);
+    setActiveTab(null);
+    const saved = localStorage.getItem(`bz-editor-tabs-${sessionId}`);
+    if (!saved) { isRestoringRef.current = false; return; }
+    try {
+      const { paths, activeTab: savedActive } = JSON.parse(saved) as { paths: string[]; activeTab: string | null };
+      if (!paths?.length) { isRestoringRef.current = false; return; }
+      (async () => {
+        for (const p of paths) { await openFile(p); }
+        if (savedActive) setActiveTab(savedActive);
+        isRestoringRef.current = false;
+      })();
+    } catch { isRestoringRef.current = false; }
+  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload active file and refresh file tree when agent finishes a turn (increments refreshKey)
   // Skip document files — they use /api/doc/parse and raw bytes would overwrite parsed content
@@ -430,29 +506,51 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
     }, 500);
   }, []);
 
+  async function saveTab(tab: Tab) {
+    if (tab.docType === 'ppt') { pptSaveRef.current?.(); return; }
+    if (tab.docType === 'excel') return; // ExcelEditor manages its own save
+    if (tab.docType) {
+      const body = tab.blocks
+        ? { path: tab.path, blocks: tab.blocks }
+        : { path: tab.path, content: tab.content };
+      const r = await fetch(`${HTTP_BASE}/api/doc/save`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (d.error) throw new Error(d.error);
+    } else {
+      await fetch(`${HTTP_BASE}/api/file`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: tab.path, content: tab.content }),
+      });
+    }
+  }
+
   async function save() {
     if (!currentTab?.dirty) return;
+    if (currentTab.docType === 'ppt') { pptSaveRef.current?.(); return; }
+    if (currentTab.docType === 'excel') return;
     setSaving(true);
     setError('');
     try {
-      if (currentTab.docType) {
-        // Word file: send Block[] to regenerate DOCX; other docs: send markdown
-        const body = currentTab.blocks
-          ? { path: currentTab.path, blocks: currentTab.blocks }
-          : { path: currentTab.path, content: currentTab.content };
-        const r = await fetch(`${HTTP_BASE}/api/doc/save`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const d = await r.json() as { ok?: boolean; error?: string };
-        if (d.error) { setError(d.error); return; }
-      } else {
-        await fetch(`${HTTP_BASE}/api/file`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: currentTab.path, content: currentTab.content }),
-        });
-      }
+      await saveTab(currentTab);
       setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, dirty: false } : t));
+    } catch (e) { setError(String(e)); }
+    finally { setSaving(false); }
+  }
+
+  async function saveAll() {
+    const dirty = tabs.filter(t => t.dirty);
+    if (!dirty.length) return;
+    setSaving(true);
+    setError('');
+    try {
+      const regular = dirty.filter(t => t.docType !== 'excel' && t.docType !== 'ppt');
+      await Promise.all(regular.map(t => saveTab(t)));
+      setTabs(prev => prev.map(t => regular.some(d => d.path === t.path) ? { ...t, dirty: false } : t));
+      // PPT saves via its own imperative ref (only works when that tab is active)
+      if (dirty.some(t => t.docType === 'ppt') && pptSaveRef.current) pptSaveRef.current();
     } catch (e) { setError(String(e)); }
     finally { setSaving(false); }
   }
@@ -513,12 +611,34 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
         borderRight: `1px solid var(--border-primary)`,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
-        <div style={{ padding: '9px 10px 5px', flexShrink: 0 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
+        <div style={{ padding: '6px 6px 5px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ flex: 1, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', fontFamily: 'ui-sans-serif, system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {cwd.split('/').filter(Boolean).pop()}
           </span>
+          <button
+            type="button"
+            title="Upload file"
+            disabled={uploading}
+            onClick={() => uploadRef.current?.click()}
+            style={{ flexShrink: 0, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-tertiary)', cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.5 : 1 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)'; }}
+          >
+            <UploadSimpleIcon size={13} />
+          </button>
+          <input
+            ref={uploadRef}
+            type="file"
+            multiple
+            accept=".pptx,.ppt,.docx,.doc,.xlsx,.xls,.pdf,.txt,.md,.csv,.json,.py,.ts,.tsx,.js,.jsx"
+            style={{ display: 'none' }}
+            onChange={handleUpload}
+          />
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 4px 8px' }}>
+        <div
+          style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 4px 8px' }}
+          onContextMenu={handleTreeBgCtxMenu}
+        >
           <TreeNode
             key={treeVersion}
             entry={rootEntry} depth={0} selected={activeTab} onSelect={openFile}
@@ -526,6 +646,35 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
             renamingPath={renamingPath} onRenameCommit={handleRenameCommit}
             onRefresh={() => setTreeVersion(v => v + 1)}
           />
+          {/* Inline new-folder input */}
+          {newFolderDir && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 22px' }}>
+              <FolderIcon size={13} style={{ color: FOLDER_COLOR, flexShrink: 0 }} weight="duotone" />
+              <input
+                ref={newFolderInputRef}
+                value={newFolderName}
+                placeholder="folder name"
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={async e => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    const name = newFolderName.trim();
+                    if (!name) return;
+                    const dir = newFolderDir!;
+                    setNewFolderDir(null); setNewFolderName('');
+                    await fetch(`${HTTP_BASE}/api/file/mkdir`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ path: `${dir}/${name}` }),
+                    }).catch(() => null);
+                    setTreeVersion(v => v + 1);
+                  }
+                  if (e.key === 'Escape') { setNewFolderDir(null); setNewFolderName(''); }
+                }}
+                onContextMenu={e => e.stopPropagation()}
+                style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--accent-blue)', borderRadius: 3, padding: '1px 4px', outline: 'none' }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -538,28 +687,39 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
             background: 'var(--bg-elevated, var(--bg-primary))',
             border: '1px solid var(--border-primary)',
             borderRadius: 6, padding: '4px 0',
-            minWidth: 160,
+            minWidth: 170,
             boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
           }}
           onMouseDown={e => e.stopPropagation()}
         >
-          {[
-            ...(!ctxMenu.entry.isDir ? [{ id: 'open',      label: 'Open' }] : []),
-            { id: 'rename',    label: 'Rename' },
-            ...(!ctxMenu.entry.isDir ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
-            ...(!ctxMenu.entry.isDir ? [{ id: 'download',  label: 'Download' }] : []),
-          ].map(item => (
-            <div
-              key={item.id}
-              onClick={() => doCtxAction(item.id, ctxMenu.entry)}
-              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-            >
-              {item.label}
-            </div>
-          ))}
+          {/* File/folder specific actions */}
+          {ctxMenu.entry && !ctxMenu.entry.isDir && (
+            <div onClick={() => doCtxAction('open', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>Open</div>
+          )}
+          {ctxMenu.entry && (
+            <div onClick={() => doCtxAction('rename', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>Rename</div>
+          )}
+          {ctxMenu.entry && !ctxMenu.entry.isDir && (
+            <div onClick={() => doCtxAction('duplicate', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>Duplicate</div>
+          )}
+          {ctxMenu.entry && !ctxMenu.entry.isDir && (
+            <div onClick={() => doCtxAction('download', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>Download</div>
+          )}
+          {/* Divider before common actions */}
+          {ctxMenu.entry && <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />}
+          {/* Common actions — always shown */}
+          <div onClick={() => doCtxAction('upload', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>Upload file here</div>
+          <div onClick={() => doCtxAction('new-folder', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>New folder</div>
+          {/* Delete — for files and folders (not the root cwd) */}
+          {ctxMenu.entry && ctxMenu.entry.path !== cwd && (
+            <>
+              <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />
+              <div onClick={() => doCtxAction('delete', ctxMenu)} style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--accent-red, #e8453c)' }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, var(--bg-tertiary))'; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+                Delete {ctxMenu.entry.isDir ? 'folder' : 'file'}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -646,8 +806,17 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
             })}
           </div>{/* end scrollable tab list */}
 
-          {/* Run button — always visible, runs the whole project */}
-          <div style={{ flexShrink: 0, padding: '0 8px', borderLeft: `1px solid var(--border-primary)`, display: 'flex', alignItems: 'center', height: '100%' }}>
+          {/* Save All button — shown whenever any tab has unsaved changes */}
+          {tabs.some(t => t.dirty) && (
+            <div style={{ flexShrink: 0, padding: '0 8px', borderLeft: `1px solid var(--border-primary)`, display: 'flex', alignItems: 'center', height: '100%' }}>
+              <button type="button" onClick={() => void saveAll()} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', fontSize: 11, border: `1px solid var(--accent-blue)`, borderRadius: 3, background: 'transparent', color: 'var(--accent-blue)', cursor: 'pointer', opacity: saving ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                {saving ? 'Saving…' : 'Save All'}
+              </button>
+            </div>
+          )}
+
+          {/* Run button — coder mode only */}
+          {codeMode && <div style={{ flexShrink: 0, padding: '0 8px', borderLeft: `1px solid var(--border-primary)`, display: 'flex', alignItems: 'center', height: '100%' }}>
             {previewUrl ? (
               <button type="button" onClick={() => {
                 setPreviewUrl(null);
@@ -668,7 +837,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
                 {previewLoading ? 'Starting…' : 'Run'}
               </button>
             )}
-          </div>
+          </div>}
         </div>{/* end tab bar */}
 
         {/* Path + save toolbar — hidden for doc files which have their own toolbar */}
@@ -681,7 +850,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
             <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)', fontFamily: FONT_STYLE.fontFamily, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {currentTab.path.replace(cwd, '').replace(/^\//, '')}
             </span>
-            {currentTab.dirty && (
+            {currentTab.dirty && !currentTab.docType && (
               <button type="button" onClick={() => void save()} disabled={saving} style={{
                 padding: '2px 10px', fontSize: 11, flexShrink: 0,
                 border: `1px solid var(--accent-blue)`, borderRadius: 3,
@@ -701,15 +870,19 @@ export function EditorPanel({ cwd, codeMode, refreshKey }: Props) {
 
         {/* ── Document viewer or syntax-highlighted editor ─────────── */}
         {currentTab ? (
-          currentTab.isExcel ? (
-            /* ── Excel spreadsheet — ExcelEditor handles data loading internally ── */
+          currentTab.docType === 'excel' ? (
             <React.Suspense fallback={<div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-tertiary)',fontSize:13 }}>Loading spreadsheet…</div>}>
               <ExcelEditor filePath={currentTab.path} style={{ flex: 1, minHeight: 0 }} />
             </React.Suspense>
-          ) : currentTab.isPpt ? (
-            /* ── PowerPoint — PptEditor handles data loading internally ── */
+          ) : currentTab.docType === 'ppt' ? (
             <React.Suspense fallback={<div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-tertiary)',fontSize:13 }}>Loading presentation…</div>}>
-              <PptEditor filePath={currentTab.path} style={{ flex: 1, minHeight: 0 }} />
+              <PptEditor
+                filePath={currentTab.path}
+                style={{ flex: 1, minHeight: 0 }}
+                saveRef={pptSaveRef}
+                onDirty={() => setTabs(prev => prev.map(t => t.path === currentTab.path ? { ...t, dirty: true } : t))}
+                onClean={() => setTabs(prev => prev.map(t => t.path === currentTab.path ? { ...t, dirty: false } : t))}
+              />
             </React.Suspense>
           ) : currentTab.docType ? (
             /* ── Document viewer / editor ── */

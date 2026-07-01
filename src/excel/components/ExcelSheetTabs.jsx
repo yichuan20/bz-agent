@@ -1,9 +1,36 @@
+import { useEffect, useRef, useState } from 'react';
 
 const ExcelSheetTabs = ({
   sheetNames = [],
   selectedSheetName,
   onSheetSelect,
+  onAddSheet,
+  onRenameSheet,
 }) => {
+  const [editingName, setEditingName] = useState('');
+  const [editValue, setEditValue]     = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editingName) inputRef.current?.select();
+  }, [editingName]);
+
+  const startRename = (name, e) => {
+    e.stopPropagation();
+    setEditingName(name);
+    setEditValue(name);
+  };
+
+  const commitRename = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== editingName) {
+      onRenameSheet?.(editingName, trimmed);
+    }
+    setEditingName('');
+  };
+
+  const cancelRename = () => setEditingName('');
+
   return (
     <div style={{
       height: 36, padding: '0 8px',
@@ -24,6 +51,7 @@ const ExcelSheetTabs = ({
             border: 'none', background: 'transparent', flexShrink: 0,
           }}
           title="Add sheet"
+          onClick={() => onAddSheet?.()}
         >
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -32,22 +60,42 @@ const ExcelSheetTabs = ({
         </button>
 
         {sheetNames.map(name => {
-          const isActive = name === selectedSheetName;
+          const isActive  = name === selectedSheetName;
+          const isEditing = name === editingName;
           return (
             <div
               key={name}
-              onClick={() => onSheetSelect?.(name)}
+              onClick={() => !isEditing && onSheetSelect?.(name)}
+              onDoubleClick={e => startRename(name, e)}
               style={{
                 padding: '5px 12px', fontSize: 11, fontWeight: 500,
                 color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                background: isActive
-                  ? 'var(--bg-tertiary)'
-                  : 'transparent',
+                background: isActive ? 'var(--bg-tertiary)' : 'transparent',
                 borderBottom: isActive ? '2px solid var(--accent-blue)' : '2px solid transparent',
               }}
             >
-              {name}
+              {isEditing ? (
+                <input
+                  ref={inputRef}
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter')  { e.preventDefault(); commitRename(); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                    e.stopPropagation();
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
+                    border: '1px solid var(--accent-blue)', borderRadius: 3,
+                    background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                    padding: '0 4px', outline: 'none',
+                    width: Math.max(40, editValue.length * 7),
+                  }}
+                />
+              ) : name}
             </div>
           );
         })}

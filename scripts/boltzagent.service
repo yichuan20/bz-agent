@@ -13,11 +13,11 @@ ExecStart=/opt/boltzagent/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 18789
 Restart=on-failure
 RestartSec=5
 
-Environment=BZCODE_PATH=/opt/boltzagent/bzcode
 # BZCODE_CWD must be a directory the service user can write to.
 # /opt/boltzagent is typically owned by root — use the user's home or a
 # dedicated workspace instead:
 Environment=BZCODE_CWD=/home/boltzagent/workspace
+Environment=BZ_HOME=/usr/local/boltzbit
 Environment=PORT=18789
 
 # Optional: keep logs in systemd journal

@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 # Build the frontend and package everything into a deployment zip.
 #
-# Usage:
-#   ./scripts/build-deploy.sh [output-name]
+# The zip is always named bz-agent-v<version>.zip where <version> is read
+# from BACKEND_VERSION in server.py.  An optional argument overrides the name.
 #
-# Example:
-#   ./scripts/build-deploy.sh                   # → deploy.zip
+# Usage:
+#   ./scripts/build-deploy.sh                   # → bz-agent-v0.1.0.zip
 #   ./scripts/build-deploy.sh bz-agent-v1.2     # → bz-agent-v1.2.zip
 
 set -euo pipefail
 
-OUTPUT="${1:-deploy}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$SCRIPT_DIR/.."
+
+# Read version from server.py (BACKEND_VERSION = "x.y.z")
+VERSION="$(grep -m1 'BACKEND_VERSION\s*=' "$ROOT/server.py" | sed 's/.*"\(.*\)".*/\1/')"
+DEFAULT_OUTPUT="bz-agent-v${VERSION}"
+OUTPUT="${1:-$DEFAULT_OUTPUT}"
 ZIP_FILE="$ROOT/${OUTPUT}.zip"
 
 cd "$ROOT"
@@ -32,7 +36,7 @@ zip -r "$ZIP_FILE" \
   dist/ \
   server_data/widgets/ \
   server_data/credentials.json \
-  bzcode/scripts/
+  bzcode_assets/
 
 echo "▶ 3/3  Done."
 echo ""
