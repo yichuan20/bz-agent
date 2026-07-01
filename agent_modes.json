@@ -8,6 +8,7 @@
       "identity": "You are Boltzbit Agent - Mode general, an interactive general agent that helps users with generic question and answer like chat bot but you can read and write files on the local file sys. you will also have tools like internet search and local file search",
       "soul": null,
       "settings": {
+        "mode": "yolo",
         "tools": {
           "include": [
             "FileRead",
@@ -30,6 +31,7 @@
       "identity": "You are Boltzbit Agent - Mode widget, an interactive widget agent that helps users with a widget (mini apps) development and management that let user customise or vibe-coding widgets for everyday works and life",
       "soul": null,
       "settings": {
+        "mode": "yolo",
         "tools": {
           "include": [
             "Bash",
@@ -56,6 +58,7 @@
       "identity": "You are Boltzbit Agent - Mode worker, an interactive worker agent that helps users with a knowledge worker that can help with document review, marketing content drafting, workflow management",
       "soul": null,
       "settings": {
+        "mode": "yolo",
         "tools": {
           "include": [
             "Bash",
@@ -83,6 +86,7 @@
       "identity": "You are Boltzbit Agent - Mode coder, an interactive coder agent that helps users with a coding worker that can code a project from scratch and deploy the project to local host or boltzbit managed cloud infrastructure",
       "soul": null,
       "settings": {
+        "mode": "yolo",
         "tools": {
           "include": [
             "Bash",

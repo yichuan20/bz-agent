@@ -119,10 +119,7 @@ type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 // In production (dist served by Python on port 18789), derive URLs from current origin.
 const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
   || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
-const WS_BASE   = (import.meta.env.VITE_AGENT_WS_URL   as string | undefined)
-  || (import.meta.env.PROD
-    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
-    : 'ws://localhost:18789/ws');
+
 
 const MODE_META: Record<SessionMode, { label: string; description: string; color: string }> = {
   default: { label: 'Default', description: 'Normal operation', color: 'var(--accent-blue)' },
@@ -3044,11 +3041,6 @@ function AgentPage() {
 
   // wsKey increments to force a full reconnect (e.g. after /compact)
   const [wsKey, setWsKey] = useState(0);
-  // WS URL is null while in list view (no connection)
-  // Always pass cwd so bzcode runs in the correct directory, even when resuming.
-  const wsUrl = view === 'chat' && activeCwd
-    ? `${WS_BASE}?cwd=${encodeURIComponent(activeCwd)}&mode=${encodeURIComponent(agentMode)}${activeSessionId ? `&sessionId=${encodeURIComponent(activeSessionId)}` : ''}`
-    : null;
 
   // ── Chat state ───────────────────────────────────────────────────────────────
   const [items, setItems] = useState<DisplayItem[]>([]);
@@ -3095,15 +3087,10 @@ function AgentPage() {
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
-  const wsRef               = useRef<WebSocket | null>(null);
   const pendingAutoSendRef  = useRef<string | null>(null);
   const isCompactingRef     = useRef(false);
   const streamingBlocksRef  = useRef<StreamingBlocks>(new Map());
-  // WS stability: track reconnect attempts for exponential backoff, last pong time
-  // for dead-connection detection, confirmed server session ID for reconnect URL
-  // correction, and previous wsUrl to distinguish new-session vs same-session reconnects.
   const reconnectAttemptsRef   = useRef(0);
-  const lastPongRef            = useRef(Date.now());
   const confirmedSessionIdRef  = useRef<string | null>(null);
   const prevWsUrlRef           = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3178,9 +3165,13 @@ function AgentPage() {
   }, [inputValue]);
 
   const sendRaw = useCallback((msg: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
-    }
+    const sid = confirmedSessionIdRef.current;
+    if (!sid) return;
+    fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
+    }).catch(() => null);
   }, []);
 
   // ── BoltzHub SSE streaming ────────────────────────────────────────────────
@@ -3252,15 +3243,17 @@ function AgentPage() {
     await startBzHubSSE('sync', { cwd, appId });
   }, [startBzHubSSE]);
 
-  // WebSocket — reconnects whenever wsUrl changes (new session) or wsKey increments (reconnect).
-  useEffect(() => {
-    if (!wsUrl) return;
+  // SSE + REST — connects via POST /api/pool/connect, streams via GET /api/pool/{id}/stream.
+  // Reconnects whenever connectParams change (new session) or wsKey increments (force reconnect).
+  const connectParams = view === 'chat' && activeCwd
+    ? { cwd: activeCwd, mode: agentMode, sessionId: activeSessionId || '' }
+    : null;
 
-    // Only reset conversation state when switching to a genuinely new session URL.
-    // Pure reconnects (same URL, wsKey bumped) preserve items so history isn't wiped
-    // mid-session and the user doesn't see a blank screen during the reconnect window.
-    const isNewSession = wsUrl !== prevWsUrlRef.current;
-    prevWsUrlRef.current = wsUrl;
+  useEffect(() => {
+    if (!connectParams) return;
+
+    const isNewSession = JSON.stringify(connectParams) !== prevWsUrlRef.current;
+    prevWsUrlRef.current = JSON.stringify(connectParams);
 
     if (isNewSession) {
       setItems([]);
@@ -3269,104 +3262,93 @@ function AgentPage() {
       setIsEditingTitle(false);
       setSessionUnavailable(false);
     }
-    // Always reset stream/status state on any connect attempt.
     setStreamingBlocks([]);
     setIsStreaming(false);
     setConnStatus('connecting');
     streamingBlocksRef.current.clear();
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    let intentionalClose = false;
+    let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let abortController: AbortController | null = null;
 
-    ws.onopen = () => {
-      setConnStatus('connected');
-      reconnectAttemptsRef.current = 0;   // reset backoff on successful open
-      lastPongRef.current = Date.now();   // baseline for pong timeout
-    };
-    ws.onerror = () => setConnStatus('error');
-    ws.onclose = () => {
-      setConnStatus('disconnected');
-      if (!intentionalClose) {
-        const MAX_RECONNECT = 5;
-        // Exponential backoff: 2s → 4s → 8s → 16s → 30s (cap).
-        // Prevents hammering the server/proxy on repeated failures.
-        const attempt = reconnectAttemptsRef.current;
-        if (attempt >= MAX_RECONNECT) {
-          setSessionUnavailable(true);
-          return;
-        }
-        reconnectAttemptsRef.current = attempt + 1;
-        const delay = Math.min(2_000 * Math.pow(2, attempt), 30_000);
-        const confirmedSid = confirmedSessionIdRef.current;
-        reconnectTimer = setTimeout(() => {
-          if (confirmedSid && confirmedSid !== activeSessionId) {
-            // Session ID drifted — server assigned a different ID than we requested.
-            // Updating activeSessionId changes wsUrl, which triggers the effect directly
-            // (no wsKey increment needed to avoid a double-reconnect).
-            setActiveSessionId(confirmedSid);
-          } else {
-            setWsKey(k => k + 1);
+    // Helper: restore history from messages array (same logic as before)
+    const restoreHistory = (history: Array<{ role: string; content: unknown; isMeta?: boolean }>) => {
+      const HANDSHAKE_TEXT = 'Hi, hand shake, say yes';
+      const firstRealIdx = history.findIndex(m =>
+        m.role === 'user' && !m.isMeta && typeof m.content === 'string' && m.content !== HANDSHAKE_TEXT
+      );
+      const conversationHistory = firstRealIdx >= 0 ? history.slice(firstRealIdx) : [];
+
+      const toolResultMap = new Map<string, { content: string; isError: boolean }>();
+      for (const m of conversationHistory) {
+        if (m.role !== 'user' || !Array.isArray(m.content)) continue;
+        for (const block of m.content as Array<Record<string, unknown>>) {
+          if (block['type'] === 'toolResult' && typeof block['toolUseId'] === 'string') {
+            const raw = block['content'];
+            const content = typeof raw === 'string'
+              ? raw
+              : Array.isArray(raw)
+                ? (raw as Array<Record<string, unknown>>).filter(b => b['type'] === 'text').map(b => String(b['text'] ?? '')).join('\n')
+                : '';
+            toolResultMap.set(block['toolUseId'] as string, { content, isError: !!block['isError'] });
           }
-        }, delay);
+        }
+      }
+
+      const restored: DisplayItem[] = [];
+      for (const m of conversationHistory) {
+        if (m.isMeta) continue;
+        if (m.role === 'user') {
+          if (typeof m.content !== 'string') continue;
+          const text = m.content;
+          const trimmed = text.trimStart();
+          if (trimmed.startsWith('<system-reminder>')) continue;
+          if (trimmed.startsWith('<context-summary>')) {
+            restored.push({ id: uid(), kind: 'compact-summary' as const, text });
+            continue;
+          }
+          restored.push({ id: uid(), kind: 'user', text });
+        } else {
+          const content = Array.isArray(m.content) ? m.content as Array<Record<string, unknown>> : [];
+          const textBlocks = bzBlocksToAssistantBlocks(content as unknown[]);
+          if (textBlocks.length) restored.push({ id: uid(), kind: 'assistant', blocks: textBlocks });
+          for (const b of content) {
+            if (b['type'] === 'toolUse' && typeof b['id'] === 'string' && typeof b['name'] === 'string') {
+              const result = toolResultMap.get(b['id']);
+              restored.push({
+                id: uid(), kind: 'tool',
+                toolUseId: b['id'], name: b['name'],
+                status: 'done', input: b['input'],
+                output: result?.content, isError: result?.isError,
+              } as DisplayItem);
+            }
+          }
+        }
+      }
+      if (restored.length) setItems(restored);
+
+      const last = conversationHistory[conversationHistory.length - 1];
+      const lastIsToolResult = last?.role === 'user' && Array.isArray(last.content) &&
+        (last.content as Array<Record<string,unknown>>).some(b => b['type'] === 'toolResult');
+      if (lastIsToolResult) {
+        setItems(prev => [...prev, {
+          id: uid(), kind: 'system' as const,
+          message: '⚠ Previous turn was interrupted mid-execution. Send your message again to continue.',
+        }]);
       }
     };
 
-    // Keepalive ping every 15s — server replies with pong so reverse proxies
-    // see bidirectional traffic and don't hit their idle-timeout threshold.
-    // Also acts as a dead-connection detector: if no pong arrives for 35s
-    // (> 2 ping intervals) the socket is considered zombie and force-closed.
-    const pingInterval = setInterval(() => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      const elapsed = Date.now() - lastPongRef.current;
-      if (elapsed > 35_000) {
-        // No pong for 35s — proxy or server silently dropped the connection.
-        // Force-close so onclose fires and the auto-reconnect kicks in.
-        ws.close();
-        return;
-      }
-      ws.send(JSON.stringify({ type: 'ping' }));
-    }, 15_000);
-
-    ws.onmessage = (event: MessageEvent<string>) => {
-      let msg: Record<string, unknown>;
-      try { msg = JSON.parse(event.data) as Record<string, unknown>; } catch { return; }
+    // Helper: handle one SSE message (same switch as the old ws.onmessage)
+    const handleMessage = (msg: Record<string, unknown>) => {
       const type = msg['type'] as string;
 
-      if (type === 'pong') { lastPongRef.current = Date.now(); return; }
-
       if (type === 'session') {
-        if (Array.isArray(msg['messages']) && (msg['messages'] as unknown[]).length > 0) {
-          console.log('[session resume] first bzcode line:', event.data);
-        }
-        setConnStatus('connected');
-        // Re-sync bzcode session mode after every (re)connect.
-        // bzcode always starts in 'default' — we must push the current mode back.
-        if (mode !== 'default') {
-          wsRef.current?.send(JSON.stringify({ type: 'setMode', mode }));
-        }
-        // Auto-send pending message from home page in YOLO mode
-        if (pendingAutoSendRef.current) {
-          const text = pendingAutoSendRef.current;
-          pendingAutoSendRef.current = null;
-          // Small delay to let bzcode finish its startup auto-run
-          setTimeout(() => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'setMode', mode: 'yolo' }));
-              setMode('yolo'); modeRef.current = 'yolo';
-              const userMsg = { id: uid(), kind: 'user' as const, text };
-              setItems(prev => [...prev, userMsg]);
-              wsRef.current.send(JSON.stringify({ type: 'user', content: text }));
-            }
-          }, 200);
-        }
+        const history = msg['messages'] as Array<{ role: string; content: unknown; isMeta?: boolean }> | undefined;
+        if (history?.length) restoreHistory(history);
         if (msg['sessionId']) {
           const sid = msg['sessionId'] as string;
           confirmedSessionIdRef.current = sid;
           localStorage.setItem(modeLSKey(sid), agentMode);
-          // Load custom/auto title for this session from server
           fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
             .then(r => r.json())
             .then((d: { sessions: SessionInfo[] }) => {
@@ -3377,87 +3359,6 @@ function AgentPage() {
         }
         if (Array.isArray(msg['modes'])) setAvailableModes(msg['modes'] as SessionMode[]);
         if (Array.isArray(msg['commands'])) setAvailableCommands(msg['commands'] as Array<{name:string;description:string;aliases?:string[]}>);
-        const history = msg['messages'] as Array<{ role: string; content: unknown; isMeta?: boolean }> | undefined;
-        if (history?.length) {
-          // Trim the internal handshake preamble: skip everything up to (but not including)
-          // the first real user message. "Real" = not isMeta AND not the handshake greeting.
-          const HANDSHAKE_TEXT = 'Hi, hand shake, say yes';
-          const firstRealIdx = history.findIndex(m =>
-            m.role === 'user' &&
-            !m.isMeta &&
-            typeof m.content === 'string' &&
-            m.content !== HANDSHAKE_TEXT
-          );
-          // conversationHistory is the slice we actually render; fall back to empty if
-          // the session only contains the handshake (no real user messages yet).
-          const conversationHistory = firstRealIdx >= 0 ? history.slice(firstRealIdx) : [];
-
-          // Pre-pass: build toolUseId → output map from user toolResult messages
-          // bzcode protocol uses camelCase: toolResult, toolUseId, isError
-          const toolResultMap = new Map<string, { content: string; isError: boolean }>();
-          for (const m of conversationHistory) {
-            if (m.role !== 'user' || !Array.isArray(m.content)) continue;
-            for (const block of m.content as Array<Record<string, unknown>>) {
-              if (block['type'] === 'toolResult' && typeof block['toolUseId'] === 'string') {
-                const raw = block['content'];
-                const content = typeof raw === 'string'
-                  ? raw
-                  : Array.isArray(raw)
-                    ? (raw as Array<Record<string, unknown>>)
-                        .filter(b => b['type'] === 'text')
-                        .map(b => String(b['text'] ?? ''))
-                        .join('\n')
-                    : '';
-                toolResultMap.set(block['toolUseId'] as string, { content, isError: !!block['isError'] });
-              }
-            }
-          }
-
-          const restored: DisplayItem[] = [];
-          for (const m of conversationHistory) {
-            if (m.isMeta) continue;
-            if (m.role === 'user') {
-              if (typeof m.content !== 'string') continue; // toolResult batches already mapped above
-              const text = m.content;
-              const trimmed = text.trimStart();
-              if (trimmed.startsWith('<system-reminder>')) continue;
-              if (trimmed.startsWith('<context-summary>')) {
-                restored.push({ id: uid(), kind: 'compact-summary' as const, text });
-                continue;
-              }
-              restored.push({ id: uid(), kind: 'user', text });
-            } else {
-              const content = Array.isArray(m.content) ? m.content as Array<Record<string, unknown>> : [];
-              // Text / thinking blocks
-              const textBlocks = bzBlocksToAssistantBlocks(content as unknown[]);
-              if (textBlocks.length) restored.push({ id: uid(), kind: 'assistant', blocks: textBlocks });
-              // Tool use blocks → restore as completed tool cards (camelCase: toolUse, id, name, input)
-              for (const b of content) {
-                if (b['type'] === 'toolUse' && typeof b['id'] === 'string' && typeof b['name'] === 'string') {
-                  const result = toolResultMap.get(b['id']);
-                  restored.push({
-                    id: uid(), kind: 'tool',
-                    toolUseId: b['id'], name: b['name'],
-                    status: 'done', input: b['input'],
-                    output: result?.content, isError: result?.isError,
-                  } as DisplayItem);
-                }
-              }
-            }
-          }
-          if (restored.length) setItems(restored);
-
-          // Detect interrupted turn: last message is a user toolResult (agent was mid-loop)
-          const last = conversationHistory[conversationHistory.length - 1];
-          const lastIsToolResult = last?.role === 'user' && Array.isArray(last.content) &&
-            (last.content as Array<Record<string,unknown>>).some(b => b['type'] === 'toolResult');
-          if (lastIsToolResult) {
-            setItems(prev => [...prev, {
-              id: uid(), kind: 'system' as const,
-              message: '⚠ Previous turn was interrupted mid-execution. Send your message again to continue.',
-            }]);
-          }
-        }
       }
 
       else if (type === 'status') {
@@ -3476,27 +3377,17 @@ function AgentPage() {
           if (msg['mode']) {
             const m = msg['mode'] as SessionMode;
             if (pendingModeRef.current) {
-              // Waiting for bzcode to confirm user-requested mode — don't revert UI yet
-              if (m === pendingModeRef.current) {
-                pendingModeRef.current = null; // confirmed — fall through to update
-              } else {
-                // bzcode hasn't switched yet — keep showing user's requested mode
-              }
+              if (m === pendingModeRef.current) pendingModeRef.current = null;
             }
             if (!pendingModeRef.current || m === modeRef.current) {
               setMode(m); modeRef.current = m;
             }
           }
-          // After compact completes, force-reconnect so bzcode starts fresh
-          // with the clean compacted history and avoids stale auto-run state
           if (wasCompacting) {
-            // Show done toast — pull the summary line from items if available
             const summary = items.findLast?.((i: DisplayItem) => i.kind === 'system' && (i as { text: string }).text.includes('compacted'));
             const summaryText = summary ? (summary as { text: string }).text : 'Context compacted';
             setCompactDoneMsg(summaryText);
             setTimeout(() => setCompactDoneMsg(null), 5000);
-            // Force a full reconnect: wsKey change tears down current WS
-            // and opens a fresh one with the clean compacted session
             setTimeout(() => setWsKey(k => k + 1), 800);
           }
         }
@@ -3508,13 +3399,10 @@ function AgentPage() {
         const existing = streamingBlocksRef.current.get(idx) ?? { type: msg['blockType'] as string, content: '' };
         existing.content += msg['content'] as string;
         streamingBlocksRef.current.set(idx, existing);
-
-        // Batch render: schedule a single RAF flush instead of re-rendering per delta
         if (streamingRafRef.current === null) {
           streamingRafRef.current = requestAnimationFrame(() => {
             streamingRafRef.current = null;
             setStreamingBlocks(streamingToBlocks(streamingBlocksRef.current));
-            // Scroll to bottom only once per animation frame
             if (scrollRafRef.current === null) {
               scrollRafRef.current = requestAnimationFrame(() => {
                 scrollRafRef.current = null;
@@ -3561,14 +3449,8 @@ function AgentPage() {
         const subtype = msg['subtype'] as string;
         const requestId = msg['requestId'] as string;
         if (subtype === 'permission') {
-          if (modeRef.current === 'yolo') {
-            // In YOLO mode auto-approve silently — use ref (not state) to avoid stale closure
-            wsRef.current?.send(JSON.stringify({
-              type: 'user', subtype: 'permission', requestId, behavior: 'always',
-            }));
-          } else {
-            setPendingPermission({ requestId, tool: msg['tool'] as string, input: msg['input'] });
-          }
+          // In yolo mode, the backend auto-approves — this prompt only arrives in non-yolo modes
+          setPendingPermission({ requestId, tool: msg['tool'] as string, input: msg['input'] });
         } else if (subtype === 'input') {
           const questions = (msg['questions'] as Question[] | undefined) ?? [];
           setPendingInput({ requestId, message: msg['message'] as string, questions });
@@ -3586,12 +3468,11 @@ function AgentPage() {
       }
 
       else if (type === 'auth_error') {
-        // Save current URL so login can redirect back and restore the session.
         sessionStorage.setItem('bz:returnUrl', window.location.href);
-        intentionalClose = true;
-        ws.close();
+        cancelled = true;
         window.location.href = '/login';
       }
+
       else if (type === 'result') {
         if (msg['usage']) setTokenUsage(msg['usage'] as TokenUsage);
         if (msg['status'] === 'success' && msg['output']) {
@@ -3604,13 +3485,128 @@ function AgentPage() {
       }
     };
 
-    return () => {
-      intentionalClose = true;
-      clearInterval(pingInterval);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      ws.close();
+    // Main: connect + stream
+    const run = async () => {
+      try {
+        // Step 1: POST /api/pool/connect
+        const connResp = await fetch(`${HTTP_BASE}/api/pool/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(connectParams),
+        });
+        if (!connResp.ok) {
+          const err = await connResp.json().catch(() => ({ detail: connResp.statusText }));
+          if (connResp.status === 401) {
+            sessionStorage.setItem('bz:returnUrl', window.location.href);
+            window.location.href = '/login';
+            return;
+          }
+          throw new Error(err.detail || connResp.statusText);
+        }
+        if (cancelled) return;
+
+        const connData = await connResp.json() as {
+          sessionId: string; messages: Array<{ role: string; content: unknown; isMeta?: boolean }>;
+          cwd: string; mode: string; sessionMode?: string;
+        };
+        const sid = connData.sessionId;
+        confirmedSessionIdRef.current = sid;
+        // Recover agent mode from server (persisted in meta.json)
+        if (connData.mode && connData.mode !== agentMode) {
+          setAgentMode(connData.mode as AgentMode);
+        }
+        localStorage.setItem(modeLSKey(sid), connData.mode || agentMode);
+        if (connData.messages?.length) restoreHistory(connData.messages);
+        // Set the bzcode runtime mode (e.g. "yolo") from the server
+        if (connData.sessionMode && connData.sessionMode !== 'default') {
+          const sm = connData.sessionMode as SessionMode;
+          setMode(sm); modeRef.current = sm;
+        }
+        setConnStatus('connected');
+        reconnectAttemptsRef.current = 0;
+
+        // Auto-send pending message
+        if (pendingAutoSendRef.current) {
+          const text = pendingAutoSendRef.current;
+          pendingAutoSendRef.current = null;
+          setItems(prev => [...prev, { id: uid(), kind: 'user' as const, text }]);
+          setTimeout(() => {
+            fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'user', content: text }),
+            }).catch(() => null);
+          }, 200);
+        }
+
+        // Load title
+        fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
+          .then(r => r.json())
+          .then((d: { sessions: SessionInfo[] }) => {
+            const s = d.sessions.find(s => s.sessionId === sid);
+            if (s?.title && s.title !== '(empty)') setSessionTitle(s.title);
+          })
+          .catch(() => null);
+
+        if (cancelled) return;
+
+        // Step 2: GET /api/pool/{id}/stream — SSE
+        abortController = new AbortController();
+        const streamResp = await fetch(
+          `${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/stream`,
+          { signal: abortController.signal },
+        );
+        if (!streamResp.ok || !streamResp.body) throw new Error('SSE stream failed');
+
+        const reader = streamResp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!cancelled) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() ?? '';
+          for (const chunk of chunks) {
+            const line = chunk.split('\n').find(l => l.startsWith('data: '));
+            if (!line) continue;
+            try {
+              const msg = JSON.parse(line.slice(6)) as Record<string, unknown>;
+              handleMessage(msg);
+            } catch { /* skip malformed */ }
+          }
+        }
+      } catch (e) {
+        if (cancelled) return;
+        console.error('[sse] connection error:', e);
+        setConnStatus('error');
+      }
+
+      // Reconnect with backoff (unless intentionally cancelled)
+      if (!cancelled) {
+        setConnStatus('disconnected');
+        const MAX_RECONNECT = 5;
+        const attempt = reconnectAttemptsRef.current;
+        if (attempt >= MAX_RECONNECT) {
+          setSessionUnavailable(true);
+          return;
+        }
+        reconnectAttemptsRef.current = attempt + 1;
+        const delay = Math.min(2_000 * Math.pow(2, attempt), 30_000);
+        reconnectTimer = setTimeout(() => {
+          if (!cancelled) setWsKey(k => k + 1);
+        }, delay);
+      }
     };
-  }, [wsUrl, wsKey]);
+
+    run();
+
+    return () => {
+      cancelled = true;
+      if (abortController) abortController.abort();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [connectParams ? JSON.stringify(connectParams) : null, wsKey]);
 
   const handlePermission = useCallback((requestId: string, behavior: 'allow' | 'deny' | 'always') => {
     sendRaw({ type: 'user', subtype: 'permission', requestId, behavior });
@@ -4095,7 +4091,7 @@ function AgentPage() {
             {/* Resuming a session: infinite pulse while loading history */}
             {connStatus === 'connecting' && activeSessionId && (
               <>
-                <BoltzbitLogo key={wsUrl} size={40} className="boltzbit-logo-animate" />
+                <BoltzbitLogo key={activeSessionId || wsKey} size={40} className="boltzbit-logo-animate" />
                 <p className="chat-loading-label">Loading chat history…</p>
               </>
             )}
@@ -4105,7 +4101,7 @@ function AgentPage() {
              connStatus === 'connected' ? (
               <>
                 <BoltzbitLogo
-                  key={wsUrl}
+                  key={activeSessionId || wsKey}
                   size={40}
                   className="boltzbit-logo-animate-settling"
                 />
