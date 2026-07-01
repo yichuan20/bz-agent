@@ -1586,6 +1586,8 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             "pid": entry.proc.pid if entry.proc else None,
             "reused": is_reuse,
             "messages": messages,
+            "modes": entry.available_modes,
+            "commands": entry.available_commands,
         }
 
     @misc_router.get("/api/pool/{session_id}/stream")

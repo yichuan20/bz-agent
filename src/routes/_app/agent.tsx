@@ -3508,6 +3508,7 @@ function AgentPage() {
         const connData = await connResp.json() as {
           sessionId: string; messages: Array<{ role: string; content: unknown; isMeta?: boolean }>;
           cwd: string; mode: string; sessionMode?: string;
+          modes?: SessionMode[]; commands?: Array<{name: string; description: string; aliases?: string[]}>;
         };
         const sid = connData.sessionId;
         confirmedSessionIdRef.current = sid;
@@ -3522,6 +3523,8 @@ function AgentPage() {
           const sm = connData.sessionMode as SessionMode;
           setMode(sm); modeRef.current = sm;
         }
+        if (connData.modes?.length) setAvailableModes(connData.modes);
+        if (connData.commands?.length) setAvailableCommands(connData.commands);
         setConnStatus('connected');
         reconnectAttemptsRef.current = 0;
 
