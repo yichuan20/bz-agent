@@ -2978,53 +2978,31 @@ function AgentPage() {
     void navigate({ to: '/agent', search: {}, replace: true });
   }, [navigate]);
 
-  // Create a new session: write config, pre-connect bzcode (showing progress), then navigate.
+  // Create a new session: connect via pool (spawns bzcode), then navigate.
   const startNewSession = useCallback(async (cwd: string, mode: AgentMode) => {
     const controller = new AbortController();
     createAbortRef.current = controller;
     sessionCreatingParamsRef.current = { cwd, mode };
     setSessionCreating(true);
     setSessionCreateError(null);
-    setSessionCreateStep('creating');
+    setSessionCreateStep('starting');
     setSessionCreateMode('create');
     try {
-      // Step 1: create session config (instant)
-      const res = await fetch(`${HTTP_BASE}/sessions/create`, {
+      const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cwd, mode }),
         signal: controller.signal,
       });
-      const data = await res.json() as { ok: boolean; sessionId?: string; error?: string; detail?: string };
-      if (!res.ok || !data.ok) {
-        setSessionCreateError(data.detail ?? data.error ?? 'Failed to create session');
+      if (!poolRes.ok) {
+        const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
+        setSessionCreateError(err.detail ?? err.error ?? 'Failed to start agent');
         return;
       }
-      const sid = data.sessionId!;
-
-      // Step 2: connect agent (bzcode cold start — the slow part)
-      setSessionCreateStep('starting');
-      const connectingTimer = setTimeout(() => setSessionCreateStep('connecting'), 12000);
-      try {
-        const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cwd, sessionId: sid, mode }),
-          signal: controller.signal,
-        });
-        if (!poolRes.ok) {
-          const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
-          setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
-          return;
-        }
-      } finally {
-        clearTimeout(connectingTimer);
-      }
-
-      // Navigate without page reload — pool/connect already warmed bzcode
+      const data = await poolRes.json() as { sessionId: string };
       setSessionCreating(false);
       setPendingNewCwd(null);
-      openSession(cwd, sid, mode as AgentMode);
+      openSession(cwd, data.sessionId, mode as AgentMode);
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         setSessionCreating(false);
