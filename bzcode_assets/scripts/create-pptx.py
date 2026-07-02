@@ -124,11 +124,22 @@ def _fill_body_placeholder(slide, bullets: list[str], body_text: str) -> bool:
 
 # ── Template mode ─────────────────────────────────────────────────────────────
 
+def _remove_all_slides(prs) -> None:
+    """Strip every slide while preserving slide masters and layouts."""
+    from pptx.oxml.ns import qn
+    sldIdLst = prs.slides._sldIdLst
+    for sldId in list(sldIdLst):
+        rId = sldId.get(qn('r:id'))
+        prs.part.drop_rel(rId)
+    sldIdLst.clear()
+
+
 def make_from_template(outline: dict, template_path: Path, out_path: Path) -> int:
     from pptx import Presentation
     from pptx.util import Pt
 
     prs = Presentation(str(template_path))
+    _remove_all_slides(prs)   # blank canvas — masters/layouts intact
     slides_data = outline.get("slides", [])
     slide_count = 0
 

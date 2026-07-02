@@ -4545,7 +4545,7 @@ body.canvas-dragging * { cursor: grabbing !important; }
   font-family: var(--font-heading);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: #a78bfa;
+  color: var(--accent-purple, #a78bfa);
   margin-bottom: 5px;
 }
 
@@ -5236,9 +5236,9 @@ pre code {
 }
 .conv-item-action-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
 .conv-item-action-btn--delete:hover { color: var(--accent-red); }
-.conv-item-action-btn--default-active { color: #f59e0b; background: color-mix(in srgb, #f59e0b 12%, transparent); }
-.conv-item-action-btn--default-active:hover { color: #f59e0b; opacity: 0.7; }
-.conv-item-default-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 5px; border-radius: 99px; background: color-mix(in srgb, #f59e0b 15%, transparent); color: #f59e0b; flex-shrink: 0; }
+.conv-item-action-btn--default-active { color: var(--accent-yellow); background: color-mix(in srgb, var(--accent-yellow) 12%, transparent); }
+.conv-item-action-btn--default-active:hover { color: var(--accent-yellow); opacity: 0.7; }
+.conv-item-default-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 5px; border-radius: 99px; background: color-mix(in srgb, var(--accent-yellow) 15%, transparent); color: var(--accent-yellow); flex-shrink: 0; }
 
 .agent-ctrl-btn--active { color: var(--accent-blue); }
 
@@ -6229,6 +6229,51 @@ pre code {
 }
 .new-session-cancel:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
+/* Session creation progress steps */
+.new-session-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.session-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-step-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  transition: all 0.2s ease;
+}
+.session-step-dot.done {
+  background: var(--accent-green, #51D390);
+  border-color: var(--accent-green, #51D390);
+  color: #000;
+}
+.session-step-dot.active {
+  border-color: var(--accent-green, #51D390);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-green, #51D390) 20%, transparent);
+}
+
+.session-step-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  transition: color 0.2s ease;
+}
+.session-step-label.active { color: var(--text-primary); font-weight: 500; }
+.session-step-label.done   { color: var(--text-secondary); }
+.session-step-secs { font-weight: 400; opacity: 0.55; font-size: var(--font-size-2xs); }
+
 
 /* ═══════════════════════════════════════════════════════════
    CODE EDITOR — SYNTAX TOKEN COLOURS
@@ -6618,20 +6663,20 @@ pre code {
 }
 .mkt-orb--2 {
   width: 420px; height: 420px;
-  background: radial-gradient(circle, rgba(138,43,226,0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
   bottom: -60px; left: -80px;
   animation: mkt-float2 16s ease-in-out infinite;
 }
 .mkt-orb--3 {
   width: 300px; height: 300px;
-  background: radial-gradient(circle, rgba(45,185,112,0.09) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(34,197,94,0.09) 0%, transparent 70%);
   top: 30%; left: 20%;
   animation: mkt-float 20s ease-in-out infinite reverse;
 }
 
-[data-theme="dark"] .mkt-orb--1 { background: radial-gradient(circle, rgba(46,136,255,0.22) 0%, transparent 70%); }
-[data-theme="dark"] .mkt-orb--2 { background: radial-gradient(circle, rgba(160,60,255,0.16) 0%, transparent 70%); }
-[data-theme="dark"] .mkt-orb--3 { background: radial-gradient(circle, rgba(63,220,126,0.12) 0%, transparent 70%); }
+[data-theme="dark"] .mkt-orb--1 { background: radial-gradient(circle, rgba(20,115,223,0.22) 0%, transparent 70%); }
+[data-theme="dark"] .mkt-orb--2 { background: radial-gradient(circle, rgba(139,92,246,0.16) 0%, transparent 70%); }
+[data-theme="dark"] .mkt-orb--3 { background: radial-gradient(circle, rgba(34,197,94,0.12) 0%, transparent 70%); }
 
 /* ── Feature sections ── */
 .mkt-features-wrap { background: var(--bg-secondary); }

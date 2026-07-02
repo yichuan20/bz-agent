@@ -1347,132 +1347,29 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
     @sessions_router.post("/sessions/create")
     async def create_session_with_handshake(body: CreateSessionBody):
-        """Pre-create a session: write config, spawn bzcode, run a handshake exchange,
-        then terminate bzcode. Returns the confirmed sessionId so the frontend can
-        resume a verified session instead of opening a raw unconfirmed connection."""
+        """Pre-create a session: write config, pre-warm bzcode in background, return immediately."""
         import secrets as _sec2
-        import shutil as _sh
-        _bz = app.state.bzcode_path
         effective_cwd = (body.cwd if body.cwd and os.path.isdir(body.cwd)
                          else app.state.default_cwd)
         mode = body.mode or _load_mode_config().get("default", "general")
-
         session_id = f"bz-{_sec2.token_hex(6)}"
         _write_session_config(session_id, mode, working_dir=effective_cwd)
 
-        # Resolve and validate bzcode path (same logic as ws_endpoint)
-        bz_resolved = _sh.which(_bz) or _bz
-        if not os.path.isfile(bz_resolved):
-            raise HTTPException(500, f"bzcode not found: '{_bz}'")
-        if not os.access(bz_resolved, os.X_OK):
+        # Pre-warm: start bzcode now so it's ready when the browser redirects and connects.
+        _bzcode = app.state.bzcode_path
+        _bz_home = getattr(app.state, 'bz_home', None)
+        cmd = [_bzcode, "--stdio", "--resume", session_id]
+        env = {**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
+               **({"BZ_HOME": _bz_home} if _bz_home else {})}
+
+        async def _prewarm():
             try:
-                os.chmod(bz_resolved, 0o755)
-            except OSError:
-                raise HTTPException(500, f"bzcode is not executable: {bz_resolved}")
+                await agent_pool.get_or_create(session_id, effective_cwd, mode, _bzcode, cmd, env)
+            except Exception as _e:
+                print(f"[session] prewarm failed for {session_id}: {_e}", file=sys.stderr)
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                bz_resolved, "--stdio", "--resume", session_id,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=effective_cwd,
-                env={**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable},
-                limit=16 * 1024 * 1024,
-            )
-        except (FileNotFoundError, PermissionError) as exc:
-            raise HTTPException(500, f"Failed to start bzcode: {exc}")
-
-        confirmed_id = session_id
-        try:
-            _entry_cfg = _load_mode_config().get("modes", {}).get(mode, {})
-            _session_mode = (_entry_cfg.get("settings") or {}).get("mode", "")
-            if _session_mode:
-                proc.stdin.write(json.dumps({"type": "setMode", "mode": _session_mode}).encode() + b"\n")
-                await proc.stdin.drain()
-
-            # Wait for session message (bzcode ready)
-            try:
-                while True:
-                    line = await asyncio.wait_for(proc.stdout.readline(), timeout=20.0)
-                    if not line:
-                        raise HTTPException(500, "bzcode exited before sending session message")
-                    raw = line.decode().rstrip('\n')
-                    if raw and raw[0] == '{':
-                        try:
-                            msg = json.loads(raw)
-                            if msg.get('type') == 'session':
-                                confirmed_id = msg.get('sessionId', session_id)
-                                break
-                        except json.JSONDecodeError:
-                            pass
-            except asyncio.TimeoutError:
-                raise HTTPException(504, "bzcode startup timed out after 20s")
-
-            # Send handshake
-            handshake = json.dumps({"type": "user", "content": "Hi, hand shake, say yes"}) + "\n"
-            proc.stdin.write(handshake.encode())
-            await proc.stdin.drain()
-
-            # Wait for bzcode to finish processing the handshake.
-            # Capture any error message so we can surface it to the caller.
-            _handshake_error: list[str] = []
-
-            async def _wait_reply() -> bool:
-                while True:
-                    line = await proc.stdout.readline()
-                    if not line:
-                        return False
-                    raw = line.decode().rstrip('\n')
-                    if not raw or raw[0] != '{':
-                        continue
-                    try:
-                        msg = json.loads(raw)
-                        mtype = msg.get('type')
-                        if mtype == 'result':
-                            if msg.get('status') == 'error':
-                                err = msg.get('error') or msg.get('message') or 'Model call failed during handshake'
-                                _handshake_error.append(str(err))
-                                return False
-                            # Only a non-error result means the model actually replied.
-                            # status:idle alone is NOT sufficient — it fires even on failure.
-                            return True
-                    except json.JSONDecodeError:
-                        pass
-
-            try:
-                ok = await asyncio.wait_for(_wait_reply(), timeout=60.0)
-            except asyncio.TimeoutError:
-                raise HTTPException(504, "Handshake timed out — model may be unreachable")
-            if not ok:
-                err_detail = _handshake_error[0] if _handshake_error else "bzcode exited during handshake"
-                raise HTTPException(500, err_detail)
-
-            # Close stdin so bzcode sees EOF and flushes its JSONL to disk.
-            try:
-                proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except (asyncio.TimeoutError, ProcessLookupError):
-                pass  # fall through to terminate in finally
-
-            return {"ok": True, "sessionId": confirmed_id}
-
-        finally:
-            # Ensure process is dead (noop if already exited above).
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except (asyncio.TimeoutError, ProcessLookupError):
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
+        asyncio.create_task(_prewarm())
+        return {"ok": True, "sessionId": session_id}
 
     # ── Search / token-stats / agent-modes / settings (misc) ─────────────────
 

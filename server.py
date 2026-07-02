@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.2.4.3"
+BACKEND_VERSION = "0.3.0"
 
 import asyncio
 import json
@@ -575,7 +575,14 @@ def _canvas_file(session_id: str, cwd: str) -> Path:
 
 # One persistent bzcode process per WhatsApp phone number.
 _whatsapp_sessions: dict = {}
-_whatsapp_lock = asyncio.Lock()
+_whatsapp_lock: Optional[asyncio.Lock] = None
+
+
+def _get_whatsapp_lock() -> asyncio.Lock:
+    global _whatsapp_lock
+    if _whatsapp_lock is None:
+        _whatsapp_lock = asyncio.Lock()
+    return _whatsapp_lock
 
 
 class _WASess:
@@ -1206,12 +1213,14 @@ class AgentPool:
 
     def __init__(self, idle_timeout: float = 300.0):
         self._entries: dict[str, AgentPoolEntry] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None  # created in start() inside the running loop
         self._idle_timeout = idle_timeout
         self._idle_check_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
         """Start the idle-timeout sweeper. Call from FastAPI lifespan startup."""
+        # Create the lock here so it's bound to the running event loop (Python 3.8 compat).
+        self._lock = asyncio.Lock()
         self._idle_check_task = asyncio.create_task(self._idle_sweeper())
         print(f"[pool] started  idle_timeout={self._idle_timeout}s", file=sys.stderr)
 

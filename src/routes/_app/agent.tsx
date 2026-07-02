@@ -41,10 +41,11 @@ import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
 import { EditorPanel }  from '#/components/EditorPanel';
 
 export const Route = createFileRoute('/_app/agent')({
-  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string; mode?: AgentMode } => ({
+  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string; mode?: AgentMode; isNew?: boolean } => ({
     ...(typeof search['cwd']       === 'string' && search['cwd']       ? { cwd:       search['cwd'] as string }       : {}),
     ...(typeof search['sessionId'] === 'string' && search['sessionId'] ? { sessionId: search['sessionId'] as string } : {}),
     ...(typeof search['mode']      === 'string' && AGENT_MODES.includes(search['mode'] as AgentMode) ? { mode: search['mode'] as AgentMode } : {}),
+    ...(search['new'] === '1' ? { isNew: true } : {}),
   }),
   component: AgentPage,
 });
@@ -2836,6 +2837,35 @@ function BoltzingIndicator({ variant = 'chat' }: { variant?: 'chat' | 'float' })
   );
 }
 
+// ── Session-create progress step ─────────────────────────────────────────────
+
+function SessionStep({ done, active, label }: { done: boolean; active: boolean; label: string }) {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    if (!active) { setSecs(0); return; }
+    setSecs(0);
+    const t = setInterval(() => setSecs(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+
+  let hint = '';
+  if (active && secs >= 8)  hint = `${secs}s`;
+  if (active && secs >= 25) hint = `${secs}s — loading history…`;
+  if (active && secs >= 45) hint = `${secs}s — large history, almost there`;
+
+  return (
+    <div className="session-step">
+      <span className={`session-step-dot${done ? ' done' : active ? ' active' : ''}`}>
+        {done ? '✓' : active ? '·' : ''}
+      </span>
+      <span className={`session-step-label${done ? ' done' : active ? ' active' : ''}`}>
+        {label}
+        {hint && <span className="session-step-secs"> — {hint}</span>}
+      </span>
+    </div>
+  );
+}
+
 // ── Session-create error panel ────────────────────────────────────────────────
 
 function SessionCreateErrorPanel({
@@ -2890,7 +2920,7 @@ function SessionCreateErrorPanel({
 
 function AgentPage() {
   // ── Session routing ─────────────────────────────────────────────────────────
-  const { cwd: searchCwd, sessionId: searchSessionId, mode: searchMode } = Route.useSearch();
+  const { cwd: searchCwd, sessionId: searchSessionId, mode: searchMode, isNew: searchIsNew } = Route.useSearch();
   const navigate = useNavigate();
 
   const [view,           setView]           = useState<'list' | 'chat'>(() => searchCwd ? 'chat' : 'list');
@@ -2911,9 +2941,11 @@ function AgentPage() {
   const [docViewerLoading, setDocViewerLoading] = useState(false);
   // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
   const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
-  // Session creation handshake state
+  // Session creation state
   const [sessionCreating,     setSessionCreating]     = useState(false);
   const [sessionCreateError,  setSessionCreateError]  = useState<string | null>(null);
+  const [sessionCreateStep,   setSessionCreateStep]   = useState<'creating' | 'starting' | 'connecting'>('creating');
+  const [sessionCreateMode,   setSessionCreateMode]   = useState<'create' | 'resume'>('create');
   // BZ_API_KEY form shown inside the session-create error panel
   const [apiKeyValue,       setApiKeyValue]       = useState('');
   const [apiKeySaving,      setApiKeySaving]      = useState(false);
@@ -2946,15 +2978,17 @@ function AgentPage() {
     void navigate({ to: '/agent', search: {}, replace: true });
   }, [navigate]);
 
-  // Create a new session via server-side handshake before opening chat.
-  // Shows a loading overlay while bzcode initialises, and an error if it fails.
+  // Create a new session: write config, pre-connect bzcode (showing progress), then navigate.
   const startNewSession = useCallback(async (cwd: string, mode: AgentMode) => {
     const controller = new AbortController();
     createAbortRef.current = controller;
     sessionCreatingParamsRef.current = { cwd, mode };
     setSessionCreating(true);
     setSessionCreateError(null);
+    setSessionCreateStep('creating');
+    setSessionCreateMode('create');
     try {
+      // Step 1: create session config (instant)
       const res = await fetch(`${HTTP_BASE}/sessions/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2967,11 +3001,32 @@ function AgentPage() {
         return;
       }
       const sid = data.sessionId!;
-      const params = new URLSearchParams({ cwd, sessionId: sid, mode });
-      window.location.href = `/agent?${params}`;
+
+      // Step 2: connect agent (bzcode cold start — the slow part)
+      setSessionCreateStep('starting');
+      const connectingTimer = setTimeout(() => setSessionCreateStep('connecting'), 12000);
+      try {
+        const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cwd, sessionId: sid, mode }),
+          signal: controller.signal,
+        });
+        if (!poolRes.ok) {
+          const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
+          setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
+          return;
+        }
+      } finally {
+        clearTimeout(connectingTimer);
+      }
+
+      // Navigate without page reload — pool/connect already warmed bzcode
+      setSessionCreating(false);
+      setPendingNewCwd(null);
+      openSession(cwd, sid, mode as AgentMode);
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
-        // User cancelled — close overlay silently
         setSessionCreating(false);
         setPendingNewCwd(null);
         return;
@@ -2979,7 +3034,44 @@ function AgentPage() {
       setSessionCreateError('Could not reach the server');
       setSessionCreating(false);
     }
-  }, []);
+  }, [openSession]);
+
+  // Resume an existing session: connect bzcode (showing progress), then navigate.
+  const connectAndOpenSession = useCallback(async (cwd: string, sessionId: string, mode?: AgentMode) => {
+    const resolvedMode = mode ?? (localStorage.getItem(modeLSKey(sessionId)) as AgentMode | null) ?? agentMode;
+    const controller = new AbortController();
+    createAbortRef.current = controller;
+    sessionCreatingParamsRef.current = { cwd, mode: resolvedMode };
+    setSessionCreating(true);
+    setSessionCreateError(null);
+    setSessionCreateStep('starting');
+    setSessionCreateMode('resume');
+    const connectingTimer = setTimeout(() => setSessionCreateStep('connecting'), 12000);
+    try {
+      const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd, sessionId, mode: resolvedMode }),
+        signal: controller.signal,
+      });
+      if (!poolRes.ok) {
+        const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
+        setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
+        return;
+      }
+      setSessionCreating(false);
+      openSession(cwd, sessionId, resolvedMode);
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') {
+        setSessionCreating(false);
+        return;
+      }
+      setSessionCreateError('Could not reach the server');
+      setSessionCreating(false);
+    } finally {
+      clearTimeout(connectingTimer);
+    }
+  }, [openSession, agentMode]);
 
   const cancelSessionCreate = useCallback(() => {
     createAbortRef.current?.abort();
@@ -3274,9 +3366,17 @@ function AgentPage() {
     // Helper: restore history from messages array (same logic as before)
     const restoreHistory = (history: Array<{ role: string; content: unknown; isMeta?: boolean }>) => {
       const HANDSHAKE_TEXT = 'Hi, hand shake, say yes';
-      const firstRealIdx = history.findIndex(m =>
-        m.role === 'user' && !m.isMeta && typeof m.content === 'string' && m.content !== HANDSHAKE_TEXT
-      );
+      const firstRealIdx = history.findIndex(m => {
+        if (m.role !== 'user' || m.isMeta) return false;
+        if (typeof m.content === 'string') return m.content !== HANDSHAKE_TEXT;
+        // Array content: real if it has any text or image block
+        if (Array.isArray(m.content)) {
+          return (m.content as Array<Record<string, unknown>>).some(
+            b => b['type'] === 'text' || b['type'] === 'image'
+          );
+        }
+        return false;
+      });
       const conversationHistory = firstRealIdx >= 0 ? history.slice(firstRealIdx) : [];
 
       const toolResultMap = new Map<string, { content: string; isError: boolean }>();
@@ -3299,15 +3399,38 @@ function AgentPage() {
       for (const m of conversationHistory) {
         if (m.isMeta) continue;
         if (m.role === 'user') {
-          if (typeof m.content !== 'string') continue;
-          const text = m.content;
+          let text: string;
+          let attachments: AnyAttachment[] | undefined;
+          if (typeof m.content === 'string') {
+            text = m.content;
+          } else if (Array.isArray(m.content)) {
+            const blocks = m.content as Array<Record<string, unknown>>;
+            text = blocks
+              .filter(b => b['type'] === 'text')
+              .map(b => String(b['text'] ?? ''))
+              .join('');
+            const imgBlocks = blocks.filter(b => b['type'] === 'image');
+            if (imgBlocks.length) {
+              attachments = imgBlocks.map(b => {
+                const src = b['source'] as Record<string, unknown> | undefined;
+                return {
+                  data:      String(src?.['data'] ?? ''),
+                  mediaType: String(src?.['mediaType'] ?? 'image/png'),
+                  name:      'image',
+                } as AnyAttachment;
+              });
+            }
+            if (!text && !attachments?.length) continue;
+          } else {
+            continue;
+          }
           const trimmed = text.trimStart();
           if (trimmed.startsWith('<system-reminder>')) continue;
           if (trimmed.startsWith('<context-summary>')) {
             restored.push({ id: uid(), kind: 'compact-summary' as const, text });
             continue;
           }
-          restored.push({ id: uid(), kind: 'user', text });
+          restored.push({ id: uid(), kind: 'user', text: text || '(image)', attachments });
         } else {
           const content = Array.isArray(m.content) ? m.content as Array<Record<string, unknown>> : [];
           const textBlocks = bzBlocksToAssistantBlocks(content as unknown[]);
@@ -3873,7 +3996,7 @@ function AgentPage() {
     return (
       <div className="agent-page">
         <SessionListPage
-          onSelect={(sessionId, cwd) => openSession(cwd, sessionId)}
+          onSelect={(sessionId, cwd) => void connectAndOpenSession(cwd, sessionId)}
           onNew={(cwd) => setPendingNewCwd(cwd)}
         />
         {(pendingNewCwd || sessionCreating || sessionCreateError) && (
@@ -3882,8 +4005,11 @@ function AgentPage() {
               {sessionCreating && (
                 <>
                   <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
-                  <p className="new-session-title">Starting session…</p>
-                  <p className="new-session-hint">Verifying agent is ready. This takes a few seconds.</p>
+                  <div className="new-session-steps">
+                    <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
+                    <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
+                    <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
+                  </div>
                   {showApiKeyPrompt && (
                     <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
@@ -4039,7 +4165,7 @@ function AgentPage() {
               cwd={activeCwd}
               activeSessionId={activeSessionId}
               httpBase={HTTP_BASE}
-              onSelect={sessionId => { openSession(activeCwd, sessionId); setShowConversations(false); }}
+              onSelect={sessionId => { void connectAndOpenSession(activeCwd, sessionId); setShowConversations(false); }}
               onNew={() => { setShowConversations(false); setPendingNewCwd(activeCwd); }}
               onClose={() => setShowConversations(false)}
             />
@@ -4091,17 +4217,16 @@ function AgentPage() {
         <div ref={scrollRef} className="chat-messages">
         {allItems.length === 0 ? (
           <div className="chat-empty">
-            {/* Resuming a session: infinite pulse while loading history */}
-            {connStatus === 'connecting' && activeSessionId && (
+            {/* Connecting state: show for any session while bzcode is starting */}
+            {connStatus === 'connecting' && (
               <>
                 <BoltzbitLogo key={activeSessionId || wsKey} size={40} className="boltzbit-logo-animate" />
-                <p className="chat-loading-label">Loading chat history…</p>
+                <p className="chat-loading-label">Connecting…</p>
               </>
             )}
 
-            {/* New chat opening: one-shot settling pulse (matches VSCode new-tab animation) */}
-            {(connStatus === 'connecting' && !activeSessionId) ||
-             connStatus === 'connected' ? (
+            {/* Connected with empty chat: one-shot settling pulse */}
+            {connStatus === 'connected' ? (
               <>
                 <BoltzbitLogo
                   key={activeSessionId || wsKey}
@@ -4660,9 +4785,12 @@ function AgentPage() {
           {sessionCreating && (
             <>
               <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
-              <p className="new-session-title">Starting session…</p>
-              <p className="new-session-hint">Verifying agent is ready. This takes a few seconds.</p>
-              {showApiKeyPrompt && (
+              <div className="new-session-steps">
+                <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
+                <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
+                <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
+              </div>
+              {showApiKeyPrompt && sessionCreateMode !== 'resume' && (
                 <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
                   <input
