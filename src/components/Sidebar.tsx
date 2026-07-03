@@ -17,9 +17,7 @@ import {
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
 import { clearAccessToken } from '#/auth-store';
-import { FRONTEND_VERSION } from '#/version';
 
 const SIDEBAR_WIDTH = 220;   // px — matches bz-codespace --spacing-bl-sidebar
 
@@ -31,26 +29,15 @@ const NAV_ITEMS = [
 ] as const;
 
 interface SidebarProps {
-  open:          boolean;
-  onMouseLeave?: () => void;
-  onCollapse?:   () => void;
+  open:             boolean;
+  onMouseLeave?:    () => void;
+  onCollapse?:      () => void;
+  bzcodeOutdated?:  boolean;
 }
 
-const AGENT_HTTP =
-  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
-
-export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps) {
+export default function Sidebar({ open, onMouseLeave, onCollapse, bzcodeOutdated }: SidebarProps) {
   const navigate = useNavigate();
   const { location } = useRouterState();
-  const [backendVersion, setBackendVersion] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${AGENT_HTTP}/api/version`)
-      .then(r => r.json())
-      .then((d: { backend: string }) => setBackendVersion(d.backend))
-      .catch(() => {/* non-fatal */});
-  }, []);
 
   function isActive(to: string, exact: boolean) {
     return exact ? location.pathname === to : location.pathname.startsWith(to);
@@ -219,7 +206,19 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
             }
           }}
         >
-          <GearIcon size={15} weight={isActive('/settings', false) ? 'fill' : 'regular'} style={{ flexShrink: 0 }} />
+          <span style={{ position: 'relative', flexShrink: 0, display: 'flex' }}>
+            <GearIcon size={15} weight={isActive('/settings', false) ? 'fill' : 'regular'} />
+            {bzcodeOutdated && (
+              <span style={{
+                position: 'absolute', top: -3, right: -3,
+                width: 7, height: 7,
+                borderRadius: '50%',
+                background: '#f97316',
+                border: '1.5px solid var(--bg-primary)',
+                pointerEvents: 'none',
+              }} />
+            )}
+          </span>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>Settings</span>
         </Link>
 
@@ -295,19 +294,6 @@ export default function Sidebar({ open, onMouseLeave, onCollapse }: SidebarProps
           <span>Sign out</span>
         </button>
 
-        {/* Version badge */}
-        <div style={{
-          marginTop: 8,
-          padding: '4px 8px',
-          fontSize: 10,
-          color: 'var(--text-tertiary)',
-          fontFamily: 'var(--font-heading)',
-          letterSpacing: '0.03em',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-        }}>
-          FE v{FRONTEND_VERSION}{backendVersion ? ` · BE v${backendVersion}` : ''}
-        </div>
       </div>
     </aside>
   );

@@ -17,7 +17,7 @@ import {
   SunIcon,
   SignOutIcon,
 } from '@phosphor-icons/react';
-import { BoltzAgentMark } from '#/components/BoltzAgentMark';
+import { BoltzAgentLogo } from '#/components/BoltzAgentLogo';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { clearAccessToken } from '#/auth-store';
@@ -166,7 +166,7 @@ const TopBar: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {/* Logo mark + app name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BoltzAgentMark size={22} color="#51D390" />
+          <BoltzAgentLogo size={24} />
           <span style={{
             fontSize: 15, fontWeight: 700,
             color: 'var(--text-primary)',

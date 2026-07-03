@@ -319,6 +319,49 @@ async def lifespan(app: FastAPI):
 
     await agent_pool.start()
 
+    # ── bzcode version detection (run once at startup) ────────────────────────
+    app.state.bzcode_version = None
+    app.state.bzcode_latest  = None
+    try:
+        import shutil as _shv, re as _rev, aiohttp as _aio_v
+        _bzc = app.state.bzcode_path
+        _bzc_resolved = _shv.which(_bzc) or _bzc
+        if os.path.isfile(_bzc_resolved):
+            _vp = await asyncio.create_subprocess_exec(
+                _bzc_resolved, "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _vout, _ = await asyncio.wait_for(_vp.communicate(), timeout=10)
+            _vm = _rev.search(r'(\d+\.\d+[\.\d]*)', _vout.decode())
+            if _vm:
+                app.state.bzcode_version = _vm.group(1)
+                print(f"[startup] bzcode version: {app.state.bzcode_version}", file=sys.stderr)
+    except Exception as _ve:
+        print(f"[startup] bzcode version check failed: {_ve}", file=sys.stderr)
+
+    try:
+        import aiohttp as _aio_l
+        async with _aio_l.ClientSession() as _ls:
+            async with _ls.get(
+                "https://boltzhub.com/bz-appstore-api/v1/bzcode/latest",
+                timeout=_aio_l.ClientTimeout(total=8),
+                ssl=False,
+            ) as _lr:
+                if _lr.ok:
+                    import re as _rel2
+                    _ld = await _lr.json(content_type=None)
+                    _lv = (_ld.get("version") or _ld.get("latestVersion")
+                           or _ld.get("tag") or "")
+                    if not _lv and isinstance(_ld, str):
+                        _lv = _ld
+                    _lm = _rel2.search(r'(\d+\.\d+[\.\d]*)', str(_lv))
+                    if _lm:
+                        app.state.bzcode_latest = _lm.group(1)
+                        print(f"[startup] bzcode latest: {app.state.bzcode_latest}", file=sys.stderr)
+    except Exception as _le:
+        print(f"[startup] bzcode latest check failed: {_le}", file=sys.stderr)
+
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
@@ -889,7 +932,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
     @misc_router.get("/api/version")
     async def api_version():
-        return {"backend": BACKEND_VERSION}
+        return {
+            "backend":       BACKEND_VERSION,
+            "bzcode":        getattr(app.state, "bzcode_version", None),
+            "bzcode_latest": getattr(app.state, "bzcode_latest",  None),
+        }
 
     @misc_router.get("/api/apikey-status")
     async def apikey_status():

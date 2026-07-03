@@ -3,6 +3,7 @@ import {
   CaretDownIcon,
   CaretRightIcon,
   HardDriveIcon,
+  InfoIcon,
   LinkIcon,
   TrashIcon,
   WarningCircleIcon,
@@ -10,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
+import { FRONTEND_VERSION } from '#/version';
 
 export const Route = createFileRoute('/_app/settings')({
   component: SettingsPage,
@@ -101,6 +103,98 @@ function fmtBytes(b: number): string {
 function pct(used: number, total: number): number {
   if (!total) return 0;
   return Math.round((used / total) * 100);
+}
+
+// ── Version section ───────────────────────────────────────────────────────────
+
+type VersionInfo = { backend?: string; bzcode?: string | null; bzcode_latest?: string | null };
+
+function VersionSection() {
+  const [info, setInfo] = useState<VersionInfo | null>(null);
+
+  useEffect(() => {
+    fetch(`${HTTP_BASE}/api/version`)
+      .then(r => r.json())
+      .then((d: VersionInfo) => setInfo(d))
+      .catch(() => null);
+  }, []);
+
+  function isOutdated(): boolean {
+    if (!info?.bzcode || !info?.bzcode_latest) return false;
+    const parse = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0);
+    const cur = parse(info.bzcode);
+    const lat = parse(info.bzcode_latest);
+    for (let i = 0; i < Math.max(cur.length, lat.length); i++) {
+      const c = cur[i] ?? 0, l = lat[i] ?? 0;
+      if (c < l) return true;
+      if (c > l) return false;
+    }
+    return false;
+  }
+
+  const rowStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '6px 0',
+    borderBottom: '1px solid var(--border-primary)',
+    fontSize: 13,
+  };
+  const labelStyle: React.CSSProperties = { color: 'var(--text-secondary)', minWidth: 80 };
+  const codeStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
+    color: 'var(--text-primary)',
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-primary)',
+    borderRadius: 4, padding: '2px 6px',
+  };
+  const metaStyle: React.CSSProperties = { color: 'var(--text-tertiary)', fontSize: 11, marginLeft: 'auto' };
+
+  return (
+    <section className="settings-section">
+      <h2 className="settings-section-title">
+        <InfoIcon size={15} />
+        Version Information
+      </h2>
+      <div className="settings-cards">
+        <div className="settings-card">
+          <div style={{ ...rowStyle }}>
+            <span style={labelStyle}>Frontend</span>
+            <code style={codeStyle}>v{FRONTEND_VERSION}</code>
+          </div>
+          <div style={{ ...rowStyle }}>
+            <span style={labelStyle}>Backend</span>
+            <code style={codeStyle}>{info?.backend ? `v${info.backend}` : '—'}</code>
+          </div>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <span style={labelStyle}>bzcode</span>
+            <code style={codeStyle}>{info?.bzcode ? `v${info.bzcode}` : '—'}</code>
+            {info?.bzcode_latest && (
+              <span style={metaStyle}>latest: v{info.bzcode_latest}</span>
+            )}
+          </div>
+          {isOutdated() && (
+            <a
+              href="https://boltzagent.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                marginTop: 12, padding: '9px 12px',
+                background: 'rgba(249,115,22,0.08)',
+                border: '1px solid rgba(249,115,22,0.30)',
+                borderRadius: 7,
+                color: '#f97316', fontSize: 12,
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              <WarningCircleIcon size={14} weight="fill" style={{ flexShrink: 0 }} />
+              bzcode update available — visit boltzagent.com to update
+            </a>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 // ── Resource card ─────────────────────────────────────────────────────────────
@@ -417,6 +511,7 @@ function SettingsPage() {
         <p className="settings-subtitle">Manage resources, integrations, and credentials</p>
       </div>
       <div className="settings-body">
+        <VersionSection />
         <ResourcesSection />
         <IntegrationsSection />
       </div>
