@@ -88,7 +88,6 @@ from server import (
     _write_app_config,
     _load_code,
     _code_path,
-    DB_CONFIG,
     handle_ws_client,
     _write_bzcode_credentials,
     _read_api_keys,
@@ -108,10 +107,7 @@ from server import (
     # _add_frontend kept separate — called after app is built
 )
 
-try:
-    import asyncpg
-except ImportError:
-    asyncpg = None  # type: ignore
+
 
 
 # ── Pydantic request models ───────────────────────────────────────────────────
@@ -300,23 +296,7 @@ class BzHubPublishBody(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
-    if asyncpg is not None:
-        try:
-            pool = await asyncpg.create_pool(**DB_CONFIG, min_size=2, max_size=10)
-            app.state.db = pool
-            print(
-                f"[db] connected  host={DB_CONFIG['host']}:{DB_CONFIG['port']}"
-                f"  db={DB_CONFIG['database']}",
-                file=sys.stderr,
-            )
-        except Exception as exc:
-            app.state.db = None
-            print(f"[db] connection failed (server continues without DB): {exc}",
-                  file=sys.stderr)
-    else:
-        app.state.db = None
-        print("[db] asyncpg not installed — Postgres disabled", file=sys.stderr)
-
+    app.state.db = None
     await agent_pool.start()
 
     # ── bzcode version detection (run once at startup) ────────────────────────
@@ -366,9 +346,6 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     await agent_pool.stop()
-    if getattr(app.state, "db", None) is not None:
-        await app.state.db.close()
-        print("[db] pool closed", file=sys.stderr)
 
 
 # ── PPTX binary export (shared by load + save) ───────────────────────────────
@@ -1671,8 +1648,23 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
         )
 
+    @files_router.get("/api/file/view")
+    async def file_view(path: str = Query(...)):
+        import mimetypes as _mt
+        p = Path(path)
+        if not p.exists() or p.is_dir():
+            raise HTTPException(404, "file not found")
+        mime, _ = _mt.guess_type(str(p))
+        mime = mime or "application/octet-stream"
+        from fastapi.responses import Response as _Resp
+        return _Resp(
+            content=p.read_bytes(),
+            media_type=mime,
+            headers={"Content-Disposition": f'inline; filename="{p.name}"'},
+        )
+
     @files_router.post("/api/file/upload")
-    async def file_upload(request: Request):
+    async def file_upload(request: Request, background_tasks: BackgroundTasks):
         form = await request.form()
         upload = form.get("file")
         dir_path = str(form.get("dir", "")).strip() or app.state.default_cwd
@@ -1690,7 +1682,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 dest = dest.parent / f"{stem} ({n}){suffix}"
                 n += 1
         dest.write_bytes(data)
-        return {"ok": True, "path": str(dest), "name": dest.name}
+        ppt_processing = dest.suffix.lower() in ('.pptx', '.ppt')
+        if ppt_processing:
+            # Parse and write sidecar in background so it's ready before first open
+            background_tasks.add_task(ppt_load, path=str(dest))
+        return {"ok": True, "path": str(dest), "name": dest.name, "pptProcessing": ppt_processing}
 
     @files_router.post("/api/file/mkdir")
     async def file_mkdir(body: dict):
@@ -2661,8 +2657,27 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                                     pass
                                 try:
                                     fn = run.font.name
+                                    if not fn:
+                                        # run.font.name misses <a:latin> set via XML directly
+                                        _rpr = run._r.find(_qn('a:rPr'))
+                                        if _rpr is not None:
+                                            _lat = _rpr.find(_qn('a:latin'))
+                                            if _lat is not None:
+                                                _tf = _lat.get('typeface', '')
+                                                # skip theme-font aliases (+mj-lt / +mn-lt)
+                                                if _tf and not _tf.startswith('+'):
+                                                    fn = _tf
                                     if fn:
                                         rs['fontFamily'] = fn
+                                except Exception:
+                                    pass
+                                try:
+                                    # spc = character spacing in hundredths of a point (can be negative)
+                                    _rpr2 = run._r.find(_qn('a:rPr'))
+                                    if _rpr2 is not None:
+                                        _spc = _rpr2.get('spc')
+                                        if _spc is not None:
+                                            rs['letterSpacing'] = int(_spc) / 100
                                 except Exception:
                                     pass
                                 try:
@@ -2722,7 +2737,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                         except Exception:
                             pass
 
-                        # Text vertical anchor from bodyPr
+                        # Text vertical anchor and internal margins from bodyPr
                         try:
                             _txBody_t = shape._element.find(_qn('p:txBody'))
                             if _txBody_t is not None:
@@ -2731,6 +2746,18 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                                     _anchor = _bpr_t.get('anchor', '')
                                     if _anchor:
                                         box_style['textAnchor'] = _anchor
+                                    # Store internal margins as canvas pixels (default 91440 EMU = 0.1in each side)
+                                    _l = int(_bpr_t.get('lIns', '91440') or '91440')
+                                    _r = int(_bpr_t.get('rIns', '91440') or '91440')
+                                    _t = int(_bpr_t.get('tIns', '45720') or '45720')
+                                    _b = int(_bpr_t.get('bIns', '45720') or '45720')
+                                    box_style['padL'] = round(_l * sx, 2)
+                                    box_style['padR'] = round(_r * sx, 2)
+                                    box_style['padT'] = round(_t * sy, 2)
+                                    box_style['padB'] = round(_b * sy, 2)
+                                    # normAutofit: box was sized to fit text, no soft word-wrap needed
+                                    if _bpr_t.find(_qn('a:normAutofit')) is not None:
+                                        box_style['normAutofit'] = True
                         except Exception:
                             pass
 
@@ -2767,14 +2794,75 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     except Exception:
                         pass
 
+                slide_width_pt = int(sw / 12700)
+                # Pre-compute text layout (line breaks, positions, overflow) server-side
+                try:
+                    from ppt_layout import compute_slide_layouts
+                    compute_slide_layouts(boxes, slide_width_pt)
+                except Exception as _le:
+                    import sys as _sys
+                    print(f'[ppt_layout] skipped: {_le}', file=_sys.stderr)
                 slide_out = {'bgColor': bg_color, 'boxes': boxes,
-                            'slideWidthPt': int(sw / 12700)}
+                            'slideWidthPt': slide_width_pt}
                 if bg_gradient:
                     slide_out['bgGradient'] = bg_gradient
                 slides_out.append(slide_out)
+            # Write sidecar atomically so future loads are instant and edits persist
+            import json as _json_w, tempfile as _tmpw, shutil as _shuw, os as _osw
+            try:
+                _tfd, _tname = _tmpw.mkstemp(dir=p.parent)
+                with _osw.fdopen(_tfd, 'w') as _tf:
+                    _tf.write(_json_w.dumps({"slides": slides_out}))
+                _shuw.move(_tname, str(json_path))
+            except Exception:
+                pass
             return {"slides": slides_out}
         except Exception as exc:
             raise HTTPException(500, str(exc))
+
+    @misc_router.get("/api/ppt/status")
+    async def ppt_status(path: str = Query(...)):
+        p = Path(path)
+        json_path = p.parent / f".{p.name}.json"
+        return {"ready": json_path.exists(), "hasSidecar": json_path.exists()}
+
+    class CheckFitBody(BaseModel):
+        path: str                # absolute path to .pptx
+        slide: int = 0           # 0-based slide index
+        box_id: str = ""         # box id from sidecar (empty → first text box)
+        text: str = ""           # proposed text (newlines → paragraph breaks)
+
+    @misc_router.post("/api/ppt/checkfit")
+    async def ppt_checkfit(body: CheckFitBody):
+        """
+        Check whether `text` fits inside a specific box on a slide.
+        Uses the pre-computed sidecar for box geometry and style, then
+        re-runs the Pillow layout engine with the new text.
+        Returns: fits, lines, textHeight, boxHeight, overflowBy (canvas px), layoutLines.
+        """
+        import json as _jf
+        from ppt_layout import checkfit as _checkfit
+        p = Path(body.path)
+        json_path = p.parent / f".{p.name}.json"
+        if not json_path.exists():
+            raise HTTPException(404, "sidecar not found — open the PPTX first")
+        sidecar = _jf.loads(json_path.read_text())
+        slides = sidecar.get("slides", [])
+        if body.slide >= len(slides):
+            raise HTTPException(400, f"slide {body.slide} out of range")
+        slide = slides[body.slide]
+        slide_width_pt = slide.get("slideWidthPt", 720)
+        boxes = slide.get("boxes", [])
+        box = None
+        if body.box_id:
+            box = next((b for b in boxes if b.get("id") == body.box_id), None)
+        if box is None:
+            # Fall back to first box that has paragraphs
+            box = next((b for b in boxes if b.get("paragraphs")), None)
+        if box is None:
+            raise HTTPException(404, "no text box found on that slide")
+        result = _checkfit(box, body.text, slide_width_pt)
+        return result
 
     @misc_router.put("/api/ppt/save")
     async def ppt_save(body: PptSaveBody):

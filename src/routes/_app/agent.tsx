@@ -4524,7 +4524,7 @@ function AgentPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept={agentMode === 'worker' ? 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx' : 'image/*'}
+          accept={agentMode === 'worker' ? 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.md,.markdown' : 'image/*'}
           multiple
           style={{ display: 'none' }}
           onChange={handleFileSelect}

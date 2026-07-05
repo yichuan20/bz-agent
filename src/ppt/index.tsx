@@ -59,18 +59,37 @@ function ThumbnailCanvas({ slide, priority }: { slide: any; priority?: boolean }
 
   useEffect(() => {
     if (!slide) return;
-    _enqueueThumb(() => {
-      const oc = document.createElement('canvas');
-      oc.width = THUMB_W;
-      oc.height = THUMB_H;
-      const ctx = oc.getContext('2d')!;
-      ctx.save();
-      // Scale so drawConfig's SF-multiplied coordinates fit into THUMB_W×THUMB_H
-      ctx.scale(THUMB_W / (CANVAS_WIDTH * SF), THUMB_H / (CANVAS_HEIGHT * SF));
-      drawConfig(ctx, slide, { x: 0, y: 0 }, true, null);
-      ctx.restore();
-      setUrl(oc.toDataURL('image/jpeg', 0.75));
-    }, priority);
+    let cancelled = false;
+    const boxes: any[] = slide?.boxes || [];
+    // Pre-load PPTX-imported base64 images (no canvasImage yet) so the one-shot draw succeeds.
+    const imageBoxes = boxes.filter((b: any) => {
+      const t = b.text || '';
+      return t.startsWith('data:image') && !b.canvasImage;
+    });
+    const loadAll: Promise<void> = imageBoxes.length === 0
+      ? Promise.resolve()
+      : (Promise.all(imageBoxes.map((b: any) => new Promise<void>(resolve => {
+          const img = new Image();
+          img.onload = () => { b.canvasImage = img; resolve(); };
+          img.onerror = () => resolve();
+          img.src = b.text;
+        }))) as unknown as Promise<void>);
+    loadAll.then(() => {
+      if (cancelled) return;
+      _enqueueThumb(() => {
+        const oc = document.createElement('canvas');
+        oc.width = THUMB_W;
+        oc.height = THUMB_H;
+        const ctx = oc.getContext('2d')!;
+        ctx.save();
+        // Scale so drawConfig's SF-multiplied coordinates fit into THUMB_W×THUMB_H
+        ctx.scale(THUMB_W / (CANVAS_WIDTH * SF), THUMB_H / (CANVAS_HEIGHT * SF));
+        drawConfig(ctx, slide, { x: 0, y: 0 }, true, null);
+        ctx.restore();
+        setUrl(oc.toDataURL('image/jpeg', 0.75));
+      }, priority);
+    });
+    return () => { cancelled = true; };
   }, [changeKey]);
 
   return <img src={url} style={{ width: '100%', display: 'block' }} />;
@@ -361,6 +380,67 @@ function ColorPicker({ label, color, onChange, allowNone, noneLabel = 'None', ic
   );
 }
 
+// ── Shape catalogue ────────────────────────────────────────────────────────
+const SHAPE_GROUPS: Array<{ group: string; shapes: Array<{ id: string; label: string }> }> = [
+  { group: 'Basic', shapes: [
+    { id: 'rect',          label: 'Rectangle' },
+    { id: 'roundRect',     label: 'Rounded rect' },
+    { id: 'ellipse',       label: 'Ellipse' },
+    { id: 'triangle',      label: 'Triangle' },
+    { id: 'rtTriangle',    label: 'Right triangle' },
+    { id: 'diamond',       label: 'Diamond' },
+    { id: 'parallelogram', label: 'Parallelogram' },
+    { id: 'trapezoid',     label: 'Trapezoid' },
+  ]},
+  { group: 'Polygons', shapes: [
+    { id: 'pentagon',  label: 'Pentagon' },
+    { id: 'hexagon',   label: 'Hexagon' },
+    { id: 'plus',      label: 'Plus' },
+    { id: 'star4',     label: '4-point star' },
+    { id: 'star5',     label: '5-point star' },
+  ]},
+  { group: 'Arrows', shapes: [
+    { id: 'rightArrow', label: 'Right arrow' },
+    { id: 'leftArrow',  label: 'Left arrow' },
+    { id: 'upArrow',    label: 'Up arrow' },
+    { id: 'downArrow',  label: 'Down arrow' },
+    { id: 'chevron',    label: 'Chevron' },
+  ]},
+  { group: '3D / Special', shapes: [
+    { id: 'can',       label: 'Cylinder' },
+    { id: 'cube',      label: 'Cube' },
+    { id: 'snip1Rect', label: 'Snipped rect' },
+  ]},
+];
+
+function ShapeIcon({ id, size = 14 }: { id: string; size?: number }) {
+  const p: React.SVGProps<SVGSVGElement> = { viewBox: '0 0 20 20', width: size, height: size, stroke: 'currentColor', strokeWidth: 1.5, fill: 'none', style: { flexShrink: 0 } };
+  switch (id) {
+    case 'rect':          return <svg {...p}><rect x="1" y="4" width="18" height="12"/></svg>;
+    case 'roundRect':     return <svg {...p}><rect x="1" y="4" width="18" height="12" rx="3"/></svg>;
+    case 'ellipse':       return <svg {...p}><ellipse cx="10" cy="10" rx="9" ry="6"/></svg>;
+    case 'triangle':      return <svg {...p}><polygon points="10,2 19,18 1,18"/></svg>;
+    case 'rtTriangle':    return <svg {...p}><polygon points="1,18 19,18 1,2"/></svg>;
+    case 'diamond':       return <svg {...p}><polygon points="10,1 19,10 10,19 1,10"/></svg>;
+    case 'parallelogram': return <svg {...p}><polygon points="5,16 19,16 15,4 1,4"/></svg>;
+    case 'trapezoid':     return <svg {...p}><polygon points="4,16 16,16 14,4 6,4"/></svg>;
+    case 'pentagon':      return <svg {...p}><polygon points="10,1 19,7.5 15.5,18 4.5,18 1,7.5"/></svg>;
+    case 'hexagon':       return <svg {...p}><polygon points="14.5,3 18.5,10 14.5,17 5.5,17 1.5,10 5.5,3"/></svg>;
+    case 'plus':          return <svg {...p}><rect x="7" y="1" width="6" height="18"/><rect x="1" y="7" width="18" height="6"/></svg>;
+    case 'star4':         return <svg {...p}><polygon points="10,1 12,8 19,10 12,12 10,19 8,12 1,10 8,8"/></svg>;
+    case 'star5':         return <svg {...p}><polygon points="10,1 12.4,7.5 19.5,7.5 14,12 16.2,18.5 10,14.5 3.8,18.5 6,12 0.5,7.5 7.6,7.5"/></svg>;
+    case 'rightArrow':    return <svg {...p}><polygon points="1,7 13,7 13,4 19,10 13,16 13,13 1,13"/></svg>;
+    case 'leftArrow':     return <svg {...p}><polygon points="19,7 7,7 7,4 1,10 7,16 7,13 19,13"/></svg>;
+    case 'upArrow':       return <svg {...p}><polygon points="7,19 7,7 4,7 10,1 16,7 13,7 13,19"/></svg>;
+    case 'downArrow':     return <svg {...p}><polygon points="7,1 7,13 4,13 10,19 16,13 13,13 13,1"/></svg>;
+    case 'chevron':       return <svg {...p}><polygon points="1,4 15,4 19,10 15,16 1,16 5,10"/></svg>;
+    case 'can':           return <svg {...p}><ellipse cx="10" cy="5" rx="8" ry="2.5"/><line x1="2" y1="5" x2="2" y2="16"/><line x1="18" y1="5" x2="18" y2="16"/><ellipse cx="10" cy="16" rx="8" ry="2.5"/></svg>;
+    case 'cube':          return <svg {...p}><rect x="5" y="7" width="13" height="11"/><polygon points="5,7 2,4 15,4 18,7"/><line x1="15" y1="4" x2="15" y2="15"/></svg>;
+    case 'snip1Rect':     return <svg {...p}><polygon points="1,4 14,4 19,9 19,16 1,16"/></svg>;
+    default:              return <svg {...p}><rect x="1" y="4" width="18" height="12"/></svg>;
+  }
+}
+
 // ── main component ─────────────────────────────────────────────────────────
 export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEditorProps) {
   const [slides, setSlides]           = useState<any[]>([]);
@@ -375,9 +455,12 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
   const thumbPanelRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTool, setActiveTool]   = useState<string>('select');
+  const [selectedShape, setSelectedShape] = useState<string>('ellipse');
+  const [showShapePicker, setShowShapePicker] = useState(false);
   const [saveMsg, setSaveMsg]         = useState('');
 
   const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const shapePickerRef = useRef<HTMLDivElement>(null);
 
   // ── load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -421,6 +504,18 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
+
+  // ── close shape picker on outside click ───────────────────────────────────
+  useEffect(() => {
+    if (!showShapePicker) return;
+    const handle = (e: MouseEvent) => {
+      if (shapePickerRef.current && !shapePickerRef.current.contains(e.target as Node)) {
+        setShowShapePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [showShapePicker]);
 
   const enterPresent = () => {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -541,6 +636,14 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
     setCurrentSlide(nc);
   };
 
+  const updateTextColor = (color: string) => {
+    if (slideEditState && slideEditState.selStart !== slideEditState.selEnd) {
+      addStyleAtSelection({ color: color || '#000000' });
+    } else {
+      updateBoxStyle({ color: color || '#000000' });
+    }
+  };
+
   const updateBorderColor = (color: string) => {
     const slide = slides[slideIndex];
     const nc = cloneDeep(slide);
@@ -593,11 +696,62 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
         {([
           { id: 'select', title: 'Select', icon: <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /></svg> },
           { id: 'text',   title: 'Text box', icon: <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" /></svg> },
-          { id: 'shape',  title: 'Shape', icon: <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="12" cy="12" r="10" /></svg> },
           { id: 'line',   title: 'Line', icon: <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><line x1="5" y1="19" x2="19" y2="5" /></svg> },
         ] as { id: string; title: string; icon: React.ReactNode }[]).map(t => (
           <Btn key={t.id} title={t.title} active={activeTool === t.id} onClick={() => setActiveTool(t.id)}>{t.icon}</Btn>
         ))}
+        {/* Shape tool — split button with shape picker */}
+        <div ref={shapePickerRef} style={{ position: 'relative', display: 'flex', flexShrink: 0 }}>
+          <Btn
+            title={SHAPE_GROUPS.flatMap(g => g.shapes).find(s => s.id === selectedShape)?.label ?? 'Shape'}
+            active={activeTool === 'shape'}
+            onClick={() => setActiveTool('shape')}
+            style={{ borderRadius: '5px 0 0 5px', paddingRight: 1 }}
+          >
+            <ShapeIcon id={selectedShape} size={14} />
+          </Btn>
+          <Btn
+            title="Choose shape"
+            onClick={() => setShowShapePicker(p => !p)}
+            style={{ width: 14, borderRadius: '0 5px 5px 0', paddingLeft: 0 }}
+          >
+            <svg viewBox="0 0 10 6" width="8" height="5" stroke="currentColor" strokeWidth="1.5" fill="none"><polyline points="1,1 5,5 9,1"/></svg>
+          </Btn>
+          {showShapePicker && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 9999,
+              background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+              borderRadius: 8, padding: '6px 8px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+              minWidth: 210,
+            }}>
+              {SHAPE_GROUPS.map(g => (
+                <div key={g.group} style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '3px 2px 2px' }}>{g.group}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    {g.shapes.map(s => {
+                      const isActive = selectedShape === s.id;
+                      return (
+                        <button key={s.id} title={s.label}
+                          onClick={() => { setSelectedShape(s.id); setActiveTool('shape'); setShowShapePicker(false); }}
+                          style={{
+                            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: 4, border: 'none', cursor: 'pointer',
+                            background: isActive ? 'var(--accent-blue-light)' : 'transparent',
+                            color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                          }}
+                          onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'; }}
+                          onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                        >
+                          <ShapeIcon id={s.id} size={16} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Image upload */}
         <Btn title="Insert image" style={{ position: 'relative', overflow: 'hidden' }}>
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
@@ -643,6 +797,15 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
             </Btn>
           ))}
           <Sep />
+          {/* Font size */}
+          <input
+            type="number" min="6" max="200" step="1"
+            value={selectedBox.boxStyle?.fontSize ?? 16}
+            onChange={e => updateBoxStyle({ fontSize: Math.max(6, parseInt(e.target.value) || 16) })}
+            onMouseDown={e => e.stopPropagation()}
+            title="Font size"
+            style={{ width: 42, height: 24, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', paddingLeft: 4 }}
+          />
           {/* Font family picker */}
           <select
             value={selectedBox.boxStyle?.fontFamily || 'Montserrat'}
@@ -654,6 +817,17 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
             ))}
           </select>
           <Sep />
+          {/* Font color */}
+          <ColorPicker
+            label="Font color"
+            color={topStyle.color || selectedBox.boxStyle?.color || '#000000'}
+            onChange={updateTextColor}
+            icon={
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none">
+                <text x="3" y="17" fontSize="16" fontWeight="bold" fontFamily="sans-serif">A</text>
+              </svg>
+            }
+          />
           {/* Fill color */}
           <ColorPicker
             label="Fill color"
@@ -815,6 +989,7 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
                     config={currentSlide}
                     isPresentationMode={isFullscreen}
                     activeTool={activeTool}
+                    activeShape={selectedShape}
                     setConfig={setCurrentSlide}
                     onSave={saveCurrentSlide}
                     onEditStateChange={setSlideEditState}

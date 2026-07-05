@@ -12,11 +12,10 @@
  *   • 2px hover zone at left edge → hoveredOpen=true → sidebar slides in as overlay
  *   • Mouse leaves sidebar → hoveredOpen=false → sidebar slides out
  */
-import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router';
 import { useState, useEffect } from 'react';
 import Sidebar from '#/components/Sidebar';
 import TopBar  from '#/components/TopBar';
-import { isLoggedIn } from '#/auth-store';
 
 const AGENT_HTTP =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
@@ -44,17 +43,6 @@ function useBzcodeOutdated(): boolean {
 }
 
 export const Route = createFileRoute('/_app')({
-  beforeLoad: async () => {
-    if (isLoggedIn()) return; // frontend JWT present — let through
-    try {
-      const res = await fetch(`${AGENT_HTTP}/auth/status`);
-      if (res.ok) {
-        const data = await res.json() as { valid: boolean };
-        if (data.valid) return; // server has valid BZ_HOME credentials — let through
-      }
-    } catch {}
-    throw redirect({ to: '/login' });
-  },
   component: AppLayout,
 });
 

@@ -15,12 +15,10 @@ import {
   MagnifyingGlassIcon,
   MoonIcon,
   SunIcon,
-  SignOutIcon,
 } from '@phosphor-icons/react';
 import { BoltzAgentLogo } from '#/components/BoltzAgentLogo';
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { clearAccessToken } from '#/auth-store';
+import { getCurrentMode, applyTheme } from '#/design-tokens';
 
 const AGENT_HTTP =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
@@ -105,13 +103,10 @@ function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: strin
     </div>
   );
 }
-import { getCurrentMode, applyTheme } from '#/design-tokens';
-
 const TopBar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(getCurrentMode);
   const { status: tokenStatus, reason: tokenReason } = useTokenStatus();
-  const navigate = useNavigate();
 
   useEffect(() => {
     const handleChange = () => setTheme(getCurrentMode());
@@ -124,19 +119,6 @@ const TopBar: React.FC = () => {
     applyTheme(next);
     setTheme(next);
     window.dispatchEvent(new Event('themechange'));
-  }
-
-  function handleLogout() {
-    const httpBase = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-      || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
-    const authUrl  = (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
-    fetch(`${httpBase}/auth/logout`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ authUrl }),
-    }).finally(() => {
-      clearAccessToken();
-      void navigate({ to: '/login' });
-    });
   }
 
   /* ── icon button shared style ── */
@@ -162,8 +144,8 @@ const TopBar: React.FC = () => {
       flexShrink: 0,
     }}>
 
-      {/* ── Left: logo ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      {/* ── Left: logo — 8px extra margin aligns icon with sidebar nav icons (12px nav + 8px item padding) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 8 }}>
         {/* Logo mark + app name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <BoltzAgentLogo size={24} />
@@ -233,22 +215,6 @@ const TopBar: React.FC = () => {
           }
         </button>
 
-        <button
-          type="button"
-          title="Sign out"
-          onClick={handleLogout}
-          style={iconBtn}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
-          }}
-        >
-          <SignOutIcon size={18} />
-        </button>
       </div>
     </nav>
   );

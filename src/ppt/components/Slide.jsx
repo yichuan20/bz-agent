@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import { cloneDeep, inRange, last } from 'lodash';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── inline uuidv4 ──────────────────────────────────────────────────────────
 const uuidv4 = () =>
@@ -346,7 +347,17 @@ const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, ed
 
   if (config.canvasImage || isBase64Image(config.text)) {
     let img = config.canvasImage;
-    if (!img && isBase64Image(config.text)) { img = new Image(); img.src = config.text; }
+    if (!img && isBase64Image(config.text)) {
+      if (_imgCache.has(config.id)) {
+        img = _imgCache.get(config.id);
+      } else {
+        const ni = new Image();
+        ni.onload = () => { _imgCache.set(config.id, ni); config.canvasImage = ni; };
+        ni.src = config.text;
+        _imgCache.set(config.id, ni); // store even if not yet loaded, so we don't create multiple
+        img = ni;
+      }
+    }
     if (img) { try { ctx.drawImage(img, x, y, w, h); } catch {} }
     if (isHovered && !config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = 'rgba(26,115,232,0.35)'; ctx.lineWidth = 1 * SF; ctx.stroke(); }
     if (config.isSelected) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.strokeStyle = SEL_COLOR; ctx.lineWidth = SEL_BORDER_W * SF; ctx.stroke(); drawResizeHandles(ctx, config); }
@@ -418,12 +429,43 @@ const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, ed
   }
 
   // ── Text rendering ─────────────────────────────────────────────────────────
-  const pad = 10 * SF;
-  const maxW = w - pad * 2;
+  // Use per-box internal margins from PPTX bodyPr (stored as canvas px in boxStyle),
+  // falling back to a sensible default (91440 EMU ≈ 7.2pt on standard slides).
+  const bs = config.boxStyle || {};
+  const padL = (bs.padL != null ? bs.padL : 10) * SF;
+  const padR = (bs.padR != null ? bs.padR : 10) * SF;
+  const padT = (bs.padT != null ? bs.padT : 5)  * SF;
+  const padB = (bs.padB != null ? bs.padB : 5)  * SF;
+  const pad = padL; // legacy alias used by non-paragraph text paths below
+  const maxW = w - padL - padR;
   ctx.textBaseline = 'top';
 
   // Rich paragraph mode — only when NOT in edit mode (editState is null)
   const hasParagraphs = config.paragraphs && config.paragraphs.length > 0 && !editState;
+
+  // ── Pre-computed layout path (from backend ppt_layout.py) ─────────────────
+  // layoutLines coords are in canvas px (no SF); multiply by SF for painting.
+  if (hasParagraphs && config.layoutLines && config.layoutLines.length > 0) {
+    ctx.textBaseline = 'top';
+    for (const ln of config.layoutLines) {
+      const lineY = (y / SF + ln.y) * SF;  // y is already in SF coords; ln.y is canvas px
+      for (const seg of ln.segs) {
+        const segX = (x / SF + seg.x) * SF;
+        const fs = seg.fontSize * ptScale * SF;
+        const fw = seg.bold ? 'bold' : 'normal';
+        const fi = seg.italic ? 'italic' : 'normal';
+        const ff = seg.fontFamily || 'Montserrat';
+        ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+        ctx.letterSpacing = ((seg.letterSpacing || 0) * ptScale * SF) + 'px';
+        ctx.fillStyle = seg.color || '#000000';
+        ctx.fillText(seg.text, segX, lineY);
+      }
+    }
+    ctx.letterSpacing = '0px';
+    // Still draw selection/hover handles if needed (handled by caller)
+    if (rotation) ctx.restore();
+    return;
+  }
 
   if (hasParagraphs) {
     const defFF = config.boxStyle?.fontFamily || 'Montserrat';
@@ -438,72 +480,109 @@ const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, ed
       const ff = run.fontFamily || defFF;
       const fw = run.bold || config.boxStyle?.fontWeight === 'bold' ? 'bold' : 'normal';
       const fi = run.italic ? 'italic' : 'normal';
-      return { fs, ff, fw, fi, lh: fs * 1.2 };
+      // letterSpacing stored in pt; convert to SF canvas pixels
+      const ls = (run.letterSpacing || 0) * ptScale * SF;
+      return { fs, ff, fw, fi, lh: fs * 1.2, ls };
     };
     const _runText = run => (doAllCaps || run.allCaps) ? run.text.toUpperCase() : run.text;
+    // normAutofit: box was sized to fit content — add tolerance to absorb browser/PPT font-metric differences
+    const wrapTolerance = config.boxStyle?.normAutofit ? defFS * 0.25 : 0;
 
-    let totalH = 0;
-    if (textAnchor !== 't') {
-      for (const para of config.paragraphs) {
-        totalH += ((para.spaceBefore || 0) * ptScale) * SF;
-        if (!para.runs || para.runs.length === 0) { totalH += defFS * 1.2 * 0.5; continue; }
-        for (const run of para.runs) {
-          if (!run.text) continue;
-          const { fs, ff, fw, fi, lh } = _runFont(run);
-          ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
-          for (const paraLine of _runText(run).split('\n')) {
-            const words = paraLine.split(' ');
-            let line = '';
-            for (const word of words) {
-              const test = line ? line + ' ' + word : word;
-              if (ctx.measureText(test).width > maxW && line) { totalH += lh; line = word; }
-              else line = test;
-            }
-            if (line) totalH += lh;
+    // Build display lines for a paragraph, flowing all runs horizontally together.
+    // Returns [{segs:[{text,color,fs,ff,fw,fi,w}], lh}]
+    const buildParaLines = para => {
+      const lines = [];
+      let segs = [], lineW = 0, lineH = defFS * 1.2;
+      const flush = () => {
+        lines.push({ segs, lh: lineH });
+        segs = []; lineW = 0; lineH = defFS * 1.2;
+      };
+      for (const run of (para.runs || [])) {
+        if (!run.text) continue;
+        const { fs, ff, fw, fi, lh, ls } = _runFont(run);
+        const color = run.color || defColor;
+        ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+        ctx.letterSpacing = ls + 'px';
+        lineH = Math.max(lineH, lh);
+        const parts = _runText(run).split('\n');
+        for (let pi = 0; pi < parts.length; pi++) {
+          if (pi > 0) {
+            flush();
+            lineH = Math.max(lineH, lh);
+            ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+            ctx.letterSpacing = ls + 'px';
           }
+          // ctx.letterSpacing is already set; measureText incorporates it automatically
+          const measure = str => ctx.measureText(str).width;
+          const words = parts[pi].split(' ');
+          let pending = '';
+          for (let wi = 0; wi < words.length; wi++) {
+            const sep = wi < words.length - 1 ? ' ' : '';
+            const cand = pending + words[wi] + sep;
+            const candW = measure(cand);
+            if (lineW + candW > maxW + wrapTolerance && (segs.length > 0 || pending)) {
+              if (pending) { const pw = measure(pending); segs.push({ text: pending, color, fs, ff, fw, fi, ls, w: pw }); lineW += pw; }
+              flush();
+              lineH = Math.max(lineH, lh);
+              ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
+              ctx.letterSpacing = ls + 'px';
+              pending = words[wi] + sep;
+            } else { pending = cand; }
+          }
+          if (pending) { const pw = measure(pending); segs.push({ text: pending, color, fs, ff, fw, fi, ls, w: pw }); lineW += pw; }
         }
       }
+      ctx.letterSpacing = '0px';
+      if (segs.length > 0) flush();
+      if (lines.length === 0) lines.push({ segs: [], lh: defFS * 1.2 * 0.5 });
+      return lines;
+    };
+
+    // Pre-build all paragraph line-groups (needed for textAnchor height calc)
+    const paraGroups = config.paragraphs.map(para => ({
+      spaceBefore: ((para.spaceBefore || 0) * ptScale) * SF,
+      align: para.align || defAlign,
+      lines: (!para.runs || para.runs.length === 0)
+        ? [{ segs: [], lh: defFS * 1.2 * 0.5 }]
+        : buildParaLines(para),
+    }));
+
+    let totalH = 0;
+    for (const pg of paraGroups) {
+      totalH += pg.spaceBefore;
+      for (const ln of pg.lines) totalH += ln.lh;
     }
 
-    let ry = textAnchor === 'b' ? y + h - pad - totalH
-           : textAnchor === 'ctr' ? y + pad + (h - pad * 2 - totalH) / 2
-           : y + pad;
+    let ry = textAnchor === 'b' ? y + h - padB - totalH
+           : textAnchor === 'ctr' ? y + padT + (h - padT - padB - totalH) / 2
+           : y + padT;
 
-    for (const para of config.paragraphs) {
-      const align = para.align || defAlign;
-      ry += ((para.spaceBefore || 0) * ptScale) * SF;
-      if (!para.runs || para.runs.length === 0) { ry += defFS * 1.2 * 0.5; continue; }
-      for (const run of para.runs) {
-        if (!run.text) continue;
-        const { fs, ff, fw, fi, lh } = _runFont(run);
-        ctx.font = `${fi} ${fw} ${fs}px '${ff}', Montserrat, sans-serif`;
-        ctx.fillStyle = run.color || defColor;
-        for (const paraLine of _runText(run).split('\n')) {
-          const words = paraLine.split(' ');
-          let line = '';
-          for (const word of words) {
-            const test = line ? line + ' ' + word : word;
-            if (ctx.measureText(test).width > maxW && line) {
-              const lw2 = ctx.measureText(line).width;
-              const dx = align === 'center' ? x + w / 2 - lw2 / 2 : align === 'right' ? x + w - pad - lw2 : x + pad;
-              ctx.fillText(line, dx, ry); ry += lh; line = word;
-            } else line = test;
-          }
-          if (line) {
-            const lw2 = ctx.measureText(line).width;
-            const dx = align === 'center' ? x + w / 2 - lw2 / 2 : align === 'right' ? x + w - pad - lw2 : x + pad;
-            ctx.fillText(line, dx, ry); ry += lh;
-          }
+    for (const pg of paraGroups) {
+      ry += pg.spaceBefore;
+      for (const ln of pg.lines) {
+        const lineW2 = ln.segs.reduce((s, seg) => s + seg.w, 0);
+        const lx = pg.align === 'center' ? x + w / 2 - lineW2 / 2
+                 : pg.align === 'right'  ? x + w - padR - lineW2
+                 : x + padL;
+        let cx = lx;
+        for (const seg of ln.segs) {
+          ctx.font = `${seg.fi} ${seg.fw} ${seg.fs}px '${seg.ff}', Montserrat, sans-serif`;
+          ctx.letterSpacing = (seg.ls || 0) + 'px';
+          ctx.fillStyle = seg.color;
+          ctx.fillText(seg.text, cx, ry);
+          cx += seg.w;
         }
+        ctx.letterSpacing = '0px';
+        ry += ln.lh;
       }
     }
   } else {
     // Flat text — used for all user-created boxes and while editing
     const { fontSize, fontWeight, color } = config.boxStyle || {};
+    const textAlign = config.boxStyle?.textAlign || 'left';
     const fontFamily = config.boxStyle?.fontFamily || 'Montserrat';
     const scaledFS = (fontSize || FONT_SIZE) * ptScale * SF;
     const lineHeight = scaledFS * 1.2;
-    // Per-range styles (from toolbar bold/italic/etc applied to selections)
     const rangeStyles = (config.styles || []).filter(s => !s.isSelection);
     const getCharStyle = ci => {
       const active = rangeStyles.filter(s => s.start <= ci && ci < s.end);
@@ -514,7 +593,6 @@ const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, ed
       const fi = cs.fontStyle || 'normal';
       return `${fi} ${fw} ${scaledFS}px '${fontFamily}', Montserrat, sans-serif`;
     };
-    ctx.fillStyle = color || '#000000';
     ctx.font = makeFont({});
 
     const caretPos = editState?.caretPos ?? -1;
@@ -526,54 +604,84 @@ const drawTextBox = (ctx, config, isHovered = false, ptScale = PPTX_PT_SCALE, ed
 
     const drawCaret = (cx, cy) => {
       ctx.save();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = 2; ctx.strokeStyle = '#111111';
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + lineHeight); ctx.stroke();
       ctx.restore();
     };
 
-    let ci = 0, cx = x + pad, cy = y + pad;
+    // Pass 1: build line structure with the same wrap condition as the original renderer
     const text = config.text || '';
-    // Clip to box so text doesn't overflow into neighbouring elements
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    while (ci < text.length) {
-      // Cursor always at caretPos (whether or not there's a selection)
-      if (ci === caretPos && caretVis) drawCaret(cx, cy);
-
-      const isNl = text[ci] === '\n';
-      if (isNl) {
-        // Newline: draw small selection rect at current pos, then wrap
-        if (hasSel && ci >= selStart && ci < selEnd) {
-          ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, scaledFS * 0.35, lineHeight); ctx.restore();
-        }
-        cy += lineHeight; cx = x + pad; ci++; continue;
+    const lines = []; // [{chars:[{ci,ch,cs,chW,font}], nlCi:number|-1}]
+    let curChars = [];
+    let tempCx = x + pad;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '\n') {
+        lines.push({ chars: curChars, nlCi: i }); curChars = []; tempCx = x + pad; continue;
       }
-      // Word-wrap on overflow
-      if (cx > x + w - pad - scaledFS) { cy += lineHeight; cx = x + pad; }
-      const ch = text[ci];
-      const cs = getCharStyle(ci);
+      if (tempCx > x + w - pad - scaledFS && curChars.length > 0) {
+        lines.push({ chars: curChars, nlCi: -1 }); curChars = []; tempCx = x + pad;
+      }
+      const cs = getCharStyle(i);
       const chFont = makeFont(cs);
       if (ctx.font !== chFont) ctx.font = chFont;
-      ctx.fillStyle = cs.color || color || '#000000';
       const chW = ctx.measureText(ch).width;
-      // Selection highlight behind character
-      if (hasSel && ci >= selStart && ci < selEnd) {
-        ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, chW, lineHeight); ctx.restore();
-        ctx.fillStyle = cs.color || color || '#000000';
-      }
-      ctx.fillText(ch, cx, cy);
-      // Underline
-      if (cs.textDecoration === 'underline') {
-        ctx.save(); ctx.strokeStyle = cs.color || color || '#000000'; ctx.lineWidth = Math.max(1, scaledFS * 0.05);
-        ctx.beginPath(); ctx.moveTo(cx, cy + scaledFS * 1.05); ctx.lineTo(cx + chW, cy + scaledFS * 1.05); ctx.stroke();
-        ctx.restore();
-      }
-      cx += chW;
-      ci++;
+      curChars.push({ ci: i, ch, cs, chW, font: chFont });
+      tempCx += chW;
     }
-    // Cursor at end of text
-    if (ci === caretPos && caretVis) drawCaret(cx, cy);
+    lines.push({ chars: curChars, nlCi: -1 });
+
+    // Pass 2: draw lines with alignment offset
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    let cy = y + pad;
+    let caretDone = false;
+    for (let li = 0; li < lines.length; li++) {
+      const { chars: lc, nlCi } = lines[li];
+      const lineW = lc.reduce((s, c) => s + c.chW, 0);
+      const lx = textAlign === 'center' ? x + w / 2 - lineW / 2
+               : textAlign === 'right'  ? x + w - pad - lineW
+               : x + pad;
+      let cx = lx;
+      // Cursor before the first char of this line
+      const firstCi = lc.length > 0 ? lc[0].ci : nlCi >= 0 ? nlCi : text.length;
+      if (!caretDone && firstCi === caretPos && caretVis) { drawCaret(cx, cy); caretDone = true; }
+
+      for (const { ci, ch, cs, chW, font: chFont } of lc) {
+        if (ctx.font !== chFont) ctx.font = chFont;
+        const fc = cs.color || color || '#000000';
+        ctx.fillStyle = fc;
+        if (hasSel && ci >= selStart && ci < selEnd) {
+          ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, chW, lineHeight); ctx.restore();
+          ctx.fillStyle = fc;
+        }
+        ctx.fillText(ch, cx, cy);
+        if (cs.textDecoration === 'underline') {
+          ctx.save(); ctx.strokeStyle = fc; ctx.lineWidth = Math.max(1, scaledFS * 0.05);
+          ctx.beginPath(); ctx.moveTo(cx, cy + scaledFS * 1.05); ctx.lineTo(cx + chW, cy + scaledFS * 1.05); ctx.stroke();
+          ctx.restore();
+        }
+        cx += chW;
+        if (!caretDone && ci + 1 === caretPos && caretVis) { drawCaret(cx, cy); caretDone = true; }
+      }
+      // Newline char: selection highlight + cursor at end of line content
+      if (nlCi >= 0) {
+        if (hasSel && nlCi >= selStart && nlCi < selEnd) {
+          ctx.save(); ctx.fillStyle = '#0b57d033'; ctx.fillRect(cx, cy, scaledFS * 0.35, lineHeight); ctx.restore();
+        }
+        if (!caretDone && nlCi === caretPos && caretVis) { drawCaret(cx, cy); caretDone = true; }
+      }
+      cy += lineHeight;
+    }
+    // Cursor at end of text (caretPos === text.length)
+    if (!caretDone && caretPos === text.length && caretVis) {
+      const ll = lines[lines.length - 1] || { chars: [] };
+      const llW = ll.chars.reduce((s, c) => s + c.chW, 0);
+      const llx = textAlign === 'center' ? x + w / 2 - llW / 2
+                : textAlign === 'right'  ? x + w - pad - llW
+                : x + pad;
+      drawCaret(llx + llW, cy - lineHeight);
+    }
     ctx.restore();
   }
 
@@ -681,7 +789,7 @@ const locationToCursor = {
 
 // ── inline styled components ───────────────────────────────────────────────
 const CtxMenu = ({ children, style, ...p }) => (
-  <div style={{ position: 'absolute', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 4, minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1000, ...style }} {...p}>{children}</div>
+  <div style={{ position: 'fixed', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 4, minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 9999, ...style }} {...p}>{children}</div>
 );
 const CtxItem = ({ children, disabled, style, ...p }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 4, cursor: disabled ? 'default' : 'pointer', fontSize: 13, color: 'var(--text-primary)', opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', ...style }}
@@ -691,15 +799,17 @@ const CtxItem = ({ children, disabled, style, ...p }) => (
 );
 const CtxShortcut = ({ children }) => <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 20 }}>{children}</span>;
 const CtxDivider = () => <div style={{ height: 1, background: 'var(--border-default)', margin: '4px 0' }} />;
-const CtxSubmenu = ({ label, children }) => {
+const CtxSubmenu = ({ label, children, parentX }) => {
   const [open, setOpen] = useState(false);
+  // Flip submenu to the left if parent menu is in the right half of the viewport
+  const flipLeft = parentX > window.innerWidth / 2;
   return (
     <div style={{ position: 'relative' }} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <CtxItem style={{ justifyContent: 'space-between' }}>
-        {label}<span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>▶</span>
+        {label}<span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{flipLeft ? '◀' : '▶'}</span>
       </CtxItem>
       {open && (
-        <div style={{ position: 'absolute', left: '100%', top: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 4, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1001 }}>
+        <div style={{ position: 'absolute', ...(flipLeft ? { right: '100%' } : { left: '100%' }), top: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 4, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1001 }}>
           {children}
         </div>
       )}
@@ -717,6 +827,7 @@ const Slide = ({
   isPresentationMode = false,
   defaultCursor = 'default',
   activeTool = null,
+  activeShape = 'ellipse',
 }) => {
   const canvasRef = useRef(null);
   const contextMenuRef = useRef(null);
@@ -1034,7 +1145,7 @@ const Slide = ({
               const size = 100;
               const nc = cloneDeep(config); nc.boxes?.forEach(b => { b.isSelected = false; });
               if (!nc.boxes) nc.boxes = [];
-              nc.boxes.push({ id: uuidv4(), x: offsetX * _cs - size / 2, y: offsetY * _cs - size / 2, w: size, h: size, shapeType: 'ellipse', fill: { type: 'solid', color: '#1473df' }, text: '', styles: [], boxStyle: { borderColor: '#0d5bb5', borderWidth: 2, bgColor: 'transparent' }, isSelected: true });
+              nc.boxes.push({ id: uuidv4(), x: offsetX * _cs - size / 2, y: offsetY * _cs - size / 2, w: size, h: size, shapeType: activeShape, fill: { type: 'solid', color: '#1473df' }, text: '', styles: [], boxStyle: { borderColor: '#0d5bb5', borderWidth: 2, bgColor: 'transparent' }, isSelected: true });
               onSave(nc); return;
             }
             if (activeTool === 'text') { onAddNewBox(e.nativeEvent.offsetX * _cs, e.nativeEvent.offsetY * _cs, 'Add text here', config, setConfig); return; }
@@ -1118,27 +1229,31 @@ const Slide = ({
         onContextMenu={e => {
           e.preventDefault();
           if (isPresentationMode) return;
-          const rect = canvasRef.current.getBoundingClientRect();
-          setContextMenu({ visible: true, x: e.clientX - rect.left, y: e.clientY - rect.top });
+          setContextMenu({ visible: true, x: e.clientX, y: e.clientY });
         }}
       />
 
-      {contextMenu.visible && (
-        <CtxMenu ref={contextMenuRef} style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
-          <CtxItem disabled={!selectedBox} onClick={handleCut}>Cut<CtxShortcut>⌘X</CtxShortcut></CtxItem>
-          <CtxItem disabled={!selectedBox} onClick={handleCopy}>Copy<CtxShortcut>⌘C</CtxShortcut></CtxItem>
-          <CtxItem disabled={!clipboard} onClick={handlePaste}>Paste<CtxShortcut>⌘V</CtxShortcut></CtxItem>
-          <CtxDivider />
-          <CtxItem disabled={!selectedBox} onClick={handleDelete}>Delete<CtxShortcut>⌫</CtxShortcut></CtxItem>
-          <CtxDivider />
-          <CtxSubmenu label="Order">
-            <CtxItem onClick={handleBringToFront}>Bring to Front</CtxItem>
-            <CtxItem onClick={handleBringForward}>Bring Forward</CtxItem>
-            <CtxItem onClick={handleSendBackward}>Send Backward</CtxItem>
-            <CtxItem onClick={handleSendToBack}>Send to Back</CtxItem>
-          </CtxSubmenu>
-        </CtxMenu>
-      )}
+      {contextMenu.visible && createPortal((() => {
+        const MENU_W = 180, MENU_H = 240;
+        const mx = Math.min(contextMenu.x, window.innerWidth  - MENU_W - 8);
+        const my = Math.min(contextMenu.y, window.innerHeight - MENU_H - 8);
+        return (
+          <CtxMenu ref={contextMenuRef} style={{ left: mx, top: my }} onClick={e => e.stopPropagation()}>
+            <CtxItem disabled={!selectedBox} onClick={handleCut}>Cut<CtxShortcut>⌘X</CtxShortcut></CtxItem>
+            <CtxItem disabled={!selectedBox} onClick={handleCopy}>Copy<CtxShortcut>⌘C</CtxShortcut></CtxItem>
+            <CtxItem disabled={!clipboard} onClick={handlePaste}>Paste<CtxShortcut>⌘V</CtxShortcut></CtxItem>
+            <CtxDivider />
+            <CtxItem disabled={!selectedBox} onClick={handleDelete}>Delete<CtxShortcut>⌫</CtxShortcut></CtxItem>
+            <CtxDivider />
+            <CtxSubmenu label="Order" parentX={mx}>
+              <CtxItem onClick={handleBringToFront}>Bring to Front</CtxItem>
+              <CtxItem onClick={handleBringForward}>Bring Forward</CtxItem>
+              <CtxItem onClick={handleSendBackward}>Send Backward</CtxItem>
+              <CtxItem onClick={handleSendToBack}>Send to Back</CtxItem>
+            </CtxSubmenu>
+          </CtxMenu>
+        );
+      })(), document.body)}
     </div>
   );
 };

@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.3.0"
+BACKEND_VERSION = "0.3.5"
 
 import asyncio
 import json
@@ -29,11 +29,6 @@ try:
     from aiohttp import web
 except ImportError:
     sys.exit("Missing dependency: pip install aiohttp")
-
-try:
-    import asyncpg
-except ImportError:
-    asyncpg = None  # type: ignore[assignment]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 3 · MODE CONFIG
@@ -206,15 +201,6 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 1 · CONFIGURATION & CONSTANTS
 # ══════════════════════════════════════════════════════════════════════════════
-# Override any of these with environment variables:
-#   export BZ_DB_HOST=localhost BZ_DB_PORT=5432 BZ_DB_NAME=bz_agent ...
-DB_CONFIG = {
-    "host":     os.environ.get("BZ_DB_HOST",     "localhost"),
-    "port":     int(os.environ.get("BZ_DB_PORT", "5432")),
-    "database": os.environ.get("BZ_DB_NAME",     "bz_agent"),
-    "user":     os.environ.get("BZ_DB_USER",     "bz_agent"),
-    "password": os.environ.get("BZ_DB_PASSWORD", "bz_agent_secret"),
-}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 2 · IN-MEMORY STATE

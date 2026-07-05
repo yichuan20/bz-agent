@@ -17,10 +17,16 @@ import { PptEditor } from '#/ppt';
 const DOC_EXTS    = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx']);
 const EXCEL_EXTS  = new Set(['xls','xlsx']);
 const PPT_EXTS    = new Set(['ppt','pptx']);
-function isDocExt(name: string)   { return DOC_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
-function isExcelExt(name: string) { return EXCEL_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
-function isPptExt(name: string)   { return PPT_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
-const DOC_ICONS: Record<string, string> = { pdf:'📄', docx:'📝', doc:'📝', xlsx:'📊', xls:'📊', pptx:'📑', excel:'📊', ppt:'📑' };
+const HTML_EXTS   = new Set(['html','htm']);
+const MD_EXTS     = new Set(['md','markdown']);
+const PDF_EXTS    = new Set(['pdf']);
+function isDocExt(name: string)      { return DOC_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isExcelExt(name: string)    { return EXCEL_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isPptExt(name: string)      { return PPT_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isHtmlExt(name: string)     { return HTML_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isMarkdownExt(name: string) { return MD_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+function isPdfExt(name: string)      { return PDF_EXTS.has(name.split('.').pop()?.toLowerCase() ?? ''); }
+const DOC_ICONS: Record<string, string> = { pdf:'📄', docx:'📝', doc:'📝', xlsx:'📊', xls:'📊', pptx:'📑', excel:'📊', ppt:'📑', html:'🌐', htm:'🌐', markdown:'🗒', md:'🗒' };
 
 const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
@@ -138,7 +144,7 @@ type FsEntry = { name: string; path: string; isDir: boolean };
 // entry=null means the user right-clicked on empty space; targetDir is the directory to act on
 interface CtxMenu { x: number; y: number; entry: FsEntry | null; targetDir: string }
 
-function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renamingPath, onRenameCommit, onRefresh }: {
+function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renamingPath, onRenameCommit, onRefresh, processingPptx }: {
   entry: FsEntry; depth: number; selected: string | null;
   onSelect: (p: string) => void;
   ctxMenu: CtxMenu | null;
@@ -146,6 +152,7 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
   renamingPath: string | null;
   onRenameCommit: (entry: FsEntry, newName: string) => void;
   onRefresh: () => void;
+  processingPptx: Set<string>;
 }) {
   const [open,    setOpen]    = useState(depth === 0);
   const [kids,    setKids]    = useState<FsEntry[]>([]);
@@ -153,8 +160,9 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
   const [loading, setLoading] = useState(false);
   const [renameVal, setRenameVal] = useState('');
   const renameRef = useRef<HTMLInputElement>(null);
-  const isActive    = entry.path === selected && !entry.isDir;
-  const isRenaming  = renamingPath === entry.path;
+  const isActive      = entry.path === selected && !entry.isDir;
+  const isRenaming    = renamingPath === entry.path;
+  const isProcessing  = !entry.isDir && processingPptx.has(entry.path);
 
   function load() {
     if (loaded || loading) return;
@@ -192,7 +200,7 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
           color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
           fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
         }}
-        onClick={() => { if (!isRenaming) { entry.isDir ? toggle() : onSelect(entry.path); } }}
+        onClick={() => { if (!isRenaming && !isProcessing) { entry.isDir ? toggle() : onSelect(entry.path); } }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onCtxMenu(e, entry); }}
         onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
         onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
@@ -217,7 +225,10 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
             style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-sans-serif, system-ui, sans-serif', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--accent-blue)', borderRadius: 3, padding: '1px 4px', outline: 'none' }}
           />
         ) : (
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{name}</span>
+          <>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{name}</span>
+            {isProcessing && <span style={{ fontSize: 10, color: 'var(--accent-orange)', marginLeft: 4, flexShrink: 0 }}>⟳ Processing…</span>}
+          </>
         )}
       </div>
       {entry.isDir && open && loading && (
@@ -228,7 +239,7 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
       {entry.isDir && open && !loading && kids.map(k => (
         <TreeNode key={k.path} entry={k} depth={depth + 1} selected={selected} onSelect={onSelect}
           ctxMenu={ctxMenu} onCtxMenu={onCtxMenu} renamingPath={renamingPath}
-          onRenameCommit={onRenameCommit} onRefresh={onRefresh} />
+          onRenameCommit={onRenameCommit} onRefresh={onRefresh} processingPptx={processingPptx} />
       ))}
     </div>
   );
@@ -260,6 +271,8 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
   const [cursors,      setCursors]      = useState<Record<string, { selStart: number; selEnd: number }>>({});
   const cursorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [uploading, setUploading] = useState(false);
+  const [processingPptx, setProcessingPptx] = useState<Set<string>>(new Set());
+  const processingPollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [newFolderDir, setNewFolderDir] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -279,6 +292,25 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const startPptxPolling = useCallback((filePath: string) => {
+    setProcessingPptx(prev => new Set(prev).add(filePath));
+    const poll = () => {
+      fetch(`${HTTP_BASE}/api/ppt/status?path=${encodeURIComponent(filePath)}`)
+        .then(r => r.json())
+        .then((d: { ready?: boolean }) => {
+          if (d.ready) {
+            setProcessingPptx(prev => { const n = new Set(prev); n.delete(filePath); return n; });
+            delete processingPollTimers.current[filePath];
+            setTreeVersion(v => v + 1);
+          } else {
+            processingPollTimers.current[filePath] = setTimeout(poll, 1500);
+          }
+        })
+        .catch(() => { processingPollTimers.current[filePath] = setTimeout(poll, 2000); });
+    };
+    processingPollTimers.current[filePath] = setTimeout(poll, 800);
+  }, []);
+
   const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -288,14 +320,16 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('dir', uploadDirRef.current);
-        await fetch(`${HTTP_BASE}/api/file/upload`, { method: 'POST', body: fd });
+        const r = await fetch(`${HTTP_BASE}/api/file/upload`, { method: 'POST', body: fd });
+        const d = await r.json() as { ok?: boolean; path?: string; pptProcessing?: boolean };
+        if (d.pptProcessing && d.path) startPptxPolling(d.path);
       }
       setTreeVersion(v => v + 1);
     } finally {
       setUploading(false);
       if (uploadRef.current) uploadRef.current.value = '';
     }
-  }, []);
+  }, [startPptxPolling]);
 
   const handleCtxMenu = useCallback((e: React.MouseEvent, entry: FsEntry) => {
     e.preventDefault();
@@ -379,6 +413,10 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
 
   // Open a file: fetch content and add a tab
   async function openFile(filePath: string) {
+    if (processingPptx.has(filePath)) {
+      setError('Slides are still being processed — please wait a moment.');
+      return;
+    }
     const existing = tabs.find(t => t.path === filePath);
     if (existing) {
       // Excel/PPT tabs load data from the server — close and reopen to get fresh data
@@ -403,6 +441,27 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
       }
       if (isPptExt(name)) {
         setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, docType: 'ppt' }]);
+        setActiveTab(filePath);
+        return;
+      }
+      if (isPdfExt(name)) {
+        setTabs(prev => [...prev, { path: filePath, name, content: '', dirty: false, docType: 'pdf' }]);
+        setActiveTab(filePath);
+        return;
+      }
+      if (isHtmlExt(name)) {
+        const r = await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(filePath)}`);
+        const d = await r.json() as { content?: string; error?: string };
+        if (d.error) { setError(d.error); return; }
+        setTabs(prev => [...prev, { path: filePath, name, content: d.content ?? '', dirty: false, docType: 'html' }]);
+        setActiveTab(filePath);
+        return;
+      }
+      if (isMarkdownExt(name)) {
+        const r = await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(filePath)}`);
+        const d = await r.json() as { content?: string; error?: string };
+        if (d.error) { setError(d.error); return; }
+        setTabs(prev => [...prev, { path: filePath, name, content: d.content ?? '', dirty: false, docType: 'markdown' }]);
         setActiveTab(filePath);
         return;
       }
@@ -465,7 +524,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
     setTreeVersion(v => v + 1);
     if (!activeTab) return;
     const currentTabData = tabs.find(t => t.path === activeTab);
-    if (currentTabData?.docType) return; // document — don't reload raw bytes
+    if (currentTabData?.docType && currentTabData.docType !== 'markdown') return; // doc/pdf/html — don't reload raw bytes
     fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(activeTab)}`)
       .then(r => r.json())
       .then((d: { content?: string }) => {
@@ -509,6 +568,14 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
   async function saveTab(tab: Tab) {
     if (tab.docType === 'ppt') { pptSaveRef.current?.(); return; }
     if (tab.docType === 'excel') return; // ExcelEditor manages its own save
+    if (tab.docType === 'pdf' || tab.docType === 'html') return; // read-only viewers
+    if (tab.docType === 'markdown') {
+      await fetch(`${HTTP_BASE}/api/file`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: tab.path, content: tab.content }),
+      });
+      return;
+    }
     if (tab.docType) {
       const body = tab.blocks
         ? { path: tab.path, blocks: tab.blocks }
@@ -630,7 +697,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
             ref={uploadRef}
             type="file"
             multiple
-            accept=".pptx,.ppt,.docx,.doc,.xlsx,.xls,.pdf,.txt,.md,.csv,.json,.py,.ts,.tsx,.js,.jsx"
+            accept=".pptx,.ppt,.docx,.doc,.xlsx,.xls,.pdf,.txt,.md,.csv,.json,.py,.ts,.tsx,.js,.jsx,.html,.htm"
             style={{ display: 'none' }}
             onChange={handleUpload}
           />
@@ -645,6 +712,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
             ctxMenu={ctxMenu} onCtxMenu={handleCtxMenu}
             renamingPath={renamingPath} onRenameCommit={handleRenameCommit}
             onRefresh={() => setTreeVersion(v => v + 1)}
+            processingPptx={processingPptx}
           />
           {/* Inline new-folder input */}
           {newFolderDir && (
@@ -841,7 +909,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
         </div>{/* end tab bar */}
 
         {/* Path + save toolbar — hidden for doc files which have their own toolbar */}
-        {currentTab && !currentTab.docType && (
+        {currentTab && (!currentTab.docType || currentTab.docType === 'markdown') && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '4px 14px', background: 'var(--bg-tertiary)',
@@ -850,7 +918,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
             <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)', fontFamily: FONT_STYLE.fontFamily, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {currentTab.path.replace(cwd, '').replace(/^\//, '')}
             </span>
-            {currentTab.dirty && !currentTab.docType && (
+            {currentTab.dirty && (
               <button type="button" onClick={() => void save()} disabled={saving} style={{
                 padding: '2px 10px', fontSize: 11, flexShrink: 0,
                 border: `1px solid var(--accent-blue)`, borderRadius: 3,
@@ -884,6 +952,68 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
                 onClean={() => setTabs(prev => prev.map(t => t.path === currentTab.path ? { ...t, dirty: false } : t))}
               />
             </React.Suspense>
+          ) : currentTab.docType === 'pdf' ? (
+            <iframe
+              key={currentTab.path}
+              src={`${HTTP_BASE}/api/file/view?path=${encodeURIComponent(currentTab.path)}`}
+              style={{ flex: 1, border: 'none', minHeight: 0, background: '#fff' }}
+              title={currentTab.name}
+            />
+          ) : currentTab.docType === 'html' ? (
+            <iframe
+              key={currentTab.path}
+              srcDoc={currentTab.content}
+              style={{ flex: 1, border: 'none', minHeight: 0, background: '#fff' }}
+              title={currentTab.name}
+              sandbox="allow-scripts"
+            />
+          ) : currentTab.docType === 'markdown' ? (
+            <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+              {/* Editor pane */}
+              <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 0, borderRight: '1px solid var(--border-primary)' }}>
+                <div style={{ position: 'relative', minWidth: '100%', minHeight: '100%' }}>
+                  <HighlightLayer content={currentTab.content} filename={currentTab.name} />
+                  <textarea
+                    ref={textareaRef}
+                    value={currentTab.content}
+                    spellCheck={false}
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    style={{
+                      ...editorFont,
+                      position: 'relative', display: 'block',
+                      width: '100%', minHeight: '100%',
+                      paddingTop: PAD.top, paddingRight: PAD.right,
+                      paddingBottom: PAD.bottom, paddingLeft: LN_WIDTH,
+                      border: 'none', outline: 'none', resize: 'none',
+                      background: 'transparent', color: 'transparent',
+                      caretColor: 'var(--accent-blue)',
+                      overflow: 'hidden', whiteSpace: 'pre',
+                      wordBreak: 'normal', overflowWrap: 'normal',
+                    }}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: val, dirty: true } : t));
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 's' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); }
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const ta = e.currentTarget;
+                        const s = ta.selectionStart, end = ta.selectionEnd;
+                        const next = currentTab.content.slice(0, s) + '  ' + currentTab.content.slice(end);
+                        setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, content: next, dirty: true } : t));
+                        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + 2; });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              {/* Preview pane */}
+              <div style={{ flex: 1, overflow: 'auto', padding: '20px 28px', background: 'var(--bg-primary)' }}>
+                <div className="doc-word-view" dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(currentTab.content) }} />
+              </div>
+            </div>
           ) : currentTab.docType ? (
             /* ── Document viewer / editor ── */
             <div className="doc-word-shell">
