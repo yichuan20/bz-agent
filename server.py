@@ -1397,7 +1397,7 @@ _MAX_DOC_BYTES = 50 * 1024 * 1024  # 50 MB
 def _docx_to_blocks(data: bytes) -> list:
     """Convert DOCX binary → Block[] in bz-office JSON format."""
     import docx as _docx
-    import io, secrets
+    import io, secrets, base64
     from docx.oxml.ns import qn
 
     doc = _docx.Document(io.BytesIO(data))
@@ -1622,10 +1622,66 @@ def _docx_to_blocks(data: bytes) -> list:
     except Exception:
         pass
 
+    def _extract_drawing_style(drawing, para):
+        """Extract image data and dimensions from a <w:drawing> element."""
+        try:
+            _wp = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+            _a  = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+            _r  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+            container = drawing.find(f'{{{_wp}}}inline') or drawing.find(f'{{{_wp}}}anchor')
+            if container is None: return None
+            extent = container.find(f'{{{_wp}}}extent')
+            cx = int(extent.get('cx', 0)) if extent is not None else 0
+            cy = int(extent.get('cy', 0)) if extent is not None else 0
+            width_px  = max(1, round(cx / 9525))
+            height_px = max(1, round(cy / 9525))
+            blip = container.find(f'.//{{{_a}}}blip')
+            if blip is None: return None
+            r_id = blip.get(f'{{{_r}}}embed')
+            if not r_id: return None
+            image_part = para.part.related_parts[r_id]
+            b64 = base64.b64encode(image_part.blob).decode('ascii')
+            data_url = f"data:{image_part.content_type};base64,{b64}"
+            return {"imageUrl": data_url, "imageWidth": width_px, "imageHeight": height_px}
+        except Exception:
+            return None
+
     def _para_to_block(para) -> dict:
         text   = para.text
         styles = _run_styles(para)
         block  = {"text": text, "styles": styles}
+
+        # Scan ALL <w:r> elements in the paragraph XML, not just para.runs —
+        # python-docx omits drawing-only runs (no <w:t>) from .runs, so image runs
+        # would be silently skipped if we used that property.
+        pos = 0
+        insertions = []
+        for run_el in para._p.findall(qn('w:r')):
+            drawing = run_el.find(qn('w:drawing'))
+            if drawing is not None:
+                img = _extract_drawing_style(drawing, para)
+                if img:
+                    insertions.append((pos, img))
+            t_el = run_el.find(qn('w:t'))
+            pos += len(t_el.text if t_el is not None and t_el.text else '')
+
+        if insertions:
+            chars = list(block["text"])
+            cur_styles = list(block["styles"])
+            for ins_pos, img_style in sorted(insertions, key=lambda x: -x[0]):
+                chars.insert(ins_pos, ' ')
+                shifted = []
+                for sr in cur_styles:
+                    nr = dict(sr)
+                    if nr["start"] >= ins_pos:
+                        nr["start"] += 1; nr["end"] += 1
+                    elif nr["end"] > ins_pos:
+                        nr["end"] += 1
+                    shifted.append(nr)
+                shifted.append({"start": ins_pos, "end": ins_pos + 1, **img_style})
+                cur_styles = sorted(shifted, key=lambda s: s["start"])
+            block["text"]   = ''.join(chars)
+            block["styles"] = cur_styles
 
         # Heading → override styles with properties from the document's heading style
         sname = para.style.name if para.style else ""
@@ -1634,12 +1690,13 @@ def _docx_to_blocks(data: bytes) -> list:
             level_key = sname.split()[-1] if sname.startswith("Heading ") else None
             props = _heading_props.get(level_key, {}) if level_key else {}
             heading_font = _major_font or _minor_font or None
-            heading_style: dict = {"start": 0, "end": len(text), "fontSize": size}
+            heading_style: dict = {"start": 0, "end": len(block["text"]), "fontSize": size}
             if props.get("isBold", True):   heading_style["isBold"]   = True
             if props.get("isItalic"):       heading_style["isItalic"] = True
             if props.get("textColor"):      heading_style["textColor"] = props["textColor"]
             if heading_font:                heading_style["fontFamily"] = heading_font
             block["styles"] = [heading_style]
+            block["headingLevel"] = int(level_key) if level_key else None
 
         # Paragraph alignment
         if para.alignment in _ALIGN_MAP:
@@ -1713,8 +1770,8 @@ def _docx_to_blocks(data: bytes) -> list:
 def _blocks_to_docx(blocks: list) -> bytes:
     """Convert Block[] (bz-office format) → DOCX binary."""
     import docx as _docx
-    import io
-    from docx.shared import Pt, RGBColor
+    import io, base64
+    from docx.shared import Pt, RGBColor, Emu
 
     doc = _docx.Document()
 
@@ -1750,18 +1807,11 @@ def _blocks_to_docx(blocks: list) -> bytes:
         prefix = b.get("prefix", "")
         indent = b.get("indent", 0)
 
-        # Detect heading via fontSize
-        heading_size = None
-        for sr in styles:
-            if sr.get("isBold") and sr.get("start", 0) == 0 and sr.get("end", 0) == len(text):
-                fs = sr.get("fontSize", 0)
-                if fs >= 24: heading_size = 1
-                elif fs >= 20: heading_size = 2
-                elif fs >= 18: heading_size = 3
+        # Use stored headingLevel (set during parse) or fall back to none
+        heading_size = b.get("headingLevel") or None
 
         if heading_size:
             para = doc.add_heading(text, level=heading_size)
-            # Apply fontFamily to heading runs if overridden
             heading_font = next((sr.get("fontFamily") for sr in styles if sr.get("fontFamily")), None)
             if heading_font:
                 for run in para.runs:
@@ -1780,22 +1830,34 @@ def _blocks_to_docx(blocks: list) -> bytes:
                     s, e = sr.get("start", 0), sr.get("end", len(text))
                     if cursor < s:
                         para.add_run(text[cursor:s])
-                    run = para.add_run(text[s:e])
-                    run.bold        = sr.get("isBold", False)
-                    run.italic      = sr.get("isItalic", False)
-                    run.underline   = sr.get("isUnderlined", False)
-                    if sr.get("fontFamily"):
-                        run.font.name = sr["fontFamily"]
-                    if sr.get("fontSize"):
-                        run.font.size = Pt(sr["fontSize"])
-                    if sr.get("textColor"):
+                    if sr.get("imageUrl"):
                         try:
-                            hex_c = sr["textColor"].lstrip("#")
-                            run.font.color.rgb = RGBColor(
-                                int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
-                            )
+                            data_url = sr["imageUrl"]
+                            _, b64_data = data_url.split(",", 1)
+                            img_bytes = base64.b64decode(b64_data)
+                            img_run = para.add_run()
+                            w_emu = sr.get("imageWidth",  64) * 9525
+                            h_emu = sr.get("imageHeight", 64) * 9525
+                            img_run.add_picture(io.BytesIO(img_bytes), width=Emu(w_emu), height=Emu(h_emu))
                         except Exception:
-                            pass
+                            para.add_run(text[s:e])
+                    else:
+                        run = para.add_run(text[s:e])
+                        run.bold      = sr.get("isBold", False)
+                        run.italic    = sr.get("isItalic", False)
+                        run.underline = sr.get("isUnderlined", False)
+                        if sr.get("fontFamily"):
+                            run.font.name = sr["fontFamily"]
+                        if sr.get("fontSize"):
+                            run.font.size = Pt(sr["fontSize"])
+                        if sr.get("textColor"):
+                            try:
+                                hex_c = sr["textColor"].lstrip("#")
+                                run.font.color.rgb = RGBColor(
+                                    int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
+                                )
+                            except Exception:
+                                pass
                     cursor = e
                 if cursor < len(text):
                     para.add_run(text[cursor:])

@@ -1802,14 +1802,16 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                         except Exception: pass
                     if sc_path.exists():
                         sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
-                        # Invalidate old sidecars that predate fontFamily support.
-                        # If no block style has fontFamily, re-parse the DOCX.
-                        has_font = any(
-                            s.get("fontFamily")
+                        # Accept sidecar if any style carries fontFamily (text content is
+                        # up-to-date) OR imageUrl (image-only blocks have no fontFamily).
+                        # Old sidecars that predate fontFamily support will have neither,
+                        # causing a re-parse from DOCX to pick up the new field.
+                        has_valid = any(
+                            s.get("fontFamily") or s.get("imageUrl")
                             for b in (sidecar.get("blocks") or [])
                             for s in (b.get("styles") or [])
                         )
-                        if has_font or not sidecar.get("blocks"):
+                        if has_valid or not sidecar.get("blocks"):
                             return sidecar
 
                 if p.stat().st_size > _MAX_DOC_BYTES:
@@ -1856,6 +1858,12 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 json.dumps(sidecar, ensure_ascii=False, indent=2),
                 encoding='utf-8'
             )
+            # Also write back to the actual DOCX so Refresh re-reads current content
+            try:
+                docx_bytes = _blocks_to_docx(body.blocks)
+                p.write_bytes(docx_bytes)
+            except Exception:
+                pass  # non-fatal: sidecar remains authoritative
             return {"ok": True, "path": str(p), "wordCount": word_count}
         except Exception as exc:
             raise HTTPException(500, f"could not save: {exc}")
