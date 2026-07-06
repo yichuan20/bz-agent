@@ -1403,6 +1403,151 @@ def _docx_to_blocks(data: bytes) -> list:
     doc = _docx.Document(io.BytesIO(data))
     blocks = []
 
+    # Resolve major/minor theme fonts once for the whole document
+    _major_font = _minor_font = None
+    try:
+        import zipfile as _zf, xml.etree.ElementTree as _ET
+        with _zf.ZipFile(io.BytesIO(data)) as _z:
+            _theme_names = [n for n in _z.namelist() if n.lower().endswith('theme1.xml') and 'theme' in n.lower()]
+            if _theme_names:
+                _theme_xml = _z.read(_theme_names[0])
+                _theme_root = _ET.fromstring(_theme_xml)
+                _ans = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+                _fs = _theme_root.find(f'.//{{{_ans}}}fontScheme')
+                if _fs is not None:
+                    _mj = _fs.find(f'{{{_ans}}}majorFont/{{{_ans}}}latin')
+                    _mn = _fs.find(f'{{{_ans}}}minorFont/{{{_ans}}}latin')
+                    if _mj is not None: _major_font = _mj.get('typeface')
+                    if _mn is not None: _minor_font = _mn.get('typeface')
+    except Exception:
+        pass
+
+    # Resolve document-default font (Normal style or docDefaults)
+    # Note: _resolve_font is defined below; inline the theme-ref logic here
+    def _resolve_theme(name):
+        if not name: return None
+        if name in ('+mn-lt', '+Body'): return _minor_font
+        if name in ('+mj-lt', '+Heading'): return _major_font
+        if name.startswith('+'): return None
+        return name
+
+    _default_font = None
+    try:
+        v = doc.styles['Normal'].font.name
+        _default_font = _resolve_theme(v) or v or None
+    except Exception:
+        pass
+
+    # Resolve the document-default body font size (from Normal style or docDefaults).
+    _default_font_size_pt = None
+    try:
+        sz = doc.styles['Normal'].font.size
+        if sz: _default_font_size_pt = int(sz.pt)
+    except Exception:
+        pass
+    if not _default_font_size_pt:
+        try:
+            _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+            # docDefaults lives in the styles XML part, NOT in doc.element (body)
+            styles_el = doc.part.styles._element
+            defs = styles_el.find(f'{{{_wns}}}docDefaults')
+            if defs is not None:
+                rPr = defs.find(f'{{{_wns}}}rPrDefault/{{{_wns}}}rPr')
+                if rPr is not None:
+                    sz_el = rPr.find(f'{{{_wns}}}sz')
+                    if sz_el is not None:
+                        val = sz_el.get(qn('w:val'))
+                        if val: _default_font_size_pt = int(val) // 2  # half-points
+        except Exception:
+            pass
+    if not _default_font:
+        try:
+            _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+            defs = doc.element.find(f'.//{{{_wns}}}docDefaults')
+            if defs is not None:
+                rFonts = defs.find(f'.//{{{_wns}}}rFonts')
+                if rFonts is not None:
+                    raw = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
+                    _default_font = _resolve_theme(raw)
+        except Exception:
+            pass
+
+    def _resolve_font(name):
+        """Resolve a font name, including theme references."""
+        if not name:
+            return None
+        if name in ('+mj-lt', '+Heading'): return _major_font
+        if name in ('+mn-lt', '+Body'):    return _minor_font
+        # w:asciiTheme / w:hAnsiTheme values like "majorHAnsi", "minorHAnsi"
+        nl = name.lower()
+        if nl.startswith('major'): return _major_font
+        if nl.startswith('minor'): return _minor_font
+        if name.startswith('+'): return None   # unknown theme slot
+        return name
+
+    def _rFonts_font(rFonts):
+        """Extract resolved font from an rFonts element, checking all relevant attrs."""
+        for attr in (qn('w:ascii'), qn('w:hAnsi'), qn('w:asciiTheme'), qn('w:hAnsiTheme'), qn('w:cs')):
+            v = _resolve_font(rFonts.get(attr))
+            if v:
+                return v
+        return None
+
+    def _get_run_font(run, para=None):
+        """Return effective font name for a run, tracing style inheritance."""
+        # 1. Directly set on the run's rFonts XML
+        try:
+            rPr = run._r.rPr
+            if rPr is not None:
+                rFonts = rPr.find(qn('w:rFonts'))
+                if rFonts is not None:
+                    v = _rFonts_font(rFonts)
+                    if v: return v
+        except Exception:
+            pass
+        # 2. Paragraph style's character rPr (for runs that inherit from the para style)
+        if para is not None:
+            try:
+                _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                style_el = para.style.element if para.style else None
+                if style_el is not None:
+                    style_rPr = style_el.find(f'.//{{{_wns}}}rPr')
+                    if style_rPr is not None:
+                        rFonts = style_rPr.find(qn('w:rFonts'))
+                        if rFonts is not None:
+                            v = _rFonts_font(rFonts)
+                            if v: return v
+            except Exception:
+                pass
+        # 3. python-docx high-level accessor
+        try:
+            v = _resolve_font(run.font.name)
+            if v: return v
+        except Exception:
+            pass
+        # 4. Document default font (minor/body theme font preferred for body text)
+        return _minor_font or _default_font or None
+
+    def _effective_font_size_pt(run, para):
+        """Resolve the effective font size in points by walking the style chain."""
+        # 1. Explicit size on the run
+        if run.font.size:
+            return int(run.font.size.pt)
+        # 2. Character style on the run
+        try:
+            if run.style and run.style.font.size:
+                return int(run.style.font.size.pt)
+        except Exception:
+            pass
+        # 3. Paragraph style
+        try:
+            if para.style and para.style.font.size:
+                return int(para.style.font.size.pt)
+        except Exception:
+            pass
+        # 4. Document default (Normal style / docDefaults)
+        return _default_font_size_pt
+
     def _run_styles(para) -> list:
         styles, pos = [], 0
         for run in para.runs:
@@ -1414,30 +1559,91 @@ def _docx_to_blocks(data: bytes) -> list:
             if run.italic:      sr["isItalic"] = True
             if run.underline:   sr["isUnderlined"] = True
             if getattr(run.font, "strike", None): sr["isStrikethrough"] = True
-            if run.font.size:   sr["fontSize"] = int(run.font.size.pt)
+            eff_size = _effective_font_size_pt(run, para)
+            if eff_size:        sr["fontSize"] = eff_size
             if run.font.color and run.font.color.type is not None:
                 try: sr["textColor"] = f"#{run.font.color.rgb}"
                 except Exception: pass
+            fname = _get_run_font(run, para)
+            if fname:
+                sr["fontFamily"] = fname
             if len(sr) > 2: styles.append(sr)
             pos += n
         return styles
 
+    # Pre-read full heading properties (size, bold, italic, color) by walking the style chain.
+    _H_WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    _FALLBACK_HEADING_SIZES = {"1": 24, "2": 20, "3": 18, "4": 16}
+
+    def _resolve_style_size_pt(style_name: str):
+        visited: set = set()
+        try: s = doc.styles[style_name]
+        except Exception: return None
+        while s is not None and s.name not in visited:
+            visited.add(s.name)
+            if s.font.size:
+                return int(s.font.size.pt)
+            s = s.base_style
+        return _default_font_size_pt
+
+    _heading_props: dict = {}  # level str -> {fontSize, isBold, isItalic, textColor, fontFamily}
+    for _level in ("1", "2", "3", "4"):
+        _props: dict = {}
+        _sz = _resolve_style_size_pt(f"Heading {_level}")
+        if _sz: _props["fontSize"] = _sz
+        try:
+            _hs = doc.styles[f"Heading {_level}"]
+            if _hs.font.bold:   _props["isBold"]   = True
+            if _hs.font.italic: _props["isItalic"] = True
+            _rPr = _hs._element.find(f'{{{_H_WNS}}}rPr')
+            _col = _rPr.find(f'{{{_H_WNS}}}color') if _rPr is not None else None
+            if _col is not None:
+                _cv = _col.get(qn('w:val'))
+                if _cv and _cv.lower() != 'auto':
+                    _props["textColor"] = f"#{_cv.upper()}"
+        except Exception:
+            pass
+        _heading_props[_level] = _props
+
     def _heading_size(style_name: str):
-        for level, size in (("1", 24), ("2", 20), ("3", 18), ("4", 16)):
+        for level in ("1", "2", "3", "4"):
             if style_name == f"Heading {level}":
-                return size
+                return _heading_props[level].get("fontSize") or _FALLBACK_HEADING_SIZES[level]
         return None
+
+    _ALIGN_MAP = {}
+    try:
+        from docx.enum.text import WD_ALIGN_PARAGRAPH as _WAP
+        _ALIGN_MAP = {
+            _WAP.CENTER: 'center',
+            _WAP.RIGHT: 'right',
+            _WAP.JUSTIFY: 'justify',
+        }
+    except Exception:
+        pass
 
     def _para_to_block(para) -> dict:
         text   = para.text
         styles = _run_styles(para)
         block  = {"text": text, "styles": styles}
 
-        # Heading → override styles with bold + large font
+        # Heading → override styles with properties from the document's heading style
         sname = para.style.name if para.style else ""
         size  = _heading_size(sname)
         if size:
-            block["styles"] = [{"start": 0, "end": len(text), "fontSize": size, "isBold": True}]
+            level_key = sname.split()[-1] if sname.startswith("Heading ") else None
+            props = _heading_props.get(level_key, {}) if level_key else {}
+            heading_font = _major_font or _minor_font or None
+            heading_style: dict = {"start": 0, "end": len(text), "fontSize": size}
+            if props.get("isBold", True):   heading_style["isBold"]   = True
+            if props.get("isItalic"):       heading_style["isItalic"] = True
+            if props.get("textColor"):      heading_style["textColor"] = props["textColor"]
+            if heading_font:                heading_style["fontFamily"] = heading_font
+            block["styles"] = [heading_style]
+
+        # Paragraph alignment
+        if para.alignment in _ALIGN_MAP:
+            block["alignment"] = _ALIGN_MAP[para.alignment]
 
         # Bullet / numbered list
         try:
@@ -1473,9 +1679,23 @@ def _docx_to_blocks(data: bytes) -> list:
                 n_cols = max((len(r.cells) for r in table.rows), default=0)
                 for r_idx, row in enumerate(table.rows):
                     for c_idx, cell in enumerate(row.cells):
+                        # Build per-cell styles by walking each paragraph's runs
+                        cell_text   = ""
+                        cell_styles = []
+                        for p_idx, para in enumerate(cell.paragraphs):
+                            if p_idx > 0:
+                                cell_text += "\n"
+                            offset = len(cell_text)
+                            for sr in _run_styles(para):
+                                cell_styles.append({
+                                    **sr,
+                                    "start": sr["start"] + offset,
+                                    "end":   sr["end"]   + offset,
+                                })
+                            cell_text += para.text
                         blocks.append({
-                            "text":            cell.text,
-                            "styles":          [],
+                            "text":            cell_text,
+                            "styles":          cell_styles,
                             "isTableCell":     True,
                             "tableId":         tid,
                             "rowIndex":        r_idx,
@@ -1486,7 +1706,8 @@ def _docx_to_blocks(data: bytes) -> list:
             except Exception:
                 pass
 
-    return blocks
+    effective_default = _minor_font or _default_font or None
+    return {"blocks": blocks, "defaultFont": effective_default}
 
 
 def _blocks_to_docx(blocks: list) -> bytes:
@@ -1540,6 +1761,11 @@ def _blocks_to_docx(blocks: list) -> bytes:
 
         if heading_size:
             para = doc.add_heading(text, level=heading_size)
+            # Apply fontFamily to heading runs if overridden
+            heading_font = next((sr.get("fontFamily") for sr in styles if sr.get("fontFamily")), None)
+            if heading_font:
+                for run in para.runs:
+                    run.font.name = heading_font
         elif prefix == "•":
             para = doc.add_paragraph(style="List Bullet")
             para.add_run(text)
@@ -1558,6 +1784,8 @@ def _blocks_to_docx(blocks: list) -> bytes:
                     run.bold        = sr.get("isBold", False)
                     run.italic      = sr.get("isItalic", False)
                     run.underline   = sr.get("isUnderlined", False)
+                    if sr.get("fontFamily"):
+                        run.font.name = sr["fontFamily"]
                     if sr.get("fontSize"):
                         run.font.size = Pt(sr["fontSize"])
                     if sr.get("textColor"):
@@ -1680,15 +1908,17 @@ def _detect_and_parse(filename: str, data: bytes) -> dict:
 
     # DOCX/DOC → return Block[] (bz-office format); other formats → markdown text
     if ext in _DOCX_EXTS:
-        blocks     = _docx_to_blocks(data)
+        result     = _docx_to_blocks(data)
+        blocks     = result["blocks"]
         word_count = sum(len(b.get("text", "").split()) for b in blocks)
         return {
-            "filename":  filename,
-            "type":      fmt,
-            "pages":     max(1, len([b for b in blocks if not b.get("isTableCell")]) // 30),
-            "wordCount": word_count,
-            "truncated": False,
-            "blocks":    blocks,
+            "filename":    filename,
+            "type":        fmt,
+            "pages":       max(1, len([b for b in blocks if not b.get("isTableCell")]) // 30),
+            "wordCount":   word_count,
+            "truncated":   False,
+            "blocks":      blocks,
+            "defaultFont": result.get("defaultFont"),
         }
 
     parsers = {

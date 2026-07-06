@@ -123,6 +123,10 @@ interface WordDocToolbarProps {
   textColor?: string;
   bgColor?: string;
   fontSize?: number;
+  fontFamily?: string;
+  alignment?: string;
+  lineSpacing?: number;
+  heading?: string;
   isBullet?: boolean;
   isNumbered?: boolean;
   isLink?: boolean;
@@ -135,6 +139,10 @@ interface WordDocToolbarProps {
   onSetTextColor?: (color: string) => void;
   onSetBgColor?: (color: string) => void;
   onSetFontSize?: (size: number) => void;
+  onSetFontFamily?: (family: string) => void;
+  onSetAlignment?: (alignment: string) => void;
+  onSetLineSpacing?: (spacing: number) => void;
+  onSetHeading?: (level: string) => void;
   onToggleBullet?: () => void;
   onToggleNumbered?: () => void;
   onInsertLink?: () => void;
@@ -160,6 +168,10 @@ const WordDocToolbar = ({
   textColor = '#000000',
   bgColor = 'transparent',
   fontSize = 11,
+  fontFamily = '',
+  alignment = 'left',
+  lineSpacing = 1,
+  heading = 'Body',
   isBullet = false,
   isNumbered = false,
   isLink = false,
@@ -171,6 +183,10 @@ const WordDocToolbar = ({
   onSetTextColor,
   onSetBgColor,
   onSetFontSize,
+  onSetFontFamily,
+  onSetAlignment,
+  onSetLineSpacing,
+  onSetHeading,
   onToggleBullet,
   onToggleNumbered,
   onInsertLink,
@@ -200,10 +216,20 @@ const WordDocToolbar = ({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   // Current selections
-  const [currentFont, setCurrentFont] = useState('Inter');
+  // Derive current font directly from prop — no intermediate state so it always tracks the cursor
+  const currentFont = (() => {
+    if (!fontFamily) return 'Inter';
+    const lower = fontFamily.toLowerCase();
+    const matched = FONTS.find(f =>
+      f.name.toLowerCase() === lower ||
+      f.family.toLowerCase().includes(lower) ||
+      lower.includes(f.name.toLowerCase())
+    );
+    return matched ? matched.name : fontFamily;
+  })();
   const [currentFontSize, setCurrentFontSize] = useState(fontSize);
-  const [currentHeading, setCurrentHeading] = useState('Body');
-  const [currentLineSpacing, setCurrentLineSpacing] = useState('1.5');
+  const currentHeading = heading || 'Body';
+  const currentLineSpacing = lineSpacing ? String(lineSpacing) : '1';
   const [currentAlignment, setCurrentAlignment] = useState('left');
 
   // Refs
@@ -212,8 +238,13 @@ const WordDocToolbar = ({
 
   // Sync internal state with props when selection changes
   useEffect(() => {
-    setCurrentFontSize(fontSize);
+    if (fontSize != null) setCurrentFontSize(fontSize);
   }, [fontSize]);
+
+
+  useEffect(() => {
+    if (alignment) setCurrentAlignment(alignment);
+  }, [alignment]);
 
   // Close all dropdowns
   const closeAllDropdowns = useCallback(() => {
@@ -377,7 +408,7 @@ const WordDocToolbar = ({
               key={font.name}
               $active={currentFont === font.name}
               style={{ fontFamily: font.family }}
-              onClick={() => { setCurrentFont(font.name); setFontDropdownOpen(false); }}
+              onClick={() => { onSetFontFamily?.(font.name); setFontDropdownOpen(false); }}
             >
               {font.name}
             </FontOption>
@@ -412,10 +443,10 @@ const WordDocToolbar = ({
         <span>{currentHeading}</span>
         <svg viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9" /></svg>
         <HeadingDropdownMenu $open={headingDropdownOpen} onClick={e => e.stopPropagation()}>
-          <HeadingOption $variant="h1" onClick={() => { setCurrentHeading('Heading 1'); setHeadingDropdownOpen(false); }}>Heading 1</HeadingOption>
-          <HeadingOption $variant="h2" onClick={() => { setCurrentHeading('Heading 2'); setHeadingDropdownOpen(false); }}>Heading 2</HeadingOption>
-          <HeadingOption $variant="h3" onClick={() => { setCurrentHeading('Heading 3'); setHeadingDropdownOpen(false); }}>Heading 3</HeadingOption>
-          <HeadingOption $variant="body" onClick={() => { setCurrentHeading('Body'); setHeadingDropdownOpen(false); }}>Body</HeadingOption>
+          <HeadingOption $variant="h1" onClick={() => { onSetHeading?.('h1'); setHeadingDropdownOpen(false); }}>Heading 1</HeadingOption>
+          <HeadingOption $variant="h2" onClick={() => { onSetHeading?.('h2'); setHeadingDropdownOpen(false); }}>Heading 2</HeadingOption>
+          <HeadingOption $variant="h3" onClick={() => { onSetHeading?.('h3'); setHeadingDropdownOpen(false); }}>Heading 3</HeadingOption>
+          <HeadingOption $variant="body" onClick={() => { onSetHeading?.('body'); setHeadingDropdownOpen(false); }}>Body</HeadingOption>
         </HeadingDropdownMenu>
       </ToolbarDropdown>
 
@@ -484,16 +515,16 @@ const WordDocToolbar = ({
       <ToolbarDivider />
 
       {/* Text Alignment */}
-      <ToolbarBtn $active={currentAlignment === 'left'} data-tooltip="Align left" onClick={() => setCurrentAlignment('left')}>
+      <ToolbarBtn $active={currentAlignment === 'left'} data-tooltip="Align left" onClick={() => { setCurrentAlignment('left'); onSetAlignment?.('left'); }}>
         <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" /></svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'center'} data-tooltip="Align center" onClick={() => setCurrentAlignment('center')}>
+      <ToolbarBtn $active={currentAlignment === 'center'} data-tooltip="Align center" onClick={() => { setCurrentAlignment('center'); onSetAlignment?.('center'); }}>
         <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'right'} data-tooltip="Align right" onClick={() => setCurrentAlignment('right')}>
+      <ToolbarBtn $active={currentAlignment === 'right'} data-tooltip="Align right" onClick={() => { setCurrentAlignment('right'); onSetAlignment?.('right'); }}>
         <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" /></svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'justify'} data-tooltip="Justify" onClick={() => setCurrentAlignment('justify')}>
+      <ToolbarBtn $active={currentAlignment === 'justify'} data-tooltip="Justify" onClick={() => { setCurrentAlignment('justify'); onSetAlignment?.('justify'); }}>
         <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
       </ToolbarBtn>
 
@@ -514,7 +545,7 @@ const WordDocToolbar = ({
             <LineSpacingOption
               key={spacing.value}
               $active={currentLineSpacing === spacing.value}
-              onClick={() => { setCurrentLineSpacing(spacing.value); setLineSpacingOpen(false); }}
+              onClick={() => { onSetLineSpacing?.(parseFloat(spacing.value)); setLineSpacingOpen(false); }}
             >
               {spacing.label}
             </LineSpacingOption>

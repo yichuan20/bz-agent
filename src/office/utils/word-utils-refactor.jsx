@@ -172,10 +172,11 @@ const contentYToDrawY = (contentY, topMargin) => {
  * Note: Positions are stored in "content space" (continuous Y coordinates)
  * Page gaps are only added when drawing
  */
-const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], topMargin = 0 }) => {
+const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], topMargin = 0, lineSpacing = 1 }) => {
   const char = text[i];
   const style = styles[i];
   const charWidth = ctx.measureText(char).width;
+  const lh = LINE_HEIGHT * lineSpacing;
 
   // handle table
   if (TABLE_CHARS.includes(char)) {
@@ -206,20 +207,75 @@ const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], t
       styleToUse = indentedStyle;
     }
 
-    y += LINE_HEIGHT;
+    y += lh;
     x = START_X + (styleToUse?.indent || 100);
     return { x, y, tableState };
   }
 
   const shouldStartNewLine = char === '\n' || isWordOverlappingEnd({ x, text, i, ctx, endX });
   if (shouldStartNewLine) {
-    y += LINE_HEIGHT;
+    y += lh;
     x = startX;
     return { x, y, tableState };
   }
 
   x += charWidth;
   return { x, y, tableState };
+};
+
+/**
+ * Set ctx.font from a character style object
+ */
+const setCtxFont = (ctx, style, defaultSize) => {
+  const fs = ((style?.fontSize || defaultSize) * SF);
+  const ff = style?.fontFamily || 'Arial';
+  const fw = style?.isBold ? 'bold' : 'normal';
+  const fi = style?.isItalic ? 'italic' : 'normal';
+  ctx.font = `${fi} ${fw} ${fs}px '${ff}', sans-serif`;
+};
+
+/**
+ * Adjust x positions in newXs for text alignment (center/right/justify).
+ * Called after pass 1 so all positions are known.
+ */
+const adjustForAlignment = (newXs, newYs, text, styles, ctx) => {
+  // Group non-control char indices by their y position (visual line)
+  const linesByY = new Map();
+  for (let j = 0; j < newXs.length && j < text.length; j++) {
+    if (TABLE_CHARS.includes(text[j]) || text[j] === '\n') continue;
+    const ly = newYs[j];
+    if (ly === undefined) continue;
+    if (!linesByY.has(ly)) linesByY.set(ly, []);
+    linesByY.get(ly).push(j);
+  }
+
+  for (const [, indices] of linesByY) {
+    if (!indices.length) continue;
+    const firstI = indices[0];
+
+    // Find alignment stored on the preceding \n (or at index 0 for first paragraph)
+    let nlIdx = firstI - 1;
+    while (nlIdx > 0 && text[nlIdx] !== '\n') nlIdx--;
+    const paraStyle = nlIdx >= 0 ? (styles[nlIdx] || styles[0]) : styles[0];
+    const alignment = paraStyle?.alignment;
+    if (!alignment || alignment === 'left') continue;
+
+    // Measure line width using the last character
+    const lastI = indices[indices.length - 1];
+    setCtxFont(ctx, styles[lastI], FONT_SIZE);
+    const lastW = ctx.measureText(text[lastI]).width;
+    const lineW = newXs[lastI] + lastW - newXs[firstI];
+    const availW = END_X - START_X;
+
+    let offset = 0;
+    if (alignment === 'center') offset = Math.max(0, (availW - lineW) / 2);
+    else if (alignment === 'right') offset = Math.max(0, availW - lineW);
+    // justify: skip for now (requires word spacing adjustments)
+
+    if (offset > 0) {
+      for (const idx of indices) newXs[idx] += offset;
+    }
+  }
 };
 
 /**
@@ -255,6 +311,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     lineStartIndex--;
   }
   let lastY = newYs[i];
+  let currentLineSpacing = 1;
 
   while (i < text.length && i >= 0) {
     if (Math.abs(y - lastY) > 0.1) {
@@ -263,10 +320,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     }
 
     // Set font for measureText
-    ctx.font = `${FONT_SIZE * SF}px Arial`;
-    if (styles?.[i]?.fontSize) ctx.font = `${styles[i]?.fontSize * SF}px Arial`;
-    if (styles?.[i]?.isBold) ctx.font = `bold ${ctx?.font}`;
-    if (styles?.[i]?.isItalic) ctx.font = `italic ${ctx?.font}`;
+    setCtxFont(ctx, styles?.[i], FONT_SIZE);
 
     const spacePadding = 4 * SF;
     let currentX = x;
@@ -316,11 +370,16 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
       ctx,
       styles,
       topMargin,
+      lineSpacing: currentLineSpacing,
     });
 
     x = nextPos.x;
     y = nextPos.y;
     tableState = nextPos.tableState;
+
+    if (text[i] === '\n') {
+      currentLineSpacing = styles[i]?.lineSpacing || 1;
+    }
 
     const drawY = contentYToDrawY(y, topMargin);
     if (drawY - scrollY > VIEW_H * SF && !tableState && text?.[i] !== T_END) {
@@ -338,10 +397,69 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     newYs[text.length] = y;
   }
 
+  // Pass 1.5b: Fix table rows that span page breaks.
+  // After word-wrap is computed, any row whose content crosses a page boundary
+  // is pushed entirely to the next page (same as Word's "keep rows together" behaviour).
+  {
+    const firstContentY = topMargin + PAGE_MARGIN_TOP;
+    let ii = 0;
+    while (ii < text.length) {
+      if (text[ii] === T_START) {
+        let jj = ii + 1;
+        while (jj < text.length && text[jj] !== T_END) {
+          if (text[jj] === R_START) {
+            // Scan to the end of this row (next R_START or T_END)
+            let kk = jj + 1;
+            while (kk < text.length && text[kk] !== R_START && text[kk] !== T_END) {
+              kk++;
+            }
+            const rowEnd = kk;
+
+            // Find the row's starting Y (Y of first C_START) and its max content Y
+            let rowStartY = null;
+            let rowMaxY = -Infinity;
+            for (let mm = jj; mm < rowEnd; mm++) {
+              if (newYs[mm] !== undefined) {
+                if (text[mm] === C_START && rowStartY === null) rowStartY = newYs[mm];
+                if (newYs[mm] > rowMaxY) rowMaxY = newYs[mm];
+              }
+            }
+
+            if (rowStartY !== null && isFinite(rowMaxY)) {
+              const relStart = rowStartY - firstContentY;
+              const relMax   = rowMaxY   - firstContentY;
+              if (relStart >= 0 && relMax >= 0) {
+                const startPage = Math.floor(relStart / PAGE_CONTENT_HEIGHT);
+                const endPage   = Math.floor(relMax   / PAGE_CONTENT_HEIGHT);
+                if (endPage > startPage) {
+                  // Row crosses a page boundary — push it (and everything after) to next page
+                  const nextPageStartY = firstContentY + endPage * PAGE_CONTENT_HEIGHT;
+                  const shift = nextPageStartY - rowStartY;
+                  for (let mm = jj; mm <= text.length; mm++) {
+                    if (newYs[mm] !== undefined) newYs[mm] += shift;
+                  }
+                }
+              }
+            }
+
+            jj = rowEnd;
+          } else {
+            jj++;
+          }
+        }
+        ii = jj;
+      }
+      ii++;
+    }
+  }
+
   // Calculate number of pages needed based on max Y position
   const maxY = Math.max(...newYs.filter(y => y !== undefined), y);
   const contentHeight = maxY - topMargin - PAGE_MARGIN_TOP;
   const numPages = Math.max(1, Math.ceil(contentHeight / PAGE_CONTENT_HEIGHT) + 1);
+
+  // Pass 1.5: adjust x positions for text alignment (center / right)
+  adjustForAlignment(newXs, newYs, text, styles, ctx);
 
   // Draw page backgrounds BEFORE drawing content
   drawPageSetup({ ctx, topMargin, scrollY, numPages, headerText, footerText, gapColor });
@@ -356,15 +474,12 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     const drawY = contentYToDrawY(y, topMargin) - scrollY;
 
 
-    ctx.font = `${FONT_SIZE * SF}px Arial`;
+    setCtxFont(ctx, styles?.[i], FONT_SIZE);
     ctx.fillStyle = 'black';
     if (styles?.[i]?.bgColor) {
       drawBgBox({ x, y: drawY, ctx, char: text[i], bgColor: styles[i].bgColor });
     }
     if (styles?.[i]?.textColor) ctx.fillStyle = styles[i].textColor;
-    if (styles?.[i]?.fontSize) ctx.font = `${styles[i]?.fontSize * SF}px Arial`;
-    if (styles?.[i]?.isBold) ctx.font = `bold ${ctx?.font}`;
-    if (styles?.[i]?.isItalic) ctx.font = `italic ${ctx?.font}`;
     if (styles?.[i]?.url) ctx.fillStyle = 'blue';
     if (styles?.[i]?.isUnderlined) drawLine({ x, y: drawY, ctx, char: text[i], mode: 'underline' });
     if (styles?.[i]?.isStrikethrough) drawLine({ x, y: drawY, ctx, char: text[i], mode: 'strike' });

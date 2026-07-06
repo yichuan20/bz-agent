@@ -26,9 +26,12 @@ export interface DocStyle {
   textColor?: string;
   bgColor?: string;
   fontSize?: number;
+  fontFamily?: string;
   url?: string;
   indent?: number;
   prefix?: string;
+  alignment?: string;
+  lineSpacing?: number;
   imageUrl?: string;
   description?: string;
   imageWidth?: number;
@@ -53,6 +56,9 @@ export interface SelectionStyle {
   bgColor: string;
   url: string | undefined;
   fontSize: number;
+  fontFamily: string;
+  alignment: string;
+  lineSpacing: number;
 }
 
 // Indent constants
@@ -73,19 +79,37 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
 
   const isBullet = currentParagraphStyle?.prefix === '•';
   const isNumbered = isNumberedStyle(currentParagraphStyle);
+  const alignment = currentParagraphStyle?.alignment || 'left';
+  const lineSpacing = currentParagraphStyle?.lineSpacing || 1;
 
   if (!selectedStyles?.length) {
+    // No selection — read style of the character immediately left of the cursor
+    // (falls back to the character at cursor position for position 0)
+    const s = start ?? 0;
+    const leftStyle  = doc?.styles?.[Math.max(0, s - 1)] ?? null;
+    const rightStyle = doc?.styles?.[s] ?? null;
+    // For most properties, left-of-cursor is canonical (matches typing behavior).
+    // For fontFamily: if the char to the left is a newline (\n), its fontFamily
+    // belongs to the preceding paragraph — prefer the char at cursor position instead.
+    const leftIsNewline = s > 0 && doc?.text?.[s - 1] === '\n';
+    const cursorStyle = leftStyle ?? rightStyle;
+    const fontFamilyStyle = leftIsNewline
+      ? (rightStyle?.fontFamily ? rightStyle : leftStyle)
+      : (leftStyle?.fontFamily ? leftStyle : rightStyle);
     return {
-      isBold: false,
-      isItalic: false,
-      isUnderlined: false,
-      isStrikethrough: false,
+      isBold: cursorStyle?.isBold ?? false,
+      isItalic: cursorStyle?.isItalic ?? false,
+      isUnderlined: cursorStyle?.isUnderlined ?? false,
+      isStrikethrough: cursorStyle?.isStrikethrough ?? false,
       isBullet,
       isNumbered,
-      textColor: '#000000',
-      bgColor: 'transparent',
-      url: undefined,
-      fontSize: 16,
+      textColor: cursorStyle?.textColor ?? '#000000',
+      bgColor: cursorStyle?.bgColor ?? 'transparent',
+      url: cursorStyle?.url,
+      fontSize: cursorStyle?.fontSize ?? 16,
+      fontFamily: fontFamilyStyle?.fontFamily ?? '',
+      alignment,
+      lineSpacing,
     };
   }
 
@@ -100,6 +124,9 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
     bgColor: selectedStyles?.find((style: DocStyle | null) => style?.bgColor)?.bgColor || 'transparent',
     url: selectedStyles?.find((style: DocStyle | null) => style?.url)?.url,
     fontSize: selectedStyles?.find((style: DocStyle | null) => style?.fontSize)?.fontSize || 16,
+    fontFamily: selectedStyles?.find((style: DocStyle | null) => style?.fontFamily)?.fontFamily || '',
+    alignment,
+    lineSpacing,
   };
 };
 
@@ -214,6 +241,100 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
     }
   }
 
+  if (fieldName === 'fontFamily') {
+    const [start, end] = getStartEnd(doc);
+    let i = start;
+    while (i < end) {
+      if (!fieldValue) {
+        delete (newDoc.styles[i] as DocStyle)?.fontFamily;
+        if (isEmpty(newDoc.styles[i])) {
+          newDoc.styles[i] = null;
+        }
+      } else {
+        newDoc.styles[i] = {
+          ...newDoc.styles[i],
+          fontFamily: fieldValue as string,
+        };
+      }
+      i++;
+    }
+  }
+
+  return newDoc;
+};
+
+/**
+ * Set line spacing for the current paragraph (stored on the preceding \n)
+ */
+export const setLineSpacing = (doc: Doc, lineSpacing: number): Doc => {
+  const prefixIndex = getPrevNewlineIndex(doc);
+  const newDoc = cloneDeep(doc);
+  const current = newDoc.styles[prefixIndex];
+  if (!lineSpacing || lineSpacing === 1) {
+    if (current) {
+      delete (current as DocStyle).lineSpacing;
+      if (isEmpty(current)) newDoc.styles[prefixIndex] = null;
+    }
+  } else {
+    newDoc.styles[prefixIndex] = { ...(current || {}), lineSpacing };
+  }
+  return newDoc;
+};
+
+const HEADING_FONT_SIZES: Record<string, number | null> = {
+  h1: 24,
+  h2: 20,
+  h3: 18,
+  body: null,
+};
+
+/**
+ * Apply heading style to the current paragraph (H1/H2/H3/Body)
+ */
+export const setHeading = (doc: Doc, level: string): Doc => {
+  const newDoc = cloneDeep(doc);
+  const headingFontSize = HEADING_FONT_SIZES[level] ?? null;
+
+  // Find current paragraph: from prevNewline+1 to next \n
+  const prefixIdx = getPrevNewlineIndex(doc);
+  const paraStart = prefixIdx + 1;
+  let paraEnd = paraStart;
+  while (paraEnd < doc.text.length && doc.text[paraEnd] !== '\n') {
+    paraEnd++;
+  }
+
+  for (let i = paraStart; i < paraEnd; i++) {
+    const s = newDoc.styles[i] as DocStyle | null;
+    if (headingFontSize === null) {
+      // Body: clear heading styles
+      if (s) {
+        delete s.fontSize;
+        delete s.isBold;
+        if (isEmpty(s)) newDoc.styles[i] = null;
+      }
+    } else {
+      newDoc.styles[i] = { ...(s || {}), fontSize: headingFontSize, isBold: true };
+    }
+  }
+
+  return newDoc;
+};
+
+/**
+ * Set paragraph alignment for the current paragraph
+ */
+export const setAlignment = (doc: Doc, alignment: string): Doc => {
+  const prefixIndex = getPrevNewlineIndex(doc);
+  const newDoc = cloneDeep(doc);
+  const current = newDoc.styles[prefixIndex];
+  if (!alignment || alignment === 'left') {
+    if (current) {
+      delete (current as DocStyle).alignment;
+      if (isEmpty(current)) newDoc.styles[prefixIndex] = null;
+    }
+  } else {
+    newDoc.styles[prefixIndex] = { ...(current || {}), alignment };
+  }
   return newDoc;
 };
 

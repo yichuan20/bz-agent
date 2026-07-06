@@ -24,6 +24,9 @@ import {
   getSelectionStyle,
   toggleStyle,
   addStyleField,
+  setAlignment,
+  setLineSpacing,
+  setHeading,
   addBullet,
   removeBullet,
   addNumberedList,
@@ -52,12 +55,13 @@ interface WordDocEditorProps {
   onChange?:       (blocks: import('../components/BzDocEditor').Block[]) => void;
   onCursorChange?: (cursor: { selStart: number; selEnd: number }) => void;
   initialCursor?:  { selStart: number; selEnd: number };
+  defaultFont?:    string;
   readOnly?:       boolean;
   className?:      string;
   style?:          React.CSSProperties;
 }
 
-export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor, readOnly = false, className, style }: WordDocEditorProps) {
+export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor, defaultFont, readOnly = false, className, style }: WordDocEditorProps) {
   const [doc, setDoc] = useState<OfficeDoc>(() => {
     const d = getDocFromBlocks(blocks ?? []) as OfficeDoc;
     // Always ensure selStart/selEnd are numeric — drawCaret check uses === so undefined breaks it
@@ -109,6 +113,13 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
   // Derive current formatting state from selection for toolbar
   const sel = getSelectionStyle(doc as any);
 
+  const currentHeading = (() => {
+    if (sel.isBold && sel.fontSize === 24) return 'Heading 1';
+    if (sel.isBold && sel.fontSize === 20) return 'Heading 2';
+    if (sel.isBold && sel.fontSize === 18) return 'Heading 3';
+    return 'Body';
+  })();
+
   // Toolbar command helpers — each applies a docUtils transform then propagates
   const cmd = useCallback((fn: (d: any) => any) => {
     if (readOnly) return;
@@ -126,6 +137,10 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
           textColor={sel.textColor}
           bgColor={sel.bgColor}
           fontSize={sel.fontSize}
+          fontFamily={sel.fontFamily || defaultFont || ''}
+          alignment={sel.alignment}
+          lineSpacing={sel.lineSpacing}
+          heading={currentHeading}
           isBullet={sel.isBullet}
           isNumbered={sel.isNumbered}
           isInTable={isCursorInTable(doc as any)}
@@ -136,6 +151,10 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
           onSetTextColor={(color: string) => cmd(d => addStyleField(d, 'textColor', color))}
           onSetBgColor={(color: string) => cmd(d => addStyleField(d, 'bgColor', color))}
           onSetFontSize={(size: number) => cmd(d => addStyleField(d, 'fontSize', size))}
+          onSetFontFamily={(family: string) => cmd(d => addStyleField(d, 'fontFamily', family))}
+          onSetAlignment={(align: string) => cmd(d => setAlignment(d, align))}
+          onSetLineSpacing={(spacing: number) => cmd(d => setLineSpacing(d, spacing))}
+          onSetHeading={(level: string) => cmd(d => setHeading(d, level))}
           onToggleBullet={() => cmd(d => sel.isBullet ? removeBullet(d) : addBullet(d))}
           onToggleNumbered={() => cmd(d => sel.isNumbered ? removeNumberedList(d) : addNumberedList(d))}
           onIncreaseIndent={() => cmd(d => increaseIndent(d))}

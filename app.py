@@ -1766,9 +1766,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
     # ── Document / Office ─────────────────────────────────────────────────────
 
+    def _doc_sidecar_path(p: Path) -> Path:
+        return Path(str(p) + '.json')
+
     @misc_router.post("/api/doc/parse")
     async def doc_parse(request: Request):
-        from fastapi import UploadFile
         ct = request.headers.get("content-type", "")
         _MAX_DOC_BYTES = 50 * 1024 * 1024
         try:
@@ -1779,6 +1781,8 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     raise HTTPException(400, "expected field 'file'")
                 filename = getattr(upload, "filename", None) or "upload"
                 data = await upload.read()
+                # Uploaded files have no path, parse directly
+                return _detect_and_parse(filename, data)
             else:
                 body = await request.json()
                 path_str = str(body.get("path", "")).strip()
@@ -1787,11 +1791,45 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 p = Path(path_str)
                 if not p.exists():
                     raise HTTPException(404, "file not found")
+
+                force_refresh = bool(body.get("force"))
+
+                # --- Sidecar check (DOCX only) ---
+                if p.suffix.lower() in (".docx", ".doc"):
+                    sc_path = _doc_sidecar_path(p)
+                    if force_refresh and sc_path.exists():
+                        try: sc_path.unlink()
+                        except Exception: pass
+                    if sc_path.exists():
+                        sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
+                        # Invalidate old sidecars that predate fontFamily support.
+                        # If no block style has fontFamily, re-parse the DOCX.
+                        has_font = any(
+                            s.get("fontFamily")
+                            for b in (sidecar.get("blocks") or [])
+                            for s in (b.get("styles") or [])
+                        )
+                        if has_font or not sidecar.get("blocks"):
+                            return sidecar
+
                 if p.stat().st_size > _MAX_DOC_BYTES:
                     raise HTTPException(413, "file too large (max 50 MB)")
                 data = p.read_bytes()
                 filename = p.name
-            return _detect_and_parse(filename, data)
+                result = _detect_and_parse(filename, data)
+
+                # Write sidecar for DOCX files so subsequent opens are instant
+                if p.suffix.lower() in (".docx", ".doc"):
+                    sc_path = _doc_sidecar_path(p)
+                    try:
+                        sc_path.write_text(
+                            json.dumps(result, ensure_ascii=False, indent=2),
+                            encoding='utf-8'
+                        )
+                    except Exception:
+                        pass  # sidecar write failure is non-fatal
+
+                return result
         except HTTPException:
             raise
         except ValueError as exc:
@@ -1805,13 +1843,44 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         if p.suffix.lower() not in (".docx", ".doc"):
             raise HTTPException(400, "only DOCX files can be saved")
         try:
-            docx_bytes = _blocks_to_docx(body.blocks)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes(docx_bytes)
+            sc_path = _doc_sidecar_path(p)
             word_count = sum(len(b.get("text", "").split()) for b in body.blocks)
+            # Load existing sidecar to preserve metadata (defaultFont, pages, etc.)
+            if sc_path.exists():
+                sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
+            else:
+                sidecar = {"filename": p.name, "type": "docx", "truncated": False}
+            sidecar["blocks"] = body.blocks
+            sidecar["wordCount"] = word_count
+            sc_path.write_text(
+                json.dumps(sidecar, ensure_ascii=False, indent=2),
+                encoding='utf-8'
+            )
             return {"ok": True, "path": str(p), "wordCount": word_count}
         except Exception as exc:
             raise HTTPException(500, f"could not save: {exc}")
+
+    @misc_router.get("/api/doc/download")
+    async def doc_download(path: str):
+        """Convert sidecar → DOCX and stream back as a file download."""
+        from fastapi.responses import Response as _Resp
+        p = Path(path)
+        sc_path = _doc_sidecar_path(p)
+        if not sc_path.exists():
+            raise HTTPException(404, "sidecar not found — open the file first")
+        try:
+            sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
+            blocks = sidecar.get("blocks", [])
+            docx_bytes = _blocks_to_docx(blocks)
+            return _Resp(
+                content=docx_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(500, f"could not generate DOCX: {exc}")
 
     def _sidecar_to_api(sidecar: dict) -> dict:
         """Convert sidecar JSON to the API schema the frontend expects."""

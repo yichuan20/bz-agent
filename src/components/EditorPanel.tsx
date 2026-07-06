@@ -252,6 +252,7 @@ interface Tab {
   docType?: string; docPages?: number; docWordCount?: number; docTruncated?: boolean;
   // Word files only — bz-office Block[] format
   blocks?: Block[];
+  defaultFont?: string;
 }
 
 interface Props { cwd: string; codeMode: boolean; refreshKey?: number; sessionId?: string | null }
@@ -470,7 +471,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: filePath }),
         });
-        const d = await r.json() as { content?: string; blocks?: Block[]; type?: string; pages?: number; wordCount?: number; truncated?: boolean; error?: string };
+        const d = await r.json() as { content?: string; blocks?: Block[]; type?: string; pages?: number; wordCount?: number; truncated?: boolean; error?: string; defaultFont?: string };
         if (d.error) { setError(d.error); return; }
         // Reset cursor to 0 on fresh open so it's always in the visible viewport.
         // The in-memory cursors map is also cleared so a re-open starts fresh.
@@ -479,6 +480,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
           path: filePath, name, content: d.content ?? '', dirty: false,
           docType: d.type, docPages: d.pages, docWordCount: d.wordCount, docTruncated: d.truncated,
           blocks: d.blocks,
+          defaultFont: d.defaultFont,
         }]);
       } else {
         const r = await fetch(`${HTTP_BASE}/api/file?path=${encodeURIComponent(filePath)}`);
@@ -1029,6 +1031,44 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
                 <span>{currentTab.docWordCount?.toLocaleString()} words</span>
                 {currentTab.docTruncated && <span className="doc-word-toolbar-truncated">⚠ truncated</span>}
                 <span style={{ flex: 1 }} />
+                {currentTab.blocks && (
+                  <button
+                    type="button"
+                    className="doc-word-save-btn"
+                    title="Re-parse the original DOCX file, discarding the cached sidecar"
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`${HTTP_BASE}/api/doc/parse`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ path: currentTab.path, force: true }),
+                        });
+                        const d = await r.json() as { blocks?: Block[]; type?: string; pages?: number; wordCount?: number; truncated?: boolean; defaultFont?: string; error?: string };
+                        if (d.error) { setError(d.error); return; }
+                        setTabs(prev => prev.map(t => t.path === currentTab.path ? {
+                          ...t, blocks: d.blocks, dirty: false,
+                          docPages: d.pages, docWordCount: d.wordCount, docTruncated: d.truncated, defaultFont: d.defaultFont,
+                        } : t));
+                      } catch (e) { setError(String(e)); }
+                    }}
+                  >
+                    Refresh
+                  </button>
+                )}
+                {currentTab.blocks && (
+                  <button
+                    type="button"
+                    className="doc-word-save-btn"
+                    style={{ borderColor: 'var(--accent-green)', color: 'var(--accent-green)' }}
+                    onClick={() => {
+                      const a = document.createElement('a');
+                      a.href = `${HTTP_BASE}/api/doc/download?path=${encodeURIComponent(currentTab.path)}`;
+                      a.download = currentTab.name;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    }}
+                  >
+                    Download DOCX
+                  </button>
+                )}
                 {currentTab.dirty && (
                   <button type="button" className="doc-word-save-btn" onClick={() => void save()} disabled={saving}>
                     {saving ? 'Saving…' : 'Save  ⌘S'}
@@ -1042,6 +1082,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
                 <WordDocEditor
                   key={currentTab.path}
                   blocks={currentTab.blocks}
+                  defaultFont={currentTab.defaultFont}
                   initialCursor={cursors[currentTab.path]}
                   onChange={(blocks: Block[]) => setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, blocks, dirty: true } : t))}
                   onCursorChange={(cursor) => handleCursorChange(currentTab.path, cursor)}

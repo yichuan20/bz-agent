@@ -190,12 +190,11 @@ const collectRowInfo = ({ text, ys, tStartI, topMargin }) => {
 
   while (i < text.length && text[i] !== T_END) {
     if (text[i] === R_START) {
-      // Save previous row if exists
+      // Save previous row with its actual content extent
       if (currentRowStartY !== null) {
         rows.push({ startY: currentRowStartY, endY: currentRowMaxY });
       }
-      // Start new row - use the first C_START Y for accurate positioning
-      currentRowStartY = null; // Will be set by first C_START
+      currentRowStartY = null;
       currentRowMaxY = null;
     }
 
@@ -205,9 +204,19 @@ const collectRowInfo = ({ text, ys, tStartI, topMargin }) => {
       if (currentRowStartY === null) {
         currentRowStartY = cellY;
         currentRowMaxY = cellY;
-      } else {
-        currentRowMaxY = Math.max(currentRowMaxY, cellY);
       }
+    }
+
+    // Track the max Y of every actual cell character (not table control chars).
+    // This gives the real row height including wrapped lines.
+    if (
+      currentRowStartY !== null &&
+      ys[i] !== undefined &&
+      text[i] !== T_START && text[i] !== T_END &&
+      text[i] !== R_START && text[i] !== C_START
+    ) {
+      const charDrawY = contentYToDrawY(ys[i], topMargin);
+      if (charDrawY > currentRowMaxY) currentRowMaxY = charDrawY;
     }
 
     i++;
@@ -286,24 +295,30 @@ export const drawTableLines = ({ ctx, ys = [], text, startI, endI, scrollY, topM
 
       // Draw borders for each page section
       for (let page = startPage; page <= endPage; page++) {
-        const pageContentTop = getPageContentTop(page, topMargin);
+        // Page white-area bounds (includes margins) — borders may draw in the margin area
+        const pageStart = topMargin + page * (PAGE_HEIGHT + PAGE_GAP);
+        const pageEnd   = pageStart + PAGE_HEIGHT;
+        // Content area bounds — used for row filtering and row-separator clamping
+        const pageContentTop    = getPageContentTop(page, topMargin);
         const pageContentBottom = getPageContentBottom(page, topMargin);
 
         // Find rows that are on this page (within content area)
         const rowsOnPage = rows.filter(row => {
-          const rowTop = row.startY - LINE_HEIGHT + PAD;
+          const rowTop    = row.startY - LINE_HEIGHT + PAD;
           const rowBottom = row.endY + PAD;
-          // Row is on page if any part of it intersects with the content area
           return rowBottom > pageContentTop && rowTop < pageContentBottom;
         });
 
         if (rowsOnPage.length === 0) continue;
 
-        // Calculate section bounds based on actual rows on this page
+        // Section bounds clamped to the white-page area (not the content area) so
+        // top/bottom borders can sit in the margin while never bleeding into the gap.
         const firstRowOnPage = rowsOnPage[0];
-        const lastRowOnPage = rowsOnPage[rowsOnPage.length - 1];
-        const sectionTop = firstRowOnPage.startY - LINE_HEIGHT + PAD;
-        const sectionBottom = lastRowOnPage.endY + PAD;
+        const lastRowOnPage  = rowsOnPage[rowsOnPage.length - 1];
+        const sectionTop    = Math.max(firstRowOnPage.startY - LINE_HEIGHT + PAD, pageStart);
+        const sectionBottom = Math.min(lastRowOnPage.endY + PAD, pageEnd);
+
+        if (sectionBottom <= sectionTop) continue;
 
         // Draw complete border for this section
         drawTableSection(ctx, sectionTop, sectionBottom, numColumns, scrollY);

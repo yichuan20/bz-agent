@@ -27,6 +27,10 @@ export const getBlocksFromDoc = (doc = { text: '', styles: [] }) => {
   const blocks = [];
 
   let block = cloneDeep(EMPTY_BLOCK);
+  // First block's alignment is stored at styles[0] (same position as prefix for first paragraph)
+  if (doc?.styles?.[0]?.alignment) {
+    block.alignment = doc.styles[0].alignment;
+  }
   const cursor = { blockIndex: 0, letterIndex: 0 };
 
   let i = 0;
@@ -142,6 +146,16 @@ export const getBlocksFromDoc = (doc = { text: '', styles: [] }) => {
         };
       }
 
+      // propagate alignment to the next block
+      if (charStyle?.alignment) {
+        block = { ...block, alignment: charStyle.alignment };
+      }
+
+      // propagate lineSpacing to the next block
+      if (charStyle?.lineSpacing) {
+        block = { ...block, lineSpacing: charStyle.lineSpacing };
+      }
+
       if (isInTable) {
         block = { ...block, isTableCell: true, rowIndex, columnIndex };
       }
@@ -192,7 +206,13 @@ export const getSelStartFromCursor = (blocks = [], cursor = { blockIndex: 0, let
 const getStyleAt = (blocks, blockIndex, iBlock = 0) => {
   const block = blocks[blockIndex];
 
-  let charStyle = block?.styles?.find(s => iBlock >= s.start && iBlock <= s.end);
+  // Backend uses exclusive end (end = start + len), so use strict <.
+  // Fallback to last style for positions at/past the end (e.g. the \n sentinel char).
+  let charStyle = block?.styles?.find(s => iBlock >= s.start && iBlock < s.end);
+  if (!charStyle && block?.styles?.length) {
+    const last = block.styles[block.styles.length - 1];
+    if (iBlock >= last.start) charStyle = last;
+  }
   charStyle = cloneDeep(charStyle) || {};
   delete charStyle?.start;
   delete charStyle?.end;
@@ -356,7 +376,12 @@ export const getDocFromBlocks = (blocks = [], cursor = { blockIndex: 0, letterIn
     let iBlock = 0;
     while (iBlock < block.text.length) {
       doc.text += block.text[iBlock];
-      doc.styles[i] = getStyleAt(blocks, blockIndex, iBlock);
+      let charStyle = getStyleAt(blocks, blockIndex, iBlock);
+      // First char of first block: store this block's alignment so getSelectionStyle can read it
+      if (blockIndex === 0 && iBlock === 0 && block?.alignment) {
+        charStyle = { ...(charStyle || {}), alignment: block.alignment };
+      }
+      doc.styles[i] = charStyle;
       i++;
       iBlock++;
     }
@@ -369,7 +394,20 @@ export const getDocFromBlocks = (blocks = [], cursor = { blockIndex: 0, letterIn
 
     if (shouldAddNewLineAtEndOfBlock(blocks, blockIndex)) {
       doc.text += '\n';
-      doc.styles[i] = getStyleAt(blocks, blockIndex, iBlock);
+      // The \n's style stores the NEXT block's properties (alignment, lineSpacing)
+      const nextBlock = blocks[blockIndex + 1];
+      const baseStyle = getStyleAt(blocks, blockIndex, iBlock);
+      const nextAlignment = nextBlock?.alignment;
+      const nextLineSpacing = nextBlock?.lineSpacing;
+      if (nextAlignment || nextLineSpacing) {
+        doc.styles[i] = {
+          ...(baseStyle || {}),
+          ...(nextAlignment ? { alignment: nextAlignment } : {}),
+          ...(nextLineSpacing ? { lineSpacing: nextLineSpacing } : {}),
+        };
+      } else {
+        doc.styles[i] = baseStyle;
+      }
       i++;
     }
     blockIndex++;
