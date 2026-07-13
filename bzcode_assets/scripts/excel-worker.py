@@ -159,6 +159,17 @@ def _eval(expr: str, grid: Grid, grids: 'dict[str, Grid] | None' = None):
     if not expr:
         return None
 
+    # Pure cross-sheet single-cell ref: 'Sheet1'!A2 or Sheet1!A2
+    # Must be checked before the function-call pattern so string values are
+    # returned directly instead of falling through to _safe_eval (which only
+    # handles arithmetic and would return None for string cells).
+    m = re.fullmatch(r"(?:'([^']+)'|([A-Za-z0-9_]+))!([A-Z]+\d+)", expr, re.IGNORECASE)
+    if m:
+        sheet_name = m.group(1) or m.group(2)
+        ref_part   = m.group(3)
+        g = (grids or {}).get(sheet_name, grid)
+        return g.get_ref(ref_part)
+
     # Function call: NAME(args...)
     m = re.fullmatch(r'([A-Z_][A-Z0-9_]*)\s*\((.*)$', expr, re.DOTALL | re.IGNORECASE)
     if m:
@@ -426,6 +437,8 @@ def recalc_sheet(sheet: dict, grids: 'dict[str, Grid] | None' = None) -> tuple[d
                 grid.set(row, col + 1, result)
             except Exception:
                 pass
+        elif isinstance(result, str):
+            new_cd['v'] = result
         cells[ref] = new_cd
 
     return {**sheet, 'cells': cells}, computed
@@ -502,7 +515,17 @@ def write_workbook(sheets: list[dict], out_path: Path) -> None:
             if s.get("italic"): props["italic"]     = True
             if s.get("bg"):     props["bg_color"]   = s["bg"]
             if s.get("fg"):     props["font_color"] = s["fg"]
-            if s.get("align"):  props["align"]      = s["align"]
+            if s.get("format"): props["num_format"] = s["format"]
+            if s.get("wrap"):   props["text_wrap"]  = True
+            if s.get("align"):
+                # align may be "CENTER;BOTTOM" (compound from toolbar) or plain "center"
+                parts = s["align"].split(";")
+                horiz = parts[0].strip().lower()
+                if horiz in ("left", "center", "right", "fill", "justify", "center_across"):
+                    props["align"] = horiz
+                if len(parts) > 1:
+                    vert_map = {"top": "top", "center": "vcenter", "bottom": "bottom", "vjustify": "vjustify"}
+                    props["valign"] = vert_map.get(parts[1].strip().lower(), "bottom")
             if s.get("valign"): props["valign"]     = s["valign"]
             _fmt_cache[key] = workbook.add_format(props)
         return _fmt_cache[key]
@@ -545,6 +568,16 @@ def write_workbook(sheets: list[dict], out_path: Path) -> None:
                 ws.set_column(c, c, 15)
 
         ws.freeze_panes(1, 0)
+
+        for merge_range in sheet.get('mergedCells', []):
+            parts = merge_range.split(':')
+            if len(parts) == 2:
+                try:
+                    r1, c1 = _parse_ref(parts[0].strip())
+                    r2, c2 = _parse_ref(parts[1].strip())
+                    ws.merge_range(r1 - 1, c1, r2 - 1, c2, '', default_fmt)
+                except Exception:
+                    pass
 
     workbook.close()
 
@@ -591,8 +624,21 @@ def main() -> None:
                     for ref, cd in updates.items():
                         ref = ref.strip().upper()
                         existing = dict(sheet['cells'].get(ref, {}))
-                        # Merge: f/v/s updates replace existing fields
-                        existing.update({k: v for k, v in cd.items() if v is not None})
+                        # Merge: f/v/s updates replace existing fields; None = delete
+                        for k, v in cd.items():
+                            if k == 's' and isinstance(v, dict):
+                                # Deep merge style sub-dict; null style keys = delete
+                                existing_s = dict(existing.get('s') or {})
+                                for sk, sv in v.items():
+                                    if sv is None:
+                                        existing_s.pop(sk, None)
+                                    else:
+                                        existing_s[sk] = sv
+                                existing['s'] = existing_s
+                            elif v is None:
+                                existing.pop(k, None)
+                            else:
+                                existing[k] = v
                         # If formula removed, drop v too so it becomes a plain value
                         if 'f' not in existing and 'v' in cd:
                             existing.pop('f', None)
@@ -624,12 +670,8 @@ def main() -> None:
                 sys.exit(1)
 
         computed_sheets = [compute_sheet(s) for s in data.get('sheets', [])]
-        all_computed = {
-            ref: cd.get('v')
-            for sheet in computed_sheets
-            for ref, cd in sheet['cells'].items()
-            if 'f' in cd
-        }
+        # Second pass resolves cross-sheet references (='Sheet1'!A1 etc.)
+        computed_sheets, all_computed = recalc_all_sheets(computed_sheets)
         sidecar = {
             'version': 1,
             'xlsx_path': str(out_path.resolve()),

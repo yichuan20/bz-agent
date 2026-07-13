@@ -1,7 +1,7 @@
 import ExcelTextInputWithFormulaDropdown from './ExcelTextInputWithFormulaDropdown';
 import { X_OFFSET, Y_OFFSET } from '../utils/excel-utils';
 
-export const CellsContainer = ({children, style={}, ...p}) => <div style={{width:'100%',height:'100%',overflow:'auto',overscrollBehavior:'none',position:'relative',scrollBehavior:'auto',gridRow:3,msOverflowStyle:'none',scrollbarWidth:'none',...style}} {...p}>{children}</div>;
+export const CellsContainer = ({children, style={}, ...p}) => <div style={{width:'100%',height:'100%',overflow:'hidden',position:'relative',gridRow:3,...style}} {...p}>{children}</div>;
 
 export const Container = ({children, style={}, ...p}) => <div style={{display:'grid',gridTemplateRows:'auto auto 1fr',width:'100%',height:'100%',...style}} {...p}>{children}</div>;
 
@@ -27,7 +27,7 @@ export const FormulaInputWrapper = ({children, style={}, ...p}) => <div style={{
 
 export const VerticalDivider = ({children, style={}, ...p}) => <div style={{width:1,height:'100%',background:'var(--border-default,#ccc)',...style}} {...p}>{children}</div>;
 
-export const IconButton = ({children, isActive, style={}, ...p}) => <div style={{position:'relative',borderRadius:5,display:'flex',justifyContent:'center',alignItems:'center',width:26,height:26,cursor:'pointer',color:isActive?'var(--accent-blue)':'var(--text-secondary)',background:isActive?'color-mix(in srgb,var(--accent-blue) 15%,transparent)':'transparent',...style}} {...p}>{children}</div>;
+export const IconButton = ({children, isActive, style={}, ...p}) => <div className="bzt-excel-btn" style={{position:'relative',borderRadius:5,display:'flex',justifyContent:'center',alignItems:'center',width:26,height:26,cursor:'pointer',color:isActive?'var(--accent-blue)':'var(--text-secondary)',background:isActive?'color-mix(in srgb,var(--accent-blue) 15%,transparent)':'transparent',...style}} {...p}>{children}</div>;
 
 export const ColoredIconButton = ({children, style={}, ...p}) => <IconButton style={{...style}} {...p}>{children}</IconButton>;
 export const ColoredIconButtonBucket = ({children, style={}, ...p}) => <IconButton style={{...style}} {...p}>{children}</IconButton>;

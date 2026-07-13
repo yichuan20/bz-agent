@@ -66,7 +66,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
       ),
     }));
 
-    // Convert API format {value, formula, fontBold, bgColor, color, align}
+    // Convert API format {value, formula, fontBold, fontColor, bgColor, align}
     // to sidecar format {v, f, s} for the PATCH endpoint
     const sidecarCells: Record<string, any> = {};
     for (const [ref, cd] of Object.entries(cellUpdates)) {
@@ -76,9 +76,21 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
       const style: Record<string, any> = {};
       if (cd.fontBold  !== undefined) style.bold   = cd.fontBold;
       if (cd.fontItalic !== undefined) style.italic = cd.fontItalic;
-      if (cd.color     !== undefined) style.fg     = cd.color;
-      if (cd.bgColor   !== undefined) style.bg     = cd.bgColor;
-      if (cd.align     !== undefined) style.align  = cd.align;
+      // fontColor is FFRRGGBB; convert to #RRGGBB for sidecar storage
+      const _fc = cd.fontColor ?? (cd as any).color;
+      if (_fc !== undefined) {
+        const _fcHex = String(_fc).replace(/^#/, '').replace(/^FF/i, '');
+        style.fg = `#${_fcHex}`;
+      }
+      if (cd.bgPattern === 'NO_FILL') {
+        style.bg = null; // explicit null = remove fill
+      } else if (cd.bgColor !== undefined) {
+        const _bgHex = String(cd.bgColor).replace(/^#/, '').replace(/^FF/i, '');
+        style.bg = `#${_bgHex}`;
+      }
+      if (cd.align !== undefined) style.align = cd.align;
+      if (cd.dataFormatString !== undefined) style.format = cd.dataFormatString;
+      if (cd.wrapText !== undefined) style.wrap = cd.wrapText;
       if (Object.keys(style).length) sc.s = style;
       sidecarCells[ref] = sc;
     }
@@ -112,6 +124,31 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         rowIndexToHeight:   grid.rowIndexToHeight   ?? {},
       }),
     }).catch(() => null);
+  }, [filePath, selectedSheet, sheet]);
+
+  const handleMergeCells = useCallback(({ action, ref, range }: { action: string; ref?: string; range?: string }) => {
+    if (!sheet) return;
+    const existing: string[] = sheet.mergedCellRanges ?? [];
+    let newMerges: string[];
+    if (action === 'unmerge' && ref) {
+      newMerges = existing.filter((r: string) => r.toUpperCase() !== ref.toUpperCase());
+    } else if (action === 'merge' && range) {
+      const rangeUp = range.toUpperCase();
+      newMerges = existing.includes(rangeUp) ? existing : [...existing, rangeUp];
+    } else {
+      return;
+    }
+    // Optimistic update
+    setData((prev: any) => ({
+      ...prev,
+      sheets: prev.sheets.map((s: any) =>
+        s.sheetName === selectedSheet ? { ...s, mergedCellRanges: newMerges } : s
+      ),
+    }));
+    fetch(`${HTTP_BASE}/api/excel/merge`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, sheet: selectedSheet, mergedCells: newMerges }),
+    }).then(r => r.json()).then((d: any) => { if (d.sheets) setData(d); }).catch(() => null);
   }, [filePath, selectedSheet, sheet]);
 
   const handleRenameSheet = useCallback((oldName: string, newName: string) => {
@@ -186,6 +223,8 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
             onNewImagesToPatch={() => {}}
             onScrollViewWindow={setViewWindow}
             viewWindow={viewWindow}
+            mergedCellRanges={sheet.mergedCellRanges ?? []}
+            onMergeCells={handleMergeCells}
           />
         </div>
       </React.Suspense>

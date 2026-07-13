@@ -81,18 +81,16 @@ function AppLayout() {
 
         {/* Hover strip + expand indicator — only when sidebar is fully closed */}
         {!sidebarOpen && (
-          <>
-            <div
-              className="sidebar-hover-zone"
-              onMouseEnter={() => setHoveredOpen(true)}
-            />
+          <div
+            className="sidebar-expand-zone"
+            onMouseEnter={() => setHoveredOpen(true)}
+            onMouseLeave={() => setHoveredOpen(false)}
+            onClick={toggleSidebar}
+          >
             <button
               type="button"
               className="sidebar-expand-indicator"
               title="Open navigation"
-              onClick={toggleSidebar}
-              onMouseEnter={() => setHoveredOpen(true)}
-              style={{ position: 'relative' }}
             >
               {bzcodeOutdated && (
                 <span style={{
@@ -108,7 +106,7 @@ function AppLayout() {
                 <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-          </>
+          </div>
         )}
 
         <main className="app-main">

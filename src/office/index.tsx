@@ -37,9 +37,30 @@ import {
   insertTable,
   insertImage,
 } from './utils/docUtils';
+import { VIEW_W } from './utils/word-constants';
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export type { Block, StyleRange } from '../components/BzDocEditor';
+
+// Text column width in CSS px: (END_X - START_X) / SF = (VIEW_W - 100 - 95)
+const TEXT_COL_WIDTH_PX = VIEW_W - 195;
+
+function loadImageDimensions(url: string): Promise<{ width: number; height: number }> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > TEXT_COL_WIDTH_PX) {
+        h = Math.round(h * TEXT_COL_WIDTH_PX / w);
+        w = TEXT_COL_WIDTH_PX;
+      }
+      resolve({ width: w, height: h });
+    };
+    img.onerror = () => resolve({ width: 64, height: 64 });
+    img.src = url;
+  });
+}
 
 // Internal opaque type for the bz-office Doc format
 type OfficeDoc = Record<string, any>;
@@ -160,10 +181,14 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
           onIncreaseIndent={() => cmd(d => increaseIndent(d))}
           onDecreaseIndent={() => cmd(d => decreaseIndent(d))}
           onInsertTable={(rows: number, cols: number) => cmd(d => insertTable({ doc: d, rows, cols }))}
-          onUploadImage={(base64: string) => cmd(d => insertImage({ doc: d, imageUrl: base64 }))}
-          onNetworkImage={({ url, description }: { url: string; description: string }) =>
-            cmd(d => insertImage({ doc: d, imageUrl: url, description }))
-          }
+          onUploadImage={async (base64: string) => {
+            const { width, height } = await loadImageDimensions(base64);
+            cmd(d => insertImage({ doc: d, imageUrl: base64, width, height }));
+          }}
+          onNetworkImage={async ({ url, description }: { url: string; description: string }) => {
+            const { width, height } = await loadImageDimensions(url);
+            cmd(d => insertImage({ doc: d, imageUrl: url, description, width, height }));
+          }}
         />
       )}
       {/* z-index: 0 keeps DocArea below the toolbar stacking context (z-index: 50)

@@ -1,10 +1,10 @@
 import { cloneDeep, findLastIndex, groupBy, range, round, sum, uniq } from 'lodash';
 import { parseJson } from './common';
 
-export const X_OFFSET = 42;
+export const X_OFFSET = 40;
 export const Y_OFFSET = 26;
 
-export const DEFAULT_CELL_HEIGHT = 22;
+export const DEFAULT_CELL_HEIGHT = 24;
 
 export const ALPHABET = [
   'A',

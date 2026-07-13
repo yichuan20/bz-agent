@@ -1,10 +1,13 @@
 import {
+  ArrowClockwiseIcon,
   CheckCircleIcon,
   CaretDownIcon,
   CaretRightIcon,
   HardDriveIcon,
   InfoIcon,
+  KeyIcon,
   LinkIcon,
+  TerminalIcon,
   TrashIcon,
   WarningCircleIcon,
   XCircleIcon,
@@ -501,6 +504,195 @@ function IntegrationsSection() {
   );
 }
 
+// ── API key section ───────────────────────────────────────────────────────────
+
+function ApiKeySection() {
+  const [status,  setStatus]  = useState<{ present: boolean; last4: string | null } | null>(null);
+  const [value,   setValue]   = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [error,   setError]   = useState('');
+
+  const loadStatus = useCallback(() => {
+    fetch(`${HTTP_BASE}/api/apikey-status`)
+      .then(r => r.json())
+      .then((d: { present: boolean; last4: string | null }) => setStatus(d))
+      .catch(() => null);
+  }, []);
+
+  useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  async function handleSave() {
+    if (!value.trim()) return;
+    setSaving(true); setError(''); setSavedOk(false);
+    try {
+      const r = await fetch(`${HTTP_BASE}/agent-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'BZ_API_KEY', value: value.trim() }),
+      });
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      setSavedOk(true);
+      setValue('');
+      loadStatus();
+      setTimeout(() => setSavedOk(false), 2000);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    await fetch(`${HTTP_BASE}/agent-key/BZ_API_KEY`, { method: 'DELETE' }).catch(() => null);
+    loadStatus();
+  }
+
+  return (
+    <section className="settings-section">
+      <h2 className="settings-section-title">
+        <KeyIcon size={15} />
+        AI API Key
+      </h2>
+      <div className="settings-cards">
+        <div className="settings-card">
+          <p className="settings-card-hint">
+            The <code className="settings-code">BZ_API_KEY</code> authorises bzcode to make AI model calls.
+            Required for chat to work on remote deployments.
+          </p>
+
+          {status && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13 }}>
+              {status.present
+                ? <><CheckCircleIcon size={14} weight="fill" color="var(--accent-green)" />
+                    <span>Key set</span>
+                    <code className="settings-code">····{status.last4}</code>
+                    <button type="button" className="settings-btn settings-btn--danger settings-btn--sm"
+                      onClick={() => void handleDelete()} style={{ marginLeft: 'auto' }}>
+                      <TrashIcon size={11} /> Remove
+                    </button>
+                  </>
+                : <><XCircleIcon size={14} weight="fill" color="var(--accent-red)" />
+                    <span style={{ color: 'var(--text-secondary)' }}>No key set</span>
+                  </>}
+            </div>
+          )}
+
+          <div className="settings-cred-add">
+            <input
+              className="settings-input"
+              type="password"
+              placeholder="Paste BZ_API_KEY here"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="settings-btn settings-btn--primary"
+              onClick={() => void handleSave()}
+              disabled={saving || !value.trim()}
+            >
+              {savedOk ? <CheckCircleIcon size={13} weight="fill" /> : null}
+              {saving ? 'Saving…' : savedOk ? 'Saved' : 'Save'}
+            </button>
+          </div>
+          {error && <p className="settings-error">{error}</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Server log section ────────────────────────────────────────────────────────
+
+type ServerLogInfo = { bzHome: string; logFile: string; lines: string[] };
+
+function ServerLogSection() {
+  const [info,     setInfo]     = useState<ServerLogInfo | null>(null);
+  const [loading,  setLoading]  = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`${HTTP_BASE}/api/server/log?lines=200`)
+      .then(r => r.json())
+      .then((d: ServerLogInfo) => setInfo(d))
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const codeStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+    color: 'var(--text-primary)',
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-primary)',
+    borderRadius: 4, padding: '2px 6px',
+    wordBreak: 'break-all',
+  };
+
+  return (
+    <section className="settings-section">
+      <h2 className="settings-section-title">
+        <TerminalIcon size={15} />
+        Server Log
+      </h2>
+      <div className="settings-cards">
+        <div className="settings-card">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <span style={{ color: 'var(--text-secondary)', minWidth: 72 }}>BZ_HOME</span>
+              <code style={codeStyle}>{info?.bzHome ?? '—'}</code>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <span style={{ color: 'var(--text-secondary)', minWidth: 72 }}>Log file</span>
+              <code style={codeStyle}>{info?.logFile ?? '—'}</code>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              Last {info?.lines.length ?? 0} lines
+            </span>
+            <button
+              type="button"
+              className="settings-btn"
+              onClick={load}
+              disabled={loading}
+              style={{ padding: '3px 8px', fontSize: 12 }}
+            >
+              <ArrowClockwiseIcon size={12} />
+              Refresh
+            </button>
+          </div>
+
+          <pre style={{
+            margin: 0,
+            padding: '8px 10px',
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 6,
+            fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 11,
+            lineHeight: 1.5,
+            color: 'var(--text-primary)',
+            overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight: 360,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}>
+            {info?.lines.length
+              ? info.lines.join('\n')
+              : loading ? 'Loading…' : 'No log entries yet.'}
+          </pre>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function SettingsPage() {
@@ -512,8 +704,10 @@ function SettingsPage() {
       </div>
       <div className="settings-body">
         <VersionSection />
+        <ApiKeySection />
         <ResourcesSection />
         <IntegrationsSection />
+        <ServerLogSection />
       </div>
     </div>
   );

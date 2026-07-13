@@ -64,7 +64,7 @@ export const PdfIcon = ({
 );
 
 export const FormulaIcon = ({ height = '20px', className, style = {}, onClick = () => {} }) => (
-  <svg height={height} className={className} style={style} onClick={onClick} viewBox="20 20 60 60">
+  <svg height={height} className={className} style={style} onClick={onClick} viewBox="20 20 60 60" fill="currentColor">
     <path
       d="M55.3,21.2c-1.1-0.7-2.4-1.1-4.1-1.1c-0.4,0-0.8,0-1.2,0.1c-4.4,0.7-7.3,4.7-9.1,8.5
 	c-0.8,1.8-1.5,3.7-2.2,5.5c-0.3,0.9-0.7,1.7-1,2.6c0,0.1-0.5,1.8-0.6,1.8c0,0-4,0-4,0l0,0h-0.5c-0.6,0-1.1,0.5-1.1,1.1

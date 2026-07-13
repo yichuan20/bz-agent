@@ -255,6 +255,11 @@ class ExcelRenameSheetBody(BaseModel):
     oldName: str
     newName: str
 
+class ExcelMergeBody(BaseModel):
+    path: str
+    sheet: str = ""
+    mergedCells: list = []   # list of range strings e.g. ["A1:C2"]
+
 class PptSaveBody(BaseModel):
     path: str
     slides: list = []
@@ -700,6 +705,39 @@ def _pptx_export(p, slides):
 
 _DEFAULT_BZ_HOME = "/usr/local/boltzbit"
 
+
+class _TeeWriter:
+    """Write to both the original stream and a log file simultaneously."""
+    def __init__(self, stream, file_path: Path):
+        self._stream = stream
+        try:
+            self._file = open(file_path, 'a', buffering=1, encoding='utf-8', errors='replace')
+        except Exception:
+            self._file = None
+
+    def write(self, data: str) -> int:
+        if self._file:
+            try:
+                self._file.write(data)
+            except Exception:
+                pass
+        return self._stream.write(data)
+
+    def flush(self):
+        self._stream.flush()
+        if self._file:
+            try:
+                self._file.flush()
+            except Exception:
+                pass
+
+    def fileno(self):
+        return self._stream.fileno()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
 def create_app(bzcode_path: str = "", default_cwd: str = "",
                bz_home: str = "", port: int = 18789) -> FastAPI:
 
@@ -710,7 +748,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         lifespan=lifespan,
     )
 
-    bz_home = bz_home or _DEFAULT_BZ_HOME
+    bz_home = str(Path(bz_home or _DEFAULT_BZ_HOME).expanduser())
     os.makedirs(bz_home, exist_ok=True)
 
     # Store config accessible to route handlers
@@ -718,6 +756,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     app.state.default_cwd = default_cwd
     app.state.bz_home     = bz_home
     app.state.port        = port
+
+    # Tee all stderr to BZ_HOME/server.log so remote deployments have accessible logs.
+    _log_path = Path(bz_home) / "server.log"
+    if not isinstance(sys.stderr, _TeeWriter):
+        sys.stderr = _TeeWriter(sys.stderr, _log_path)
 
     # Propagate BZ_HOME into the process environment so that _BatchItem and
     # _WASess (which inherit os.environ) also pick it up without needing refactoring.
@@ -836,9 +879,19 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             return
 
         # ── Session config & pool ────────────────────────────────────────────
-        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
+        _existing = agent_pool._entries.get(req_session_id)
+        _model_name = (_existing.model_info.get("name", "") if _existing else "")
+        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd, model_name=_model_name)
         cmd = [_bzcode, "--stdio", "--resume", req_session_id]
-        env = {**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
+        api_keys = _read_api_keys()
+        if not api_keys.get("BZ_API_KEY"):
+            print("[ws] BZ_API_KEY not found — rejecting session spawn", file=sys.stderr)
+            await websocket.send_text(json.dumps({
+                "type": "result", "status": "error",
+                "error": "No BZ_API_KEY configured. Please set it in Settings → AI API Key.",
+            }))
+            return
+        env = {**os.environ, **api_keys, "BZ_PYTHON": sys.executable,
                **( {"BZ_HOME": _bz_home} if _bz_home else {} )}
 
         print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}  mode={req_mode}",
@@ -936,6 +989,125 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         return {
             "home": home,
             "defaultCwd": default_cwd if os.path.isdir(default_cwd) else home,
+        }
+
+    @misc_router.get("/api/apikey-verify")
+    async def apikey_verify():
+        """Verify BZ_API_KEY by spawning a fresh bzcode probe session."""
+        api_keys = _read_api_keys()
+        if not api_keys.get("BZ_API_KEY"):
+            return {"status": "missing"}
+
+        _bzcode = app.state.bzcode_path
+        _bz_home = app.state.bz_home
+        import shutil as _sh, secrets as _sec
+        _bzcode = _sh.which(_bzcode) or _bzcode
+        if not os.path.isfile(_bzcode):
+            return {"status": "error", "reason": "bzcode not found"}
+
+        # Fresh session ID every call — no stale context that could trigger compaction
+        probe_id = f"bz-probe-{_sec.token_hex(4)}"
+        env = {**os.environ, **api_keys, "BZ_PYTHON": sys.executable,
+               "BZ_HOME": _bz_home}
+        result_status = "unverified"
+        result_reason = ""
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                _bzcode, "--stdio", "--resume", probe_id,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=env,
+                limit=1024 * 1024,
+            )
+
+            got_idle = False
+            deadline = asyncio.get_event_loop().time() + 20
+
+            while asyncio.get_event_loop().time() < deadline:
+                remaining = deadline - asyncio.get_event_loop().time()
+                try:
+                    line = await asyncio.wait_for(
+                        proc.stdout.readline(), timeout=min(remaining, 2))
+                except asyncio.TimeoutError:
+                    continue  # keep waiting until overall deadline
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except Exception:
+                    continue
+
+                mtype = msg.get("type", "")
+
+                if mtype == "status" and msg.get("status") == "idle" and not got_idle:
+                    got_idle = True
+                    proc.stdin.write(b'{"type":"setMode","mode":"yolo"}\n')
+                    probe = json.dumps({"type": "user", "content": "hi"}) + "\n"
+                    proc.stdin.write(probe.encode())
+                    await proc.stdin.drain()
+
+                elif mtype == "status" and msg.get("status") == "running":
+                    # bzcode accepted the prompt and is making the AI call — key is valid
+                    result_status = "verified"
+                    break
+
+                elif mtype == "result":
+                    err = msg.get("error", "")
+                    if msg.get("status") == "error" and (
+                            "403" in err or "not authorised" in err
+                            or "unauthorized" in err.lower()):
+                        result_status = "invalid"
+                        result_reason = err[:300]
+                    else:
+                        result_status = "verified"
+                    break
+
+                elif mtype in ("assistant", "text"):
+                    # Got an actual response — definitely verified
+                    result_status = "verified"
+                    break
+
+        except Exception as exc:
+            return {"status": "error", "reason": str(exc)}
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    await asyncio.wait_for(proc.wait(), timeout=3)
+                except Exception:
+                    pass
+            # Clean up probe session files so probes don't appear in the session list
+            import shutil as _probe_sh
+            _probe_jsonl = Path(_bz_home) / "sessions" / f"{probe_id}.jsonl"
+            _probe_dir   = Path(_bz_home) / "sessions" / probe_id
+            for _p in (_probe_jsonl, _probe_dir):
+                try:
+                    if _p.is_dir():
+                        _probe_sh.rmtree(_p, ignore_errors=True)
+                    elif _p.exists():
+                        _p.unlink()
+                except Exception:
+                    pass
+
+        return {"status": result_status, "reason": result_reason}
+
+    @misc_router.get("/api/server/log")
+    async def server_log(lines: int = 200):
+        bz_home_path = app.state.bz_home
+        log_file = Path(bz_home_path) / "server.log"
+        log_lines: list[str] = []
+        if log_file.exists():
+            try:
+                text = log_file.read_text(encoding='utf-8', errors='replace')
+                log_lines = text.splitlines()[-lines:]
+            except Exception:
+                pass
+        return {
+            "bzHome":   bz_home_path,
+            "logFile":  str(log_file),
+            "lines":    log_lines,
         }
 
     # ── Proxy (misc) ──────────────────────────────────────────────────────────
@@ -1039,8 +1211,9 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         keys: dict = {"BZ_API_KEY": key_value}  # overwrite; only BZ_API_KEY is stored
         with open(keys_file, "w") as f:
             json.dump(keys, f, indent=2)
-        print(f"[api-key] BZ_API_KEY updated", file=sys.stderr)
-        return {"ok": True}
+        flushed = await agent_pool.flush_all(reason="api_key_reset")
+        print(f"[api-key] BZ_API_KEY updated, flushed {flushed} session(s)", file=sys.stderr)
+        return {"ok": True, "flushed": flushed}
 
     @auth_router.get("/agent-keys")
     async def list_api_keys():
@@ -1057,10 +1230,27 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         try:
             with open(keys_file, "w") as f:
                 json.dump({}, f)
-            print(f"[api-key] BZ_API_KEY deleted", file=sys.stderr)
+            flushed = await agent_pool.flush_all(reason="api_key_deleted")
+            print(f"[api-key] BZ_API_KEY deleted, flushed {flushed} session(s)", file=sys.stderr)
         except Exception as exc:
             raise HTTPException(500, str(exc))
         return {"ok": True}
+
+    @auth_router.delete("/sessions-history")
+    async def clear_sessions_history():
+        """Delete all session JSONL files so every session starts with fresh context."""
+        flushed = await agent_pool.flush_all(reason="history_cleared")
+        deleted, errors = 0, 0
+        if SESSIONS_DIR.exists():
+            for f in SESSIONS_DIR.glob("*.jsonl"):
+                try:
+                    f.unlink()
+                    deleted += 1
+                except Exception as e:
+                    print(f"[history] could not delete {f}: {e}", file=sys.stderr)
+                    errors += 1
+        print(f"[history] cleared {deleted} session files, flushed {flushed} processes", file=sys.stderr)
+        return {"ok": True, "deleted": deleted, "flushed": flushed, "errors": errors}
 
     # ── § 3 · File System ─────────────────────────────────────────────────────
 
@@ -1480,9 +1670,15 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         if not cred_ok:
             raise HTTPException(401, cred_reason)
 
-        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd)
+        _existing2 = agent_pool._entries.get(req_session_id)
+        _model_name2 = (_existing2.model_info.get("name", "") if _existing2 else "")
+        _write_session_config(req_session_id, req_mode, working_dir=effective_cwd, model_name=_model_name2)
         cmd = [_bzcode, "--stdio", "--resume", req_session_id]
-        env = {**os.environ, **_read_api_keys(), "BZ_PYTHON": sys.executable,
+        api_keys = _read_api_keys()
+        if not api_keys.get("BZ_API_KEY"):
+            print("[pool] BZ_API_KEY not found — rejecting session spawn", file=sys.stderr)
+            raise HTTPException(401, "No BZ_API_KEY configured. Please set it in Settings → AI API Key.")
+        env = {**os.environ, **api_keys, "BZ_PYTHON": sys.executable,
                **({"BZ_HOME": _bz_home} if _bz_home else {})}
 
         is_reuse = req_session_id in agent_pool._entries
@@ -1769,6 +1965,41 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     def _doc_sidecar_path(p: Path) -> Path:
         return Path(str(p) + '.json')
 
+    def _extract_images(blocks: list) -> tuple:
+        """Move imageUrl out of block styles into a shared images dict keyed by stable ID.
+        Returns (mutated_blocks, images_dict).  Mutates block style dicts in-place."""
+        import hashlib as _hl
+        images: dict = {}
+        for block in blocks:
+            for style in (block.get("styles") or []):
+                url = style.get("imageUrl")
+                if not url:
+                    continue
+                prefix = url[:200] if isinstance(url, str) else ""
+                key = "img-" + _hl.md5(prefix.encode()).hexdigest()[:8]
+                images[key] = {
+                    "url": url,
+                    **({"width":  style["imageWidth"]}  if style.get("imageWidth")  else {}),
+                    **({"height": style["imageHeight"]} if style.get("imageHeight") else {}),
+                }
+                style.pop("imageUrl",    None)
+                style.pop("imageWidth",  None)
+                style.pop("imageHeight", None)
+                style["imageId"] = key
+        return blocks, images
+
+    def _expand_images(blocks: list, images: dict) -> list:
+        """Inline imageUrl/Width/Height back into block styles from the images dict."""
+        for block in blocks:
+            for style in (block.get("styles") or []):
+                img_id = style.get("imageId")
+                if img_id and img_id in images:
+                    img = images[img_id]
+                    style["imageUrl"]    = img["url"]
+                    if img.get("width"):  style["imageWidth"]  = img["width"]
+                    if img.get("height"): style["imageHeight"] = img["height"]
+        return blocks
+
     @misc_router.post("/api/doc/parse")
     async def doc_parse(request: Request):
         ct = request.headers.get("content-type", "")
@@ -1797,21 +2028,32 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 # --- Sidecar check (DOCX only) ---
                 if p.suffix.lower() in (".docx", ".doc"):
                     sc_path = _doc_sidecar_path(p)
+                    # On force_refresh, only discard the sidecar when the DOCX file itself
+                    # is newer — meaning the file was edited externally (e.g. by the agent).
+                    # If the sidecar is newer, it is the authoritative source (written by the
+                    # last auto-save) and must be preserved; re-parsing from DOCX would lose
+                    # bz-office fields (imagePlacedX/Y, imageWrap) that have no DOCX equivalent.
                     if force_refresh and sc_path.exists():
-                        try: sc_path.unlink()
-                        except Exception: pass
+                        try:
+                            if p.stat().st_mtime > sc_path.stat().st_mtime:
+                                sc_path.unlink()
+                        except Exception:
+                            pass
                     if sc_path.exists():
                         sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
                         # Accept sidecar if any style carries fontFamily (text content is
-                        # up-to-date) OR imageUrl (image-only blocks have no fontFamily).
+                        # up-to-date) OR imageUrl/imageId (image-only blocks have no fontFamily).
                         # Old sidecars that predate fontFamily support will have neither,
                         # causing a re-parse from DOCX to pick up the new field.
                         has_valid = any(
-                            s.get("fontFamily") or s.get("imageUrl")
+                            s.get("fontFamily") or s.get("imageUrl") or s.get("imageId")
                             for b in (sidecar.get("blocks") or [])
                             for s in (b.get("styles") or [])
                         )
                         if has_valid or not sidecar.get("blocks"):
+                            # Expand imageId references back to full imageUrl for the frontend
+                            if sidecar.get("images"):
+                                _expand_images(sidecar["blocks"], sidecar["images"])
                             return sidecar
 
                 if p.stat().st_size > _MAX_DOC_BYTES:
@@ -1852,18 +2094,30 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
             else:
                 sidecar = {"filename": p.name, "type": "docx", "truncated": False}
-            sidecar["blocks"] = body.blocks
+            # Extract imageUrl fields from styles into a shared images registry so
+            # the sidecar doesn't embed large base64 blobs inside style ranges.
+            import copy as _copy
+            save_blocks = _copy.deepcopy(body.blocks)
+            save_blocks, new_images = _extract_images(save_blocks)
+            # Merge into any images already in the sidecar (preserves old entries)
+            existing_images = sidecar.get("images") or {}
+            existing_images.update(new_images)
+            if existing_images:
+                sidecar["images"] = existing_images
+            sidecar["blocks"] = save_blocks
             sidecar["wordCount"] = word_count
+            # Write DOCX first, then sidecar — so sidecar always has the newest mtime.
+            # The mtime ordering is used by force_refresh to decide whether the DOCX
+            # was externally modified (agent edit) vs. saved by bz-office (sidecar newer).
+            try:
+                docx_bytes = _blocks_to_docx(body.blocks)  # original blocks carry imageUrl
+                p.write_bytes(docx_bytes)
+            except Exception:
+                pass  # non-fatal: sidecar is the source of truth
             sc_path.write_text(
                 json.dumps(sidecar, ensure_ascii=False, indent=2),
                 encoding='utf-8'
             )
-            # Also write back to the actual DOCX so Refresh re-reads current content
-            try:
-                docx_bytes = _blocks_to_docx(body.blocks)
-                p.write_bytes(docx_bytes)
-            except Exception:
-                pass  # non-fatal: sidecar remains authoritative
             return {"ok": True, "path": str(p), "wordCount": word_count}
         except Exception as exc:
             raise HTTPException(500, f"could not save: {exc}")
@@ -1879,6 +2133,8 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         try:
             sidecar = json.loads(sc_path.read_text(encoding='utf-8'))
             blocks = sidecar.get("blocks", [])
+            if sidecar.get("images"):
+                _expand_images(blocks, sidecar["images"])
             docx_bytes = _blocks_to_docx(blocks)
             return _Resp(
                 content=docx_bytes,
@@ -1905,9 +2161,19 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 s = cd.get('s', {})
                 if s.get('bold'):   api_cd['fontBold']  = True
                 if s.get('italic'): api_cd['fontItalic'] = True
-                if s.get('fg'):     api_cd['color']     = s['fg']
-                if s.get('bg'):     api_cd['bgColor']   = s['bg']
+                if s.get('fg'):
+                    _fg = s['fg']
+                    if _fg.startswith('#') and len(_fg) == 7:
+                        _fg = 'FF' + _fg[1:]
+                    api_cd['fontColor'] = _fg
+                if s.get('bg'):
+                    _bg = s['bg']
+                    if _bg.startswith('#') and len(_bg) == 7:
+                        _bg = 'FF' + _bg[1:]
+                    api_cd['bgColor'] = _bg
                 if s.get('align'):  api_cd['align']     = s['align']
+                if s.get('format') is not None: api_cd['dataFormatString'] = s['format']
+                if s.get('wrap') is not None:   api_cd['wrapText'] = bool(s['wrap'])
                 if api_cd:
                     api_cells[ref] = api_cd
             # Grid dimensions: prefer explicit grid field, fall back to col_widths array
@@ -1927,6 +2193,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 "hiddenColIndices": [],
                 "hiddenRowIndices": [],
                 "mergedCellIndices": [],
+                "mergedCellRanges": sheet.get('mergedCells', []),
             })
         p = Path(sidecar.get('xlsx_path', ''))
         return {"id": p.stem, "name": p.stem, "sheets": sheets, "sources": []}
@@ -1994,7 +2261,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                             if fill and fill.fill_type == "solid" and fill.fgColor and fill.fgColor.type == "rgb":
                                 rgb = fill.fgColor.rgb
                                 if rgb not in ("FF000000", "00000000", "FFFFFFFF"):
-                                    cd["bgColor"] = f"#{rgb[2:]}"
+                                    cd["bgColor"] = rgb  # FFRRGGBB format expected by renderer
                         except Exception:
                             pass
                         if cd:
@@ -2003,9 +2270,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                     if dim.width:
                         idx = openpyxl.utils.column_index_from_string(col_letter) - 1
                         col_widths[str(idx)] = max(30, int(dim.width * 7.5))
+                merged_ranges = [str(r) for r in ws.merged_cells.ranges]
                 sheets.append({"sheetName": ws.title, "cells": cells, "images": [],
                                "columnIndexToWidth": col_widths, "rowIndexToHeight": {},
-                               "hiddenColIndices": [], "hiddenRowIndices": [], "mergedCellIndices": []})
+                               "hiddenColIndices": [], "hiddenRowIndices": [], "mergedCellIndices": [],
+                               "mergedCellRanges": merged_ranges})
             return {"id": p.stem, "name": p.stem, "sheets": sheets, "sources": []}
         except Exception as exc:
             raise HTTPException(500, str(exc))
@@ -2119,6 +2388,39 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         json_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False), encoding='utf-8')
         return {"ok": True, "sheetName": body.sheetName}
 
+    @misc_router.put("/api/excel/merge")
+    async def excel_merge(body: ExcelMergeBody):
+        """Replace the mergedCells list for a sheet, rebuild xlsx, return updated data."""
+        p = Path(body.path)
+        json_path = p.parent / f".{p.name}.excel.json"
+        if not json_path.exists():
+            raise HTTPException(404, "sidecar not found")
+
+        script = _find_excel_worker()
+        if not script:
+            raise HTTPException(500, "excel-worker.py not found on server")
+
+        sidecar = json.loads(json_path.read_text(encoding='utf-8'))
+        target = body.sheet or (sidecar['sheets'][0]['name'] if sidecar.get('sheets') else "")
+        for sheet in sidecar.get('sheets', []):
+            if sheet['name'] == target:
+                sheet['mergedCells'] = body.mergedCells
+                break
+        json_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False), encoding='utf-8')
+
+        import asyncio as _asyncio
+        proc = await _asyncio.create_subprocess_exec(
+            sys.executable, str(script),
+            "--recalc", str(json_path),
+            "--out",    str(p),
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+        sidecar = json.loads(json_path.read_text(encoding='utf-8'))
+        return _sidecar_to_api(sidecar)
+
     @misc_router.put("/api/excel/save")
     async def excel_save(body: ExcelSaveBody):
         if not body.path:
@@ -2148,6 +2450,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                         if cd.get("fontFamily"): font_kw["name"] = cd["fontFamily"]
                         if cd.get("fontSize"):   font_kw["size"] = cd["fontSize"] / 20
                         if font_kw: cell.font = Font(**font_kw)
+                        if cd.get("dataFormatString"): cell.number_format = cd["dataFormatString"]
                     except Exception:
                         pass
             p = Path(body.path)

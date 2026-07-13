@@ -3,11 +3,29 @@ import { useRef, useState } from 'react';
 
 const splitByCommaAndBrackets = str => {
   if (typeof str !== 'string') return [`${str}`];
-  const separators = [',', '\\(', '\\)', '\\+', '-', '\\*', '/', ':', '=', '>', '<', '>=', '<='];
+  // Note: ':' intentionally excluded so 'B2:B21' stays as one chunk
+  const separators = [',', '\\(', '\\)', '\\+', '-', '\\*', '/', '=', '>', '<', '>=', '<='];
   return str.split(new RegExp(`(${separators.join('|')})`));
 };
 
 const COLORS = ['cyan', 'magenta', 'brown', 'red', 'purple', 'green', 'blue', 'orange'];
+
+const colToIndex = col => col.split('').reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0);
+const indexToCol = n => {
+  let col = '';
+  while (n > 0) { n--; col = String.fromCharCode(65 + (n % 26)) + col; n = Math.floor(n / 26); }
+  return col;
+};
+const expandCellRange = range => {
+  const [start, end] = range.split(':');
+  const startCol = start.match(/^[A-Z]+/)[0], endCol = end.match(/^[A-Z]+/)[0];
+  const startRow = parseInt(start.match(/[1-9]\d*$/)[0]), endRow = parseInt(end.match(/[1-9]\d*$/)[0]);
+  const c0 = colToIndex(startCol), c1 = colToIndex(endCol);
+  const cells = [];
+  for (let r = startRow; r <= endRow; r++)
+    for (let c = c0; c <= c1; c++) cells.push(`${indexToCol(c)}${r}`);
+  return cells;
+};
 
 export const getCellLocationToColorMap = str => {
   if (typeof str !== 'string') return {};
@@ -17,7 +35,13 @@ export const getCellLocationToColorMap = str => {
   const cellRange = /^[A-Z]+[1-9]\d*:[A-Z]+[1-9]\d*$/;
   splitByCommaAndBrackets(str).forEach(chunk => {
     const t = chunk.trim();
-    if (cellAddr.test(t) || cellRange.test(t)) result[t] = usedColors.pop() || 'black';
+    if (cellRange.test(t)) {
+      const color = usedColors.pop() || 'black';
+      result[t] = color;                           // color the 'B2:B21' text chunk
+      expandCellRange(t).forEach(cell => { result[cell] = color; }); // color every cell on canvas
+    } else if (cellAddr.test(t)) {
+      result[t] = usedColors.pop() || 'black';
+    }
   });
   return result;
 };
@@ -118,6 +142,14 @@ const ExcelTextInputWithFormulaDropdown = ({
         ...style,
       }}
     >
+      {/*
+       * Invisible in-flow sizer: drives the container's fit-content width.
+       * All other children are position:absolute so without this the
+       * container collapses to minWidth regardless of formula length.
+       */}
+      <span aria-hidden style={{ ...SHARED, visibility: 'hidden', display: 'block', whiteSpace: 'pre', minHeight: 22 }}>
+        {value || ' '}
+      </span>
       {/*
        * Real <input>: text is transparent so only the caret is visible.
        * Positioned to fill the container completely.

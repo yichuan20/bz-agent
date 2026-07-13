@@ -116,6 +116,56 @@ function Btn({ title, active, onClick, onMouseDown, children, style }: { title?:
   );
 }
 
+// ── Font family dropdown (matches Word/Excel style) ────────────────────────
+function FontFamilyPicker({ value, onChange, fonts }: { value: string; onChange: (f: string) => void; fonts: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <div
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4,
+          cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', height: 26,
+          border: '1px solid var(--border-default, var(--border-primary))',
+          background: 'transparent', minWidth: 110, maxWidth: 150,
+        }}
+      >
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+        <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" strokeWidth="2" fill="none" style={{ flexShrink: 0 }}>
+          <polyline points="6,9 12,15 18,9" />
+        </svg>
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, minWidth: 180, maxHeight: 220, overflowY: 'auto',
+          background: 'var(--bg-elevated, var(--bg-primary))', border: '1px solid var(--border-default, var(--border-primary))',
+          borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', padding: 4, zIndex: 9999,
+        }}>
+          {fonts.map(f => (
+            <div
+              key={f}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onChange(f); setOpen(false); }}
+              style={{
+                padding: '6px 10px', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontFamily: f,
+                color: f === value ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                background: f === value ? 'color-mix(in srgb, var(--accent-blue) 12%, transparent)' : 'transparent',
+              }}
+            >{f}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Color utilities ────────────────────────────────────────────────────────
 function parseColorInput(color: string): { hex: string; alpha: number } {
   if (!color || color === 'transparent') return { hex: '#000000', alpha: 0 };
@@ -807,15 +857,11 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
             style={{ width: 42, height: 24, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, textAlign: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', paddingLeft: 4 }}
           />
           {/* Font family picker */}
-          <select
+          <FontFamilyPicker
             value={selectedBox.boxStyle?.fontFamily || 'Montserrat'}
-            onChange={e => updateBoxStyle({ fontFamily: e.target.value })}
-            style={{ height: 24, fontSize: 11, border: '1px solid var(--border-primary)', borderRadius: 4, background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer', paddingLeft: 4 }}
-          >
-            {['Montserrat','Martian Mono','Arial','Georgia','Times New Roman','Courier New'].map(f => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
+            onChange={f => updateBoxStyle({ fontFamily: f })}
+            fonts={['Montserrat', 'Martian Mono', 'Arial', 'Georgia', 'Times New Roman', 'Courier New']}
+          />
           <Sep />
           {/* Font color */}
           <ColorPicker

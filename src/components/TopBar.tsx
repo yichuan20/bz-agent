@@ -24,22 +24,34 @@ const AGENT_HTTP =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
   || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
-type TokenStatus = 'checking' | 'valid' | 'invalid';
+type KeyVerifyStatus = 'checking' | 'missing' | 'unverified' | 'verified' | 'invalid' | 'unreachable';
 
-function useTokenStatus() {
-  const [status, setStatus] = useState<TokenStatus>('checking');
-  const [reason, setReason] = useState('');
+function useKeyStatus() {
+  const [keyStatus,  setKeyStatus]  = useState<KeyVerifyStatus>('checking');
+  const [last4,      setLast4]      = useState<string | null>(null);
+  const [reason,     setReason]     = useState('');
 
   const check = useCallback(async () => {
+    // First get the stored key info
     try {
-      const res = await fetch(`${AGENT_HTTP}/auth/status`);
-      if (!res.ok) { setStatus('invalid'); setReason('server error'); return; }
-      const data = await res.json() as { valid: boolean; reason: string };
-      setStatus(data.valid ? 'valid' : 'invalid');
-      setReason(data.reason);
+      const r = await fetch(`${AGENT_HTTP}/api/apikey-status`);
+      const d = await r.json() as { present: boolean; last4: string | null };
+      if (!d.present) { setKeyStatus('missing'); setLast4(null); return; }
+      setLast4(d.last4);
     } catch {
-      setStatus('invalid');
-      setReason('unreachable');
+      setKeyStatus('unreachable');
+      return;
+    }
+    // Then verify it against the Boltzbit API
+    try {
+      const r = await fetch(`${AGENT_HTTP}/api/apikey-verify`);
+      const d = await r.json() as { status: string; reason?: string; httpStatus?: number };
+      if (d.status === 'verified')    { setKeyStatus('verified');    setReason(''); }
+      else if (d.status === 'invalid') { setKeyStatus('invalid');    setReason(d.reason ?? ''); }
+      else if (d.status === 'missing') { setKeyStatus('missing');    setReason(''); }
+      else                             { setKeyStatus('unverified'); setReason(d.status); }
+    } catch {
+      setKeyStatus('unverified');
     }
   }, []);
 
@@ -49,38 +61,42 @@ function useTokenStatus() {
     return () => clearInterval(id);
   }, [check]);
 
-  return { status, reason };
+  return { keyStatus, last4, reason, refresh: check };
 }
 
-function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: string }) {
-  const [apiKey, setApiKey] = useState<{ present: boolean; last4: string | null } | null>(null);
+function TokenStatusDot() {
+  const { keyStatus, last4, reason } = useKeyStatus();
 
-  useEffect(() => {
-    fetch(`${AGENT_HTTP}/api/apikey-status`)
-      .then(r => r.json())
-      .then(setApiKey)
-      .catch(() => null);
-  }, []);
+  const color =
+    keyStatus === 'verified'    ? '#22c55e' :
+    keyStatus === 'invalid'     ? '#ef4444' :
+    keyStatus === 'missing'     ? '#ef4444' :
+    keyStatus === 'unverified'  ? '#eab308' :
+    keyStatus === 'unreachable' ? '#f97316' :
+    '#6b7280';
 
-  const color = status === 'valid' ? '#22c55e' : status === 'invalid' ? '#ef4444' : '#6b7280';
-  const authLabel = status === 'valid' ? 'Auth valid' : status === 'invalid' ? `Auth invalid: ${reason}` : 'Checking…';
-  const keyLabel = apiKey == null ? '' : apiKey.present ? ` · API key: ****${apiKey.last4}` : ' · No API key';
-  const label = authLabel + keyLabel;
+  const glow = keyStatus === 'verified' || keyStatus === 'invalid' || keyStatus === 'missing';
+
+  const label =
+    keyStatus === 'checking'    ? 'Checking API key…' :
+    keyStatus === 'missing'     ? 'No API key — set one in Settings' :
+    keyStatus === 'verified'    ? `API key verified · ****${last4}` :
+    keyStatus === 'invalid'     ? `API key rejected · ****${last4}` :
+    keyStatus === 'unreachable' ? `Boltzbit API unreachable · ****${last4}` :
+    `API key configured (unverified) · ****${last4}`;
 
   return (
     <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}
       className="token-status-dot-wrap"
     >
-      <div
-        style={{
-          width: 8, height: 8,
-          borderRadius: '50%',
-          background: color,
-          flexShrink: 0,
-          boxShadow: status === 'valid' ? `0 0 6px ${color}` : 'none',
-          cursor: 'default',
-        }}
-      />
+      <div style={{
+        width: 8, height: 8,
+        borderRadius: '50%',
+        background: color,
+        flexShrink: 0,
+        boxShadow: glow ? `0 0 6px ${color}` : 'none',
+        cursor: 'default',
+      }} />
       <div className="token-status-dot-tip" style={{
         position: 'absolute',
         top: 'calc(100% + 6px)',
@@ -98,7 +114,7 @@ function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: strin
         boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
         border: '1px solid rgba(255,255,255,0.1)',
       }}>
-        {label}
+        {label}{reason ? ` — ${reason}` : ''}
       </div>
     </div>
   );
@@ -106,7 +122,6 @@ function TokenStatusDot({ status, reason }: { status: TokenStatus; reason: strin
 const TopBar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(getCurrentMode);
-  const { status: tokenStatus, reason: tokenReason } = useTokenStatus();
 
   useEffect(() => {
     const handleChange = () => setTheme(getCurrentMode());
@@ -194,7 +209,7 @@ const TopBar: React.FC = () => {
 
       {/* ── Right: token status + theme + logout ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <TokenStatusDot status={tokenStatus} reason={tokenReason} />
+        <TokenStatusDot />
         <button
           type="button"
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}

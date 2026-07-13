@@ -2506,8 +2506,8 @@ function SessionListPage({
     <div className="agent-session-page">
       {/* Header */}
       <div className="agent-session-topbar">
-        <div>
-          <h2 className="agent-session-title">
+        <div className="agent-session-topbar-left" onClick={load} title="Click to refresh">
+          <h2 className="agent-session-page-title">
             Agent Projects
             {!loading && <span className="agent-session-count">{sessions.length}</span>}
           </h2>

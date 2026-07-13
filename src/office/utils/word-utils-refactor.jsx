@@ -172,7 +172,7 @@ const contentYToDrawY = (contentY, topMargin) => {
  * Note: Positions are stored in "content space" (continuous Y coordinates)
  * Page gaps are only added when drawing
  */
-const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], topMargin = 0, lineSpacing = 1 }) => {
+const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], topMargin = 0, lineSpacing = 1, effectiveEndX = END_X, effectiveStartX = START_X }) => {
   const char = text[i];
   const style = styles[i];
   const charWidth = ctx.measureText(char).width;
@@ -183,8 +183,8 @@ const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], t
     return getTableCharPosition({ x, y, i, text, tableState, topMargin });
   }
 
-  let endX = END_X;
-  let startX = START_X;
+  let endX = effectiveEndX;
+  let startX = effectiveStartX;
   if (tableState) {
     endX = START_X + tableState.columnWidth * (tableState.columnIndex + 1) - PAD;
     startX = START_X + tableState.columnWidth * tableState.columnIndex + PAD;
@@ -298,18 +298,74 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   newXs[0] = START_X;
   newYs[0] = START_Y + topMargin;
 
+  // Pre-collect placed square-wrap images (those with explicit imagePlacedX/Y coordinates).
+  // These define "occupied zones" that text must flow around.
+  const GAP = 8 * SF; // padding between text and image edge
+  const occupiedZones = [];
+  for (let si = 0; si < (styles?.length || 0); si++) {
+    const s = styles?.[si];
+    if (s?.imageUrl && s?.imageWrap === 'square' && s.imagePlacedX != null && s.imagePlacedY != null) {
+      // imagePlacedX/Y stored in CSS px; convert to canvas px for layout
+      const px = s.imagePlacedX * SF;
+      const py = s.imagePlacedY * SF;
+      occupiedZones.push({
+        left:   px,
+        right:  px + (s.imageWidth  || 64) * SF,
+        top:    py - (s.imageHeight || 64) * SF,
+        bottom: py,
+      });
+    }
+  }
+
+  // For a line at content-space Y, return the effective [startX, endX] range after
+  // accounting for any occupied zones that intersect the line.
+  const getLineRange = (lineY) => {
+    let lStartX = START_X, lEndX = END_X;
+    const mid = (START_X + END_X) / 2;
+    for (const z of occupiedZones) {
+      if (lineY > z.top - LINE_HEIGHT && lineY <= z.bottom + LINE_HEIGHT) {
+        if (z.left >= mid) {
+          lEndX = Math.min(lEndX, z.left - GAP);
+        } else {
+          lStartX = Math.max(lStartX, z.right + GAP);
+        }
+      }
+    }
+    return { startX: lStartX, endX: lEndX };
+  };
+
   const startI = getStartI({ scrollY, ys: newYs, text, topMargin });
 
   // step 1: only calculate the coordinates and line height, not drawing
   let i = clamp(startI, 0, text.length);
-  let x = newXs[i];
-  let y = newYs[i];
+
+  const isFloatImage = (s) => s?.imageUrl && (s?.imageWrap === 'square' || s?.imageWrap === 'behind');
+
+  // When startI is inside a float-image zone, text y depends on the paragraph above
+  // the image — which may have scrolled off screen. Back up to before the image so
+  // the layout re-derives the correct flow y from stored positions.
+  const startY = newYs[i] ?? (START_Y + topMargin);
+  const nearAnyZone = occupiedZones.some(z => startY > z.top - LINE_HEIGHT && startY <= z.bottom + LINE_HEIGHT);
+  if (nearAnyZone || isFloatImage(styles?.[i])) {
+    for (let k = i - 1; k >= Math.max(0, i - 2000); k--) {
+      if (isFloatImage(styles?.[k])) { i = k; break; }
+    }
+  }
+
+  // Step back past float-image chars (they store placed coords, not flow y).
+  while (i > 0 && isFloatImage(styles?.[i])) i--;
+
+  // Step back to line start so x initialises at the correct boundary.
+  while (i > 0 && newYs[i - 1] !== undefined && Math.abs(newYs[i - 1] - newYs[i]) < 0.1) {
+    i--;
+  }
+
+  let y = newYs[i] ?? (START_Y + topMargin);
+  const { startX: _initStartX } = getLineRange(y);
+  let x = _initStartX;
   let tableState = null;
 
   let lineStartIndex = i;
-  while (lineStartIndex > 0 && Math.abs(newYs[lineStartIndex - 1] - newYs[i]) < 0.1) {
-    lineStartIndex--;
-  }
   let lastY = newYs[i];
   let currentLineSpacing = 1;
 
@@ -330,11 +386,32 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     }
 
     if (styles[i]?.imageUrl) {
-      const imgWidth = (styles[i].imageWidth || 64) * SF;
+      const imgWidth  = (styles[i].imageWidth  || 64) * SF;
       const imgHeight = (styles[i].imageHeight || 64) * SF;
-      const vPadding = 8 * SF;
-      let prevLineY = START_Y + topMargin - LINE_HEIGHT;
+      const vPadding  = 8 * SF;
+      const wrap = styles[i]?.imageWrap || 'inline';
 
+      if (wrap === 'square') {
+        // imagePlacedX/Y stored in CSS px; convert to canvas px for layout
+        const rawPx = styles[i].imagePlacedX;
+        const rawPy = styles[i].imagePlacedY;
+        newXs[i] = rawPx != null ? rawPx * SF : (END_X - imgWidth - spacePadding * 2);
+        newYs[i] = rawPy != null ? rawPy * SF : y;
+        i++; continue;  // x does NOT advance — zero width in text flow
+      }
+
+      if (wrap === 'behind') {
+        // Use stored coordinates if available (preserves position across wrap mode switches).
+        // Fall back to current inline flow position for a freshly-placed behind image.
+        const rawPx = styles[i].imagePlacedX;
+        const rawPy = styles[i].imagePlacedY;
+        newXs[i] = rawPx != null ? rawPx * SF : currentX + spacePadding;
+        newYs[i] = rawPy != null ? rawPy * SF : y;
+        i++; continue;  // x does NOT advance
+      }
+
+      // 'inline' (default): expand line height to accommodate the image, advance x
+      let prevLineY = START_Y + topMargin - LINE_HEIGHT;
       if (lineStartIndex > 0) {
         prevLineY = newYs[lineStartIndex - 1];
       }
@@ -350,9 +427,8 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
         lastY += diff;
       }
 
-      newXs[i] = currentX + spacePadding;
+      newXs[i] = currentX;  // store raw position; spacePadding applied at draw time only
       newYs[i] = y;
-
       x = currentX + imgWidth + spacePadding * 2;
       i++;
       continue;
@@ -361,6 +437,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     newXs[i] = currentX;
     newYs[i] = y;
 
+    const { startX: effStartX, endX: effEndX } = getLineRange(y);
     const nextPos = getNextPosition({
       x: currentX,
       y,
@@ -371,11 +448,24 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
       styles,
       topMargin,
       lineSpacing: currentLineSpacing,
+      effectiveEndX:   effEndX,
+      effectiveStartX: effStartX,
     });
 
+    const prevY = y;
     x = nextPos.x;
     y = nextPos.y;
     tableState = nextPos.tableState;
+
+    // When a line break occurs, getNextPosition uses the OLD line's occupied-zone
+    // range to set the new line's start x. This is wrong at zone boundaries (e.g.
+    // transitioning from inside a square-wrap zone to below it). Re-derive x from
+    // getLineRange for the NEW y so the first character on the new line is placed
+    // at the correct left margin.
+    if (!tableState && Math.abs(y - prevY) > 0.1) {
+      const { startX: newLineStartX } = getLineRange(y);
+      x = newLineStartX;
+    }
 
     if (text[i] === '\n') {
       currentLineSpacing = styles[i]?.lineSpacing || 1;
@@ -464,6 +554,27 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   // Draw page backgrounds BEFORE drawing content
   drawPageSetup({ ctx, topMargin, scrollY, numPages, headerText, footerText, gapColor });
 
+  // Pre-draw: "behind text" images are drawn before text so text renders on top
+  for (let bi = startI; bi < text.length && bi < newXs.length; bi++) {
+    if (styles[bi]?.imageUrl && styles[bi]?.imageWrap === 'behind' && newXs[bi] != null && newYs[bi] != null) {
+      const bx = newXs[bi];
+      const by = newYs[bi];
+      const bDrawY = contentYToDrawY(by, topMargin) - scrollY;
+      const bImgW = (styles[bi].imageWidth  || 64) * SF;
+      const bImgH = (styles[bi].imageHeight || 64) * SF;
+      const bUrl  = styles[bi].imageUrl;
+      if (!failedImageUrls.has(bUrl)) {
+        if (imageCache.has(bUrl)) {
+          const img = imageCache.get(bUrl);
+          if (img.complete && img.naturalHeight !== 0) {
+            try { ctx.drawImage(img, bx, bDrawY - bImgH, bImgW, bImgH); } catch (_) { /* ignore */ }
+          }
+        }
+        // (loading initiated in the main draw pass below)
+      }
+    }
+  }
+
   // step 2: draw the document (viewport-clipped — only paint visible chars)
   i = clamp(startI, 0, text.length);
 
@@ -498,6 +609,38 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
       const imgWidth = (styles[i].imageWidth || 64) * SF;
       const imgHeight = (styles[i].imageHeight || 64) * SF;
 
+      // "behind" images were already painted in the pre-draw pass; skip here
+      if (styles[i]?.imageWrap === 'behind') { i++; continue; }
+
+      // Square-wrap images use their explicit placed coordinates for drawing
+      if (styles[i]?.imageWrap === 'square') {
+        const rawPx = styles[i].imagePlacedX;
+        const rawPy = styles[i].imagePlacedY;
+        if (rawPx != null && rawPy != null) {
+          // imagePlacedX/Y in CSS px → canvas px
+          const px = rawPx * SF;
+          const py = rawPy * SF;
+          const placedDrawY = contentYToDrawY(py, topMargin) - scrollY;
+          if (!failedImageUrls.has(imageUrl) && imageCache.has(imageUrl)) {
+            const img = imageCache.get(imageUrl);
+            if (img.complete && img.naturalHeight !== 0) {
+              try { ctx.drawImage(img, px, placedDrawY - imgHeight, imgWidth, imgHeight); }
+              catch (e) { failedImageUrls.add(imageUrl); }
+            }
+          } else if (!failedImageUrls.has(imageUrl) && !loadingImages.has(imageUrl) && !imageCache.has(imageUrl)) {
+            // kick off load (will re-render via callback)
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            loadingImages.set(imageUrl, img);
+            const cb = getImageLoadCallback();
+            img.onload = () => { imageCache.set(imageUrl, img); loadingImages.delete(imageUrl); cb?.(); };
+            img.onerror = () => { failedImageUrls.add(imageUrl); loadingImages.delete(imageUrl); cb?.(); };
+            img.src = imageUrl;
+          }
+          i++; continue;
+        }
+      }
+
       // Draw caret before image if cursor is at image position (but not when caret should be hidden)
       if (i === selStart && i === selEnd && hideCaretAtIndex !== i && caretVisible) {
         drawCaret({ x, y: drawY, ctx });
@@ -508,7 +651,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
           const img = imageCache.get(imageUrl);
           if (img.complete && img.naturalHeight !== 0) {
             try {
-              ctx.drawImage(img, x, drawY - imgHeight, imgWidth, imgHeight);
+              ctx.drawImage(img, x + 4 * SF, drawY - imgHeight, imgWidth, imgHeight);
             } catch (error) {
               console.error('Error drawing image:', error);
               failedImageUrls.add(imageUrl);

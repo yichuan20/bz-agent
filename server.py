@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.3.5"
+BACKEND_VERSION = "0.3.9"
 
 import asyncio
 import json
@@ -74,12 +74,16 @@ def _build_widget_template_table() -> str:
 # § 4 · SESSION MANAGEMENT
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> None:
+def _write_session_config(session_id: str, mode: str, working_dir: str = "", model_name: str = "") -> None:
     """Write IDENTITY.md, SOUL.md, settings.json, and meta.json into the session
     config directory before spawning bzcode.  bzcode picks these up at startup and
     on every --resume, so they are re-applied on reconnect too.
-    meta.json is our own metadata (not read by bzcode) used by _read_session_file."""
+    meta.json is our own metadata (not read by bzcode) used by _read_session_file.
+    model_name: reported model from bzcode status (empty = unknown, treated as boltzbit)."""
     import shutil as _shutil
+
+    is_boltzbit = not model_name or model_name.lower().startswith("boltzbit")
+    _asset_suffix = "" if is_boltzbit else "_generic"
 
     entry = _mode_entry(mode)
     cfg_dir = SESSIONS_DIR / session_id
@@ -97,10 +101,26 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
             else:
                 item.unlink(missing_ok=True)
 
+    # Detect model change and log when assets switch variant
+    _meta_path = cfg_dir / "meta.json"
+    _prev_model = ""
+    try:
+        _prev_meta = json.loads(_meta_path.read_text(encoding="utf-8"))
+        _prev_model = _prev_meta.get("model", "")
+    except Exception:
+        pass
+    _variant = "boltzbit" if is_boltzbit else "generic"
+    _prev_variant = "boltzbit" if (not _prev_model or _prev_model.lower().startswith("boltzbit")) else "generic"
+    if model_name and _prev_model and _prev_model != model_name:
+        print(f"[session] {session_id} model changed: {_prev_model!r} → {model_name!r} "
+              f"({_prev_variant} → {_variant} assets)", file=sys.stderr)
+    elif not _prev_model and model_name:
+        print(f"[session] {session_id} model set to {model_name!r} — using {_variant} assets", file=sys.stderr)
+
     # Our own metadata — used by _read_session_file since new bzcode no longer
     # writes a session header line into the .jsonl
-    meta = {"sessionId": session_id, "workingDir": working_dir, "mode": mode}
-    (cfg_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    meta = {"sessionId": session_id, "workingDir": working_dir, "mode": mode, "model": model_name}
+    _meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     # IDENTITY.md — who the agent is
     identity = entry.get("identity", "")
@@ -117,47 +137,55 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
     else:
         (cfg_dir / "SOUL.md").unlink(missing_ok=True)
 
-    # Copy agent scripts into the session config dir so the agent can reference
-    # them by a stable, deployment-agnostic path rather than an absolute one.
-    # The session config dir lives at $BZ_HOME/sessions/{id}/
+    # Copy agent scripts — variant chosen by model (boltzbit vs generic).
     _server_dir = Path(__file__).resolve().parent
-    src_scripts = _server_dir / "bzcode_assets" / "scripts"
-    # Fallback: also check CWD/bzcode_assets/scripts in case server.py is run from a
-    # different directory than where it lives (e.g. some workspace deployments).
+    import shutil as _sh
+    _scripts_folder = f"scripts{_asset_suffix}"
+    src_scripts = _server_dir / "bzcode_assets" / _scripts_folder
     if not src_scripts.is_dir():
-        _cwd_candidate = Path.cwd() / "bzcode_assets" / "scripts"
-        if _cwd_candidate.is_dir():
-            src_scripts = _cwd_candidate
-        else:
-            print(
-                f"[session] WARNING: bzcode_assets/scripts not found at {src_scripts} "
-                f"or {_cwd_candidate} — agent scripts will be unavailable",
-                file=sys.stderr,
-            )
+        # Fallback 1: try without suffix (use boltzbit scripts if generic not present yet)
+        if _asset_suffix:
+            src_scripts = _server_dir / "bzcode_assets" / "scripts"
+        # Fallback 2: check CWD
+        if not src_scripts.is_dir():
+            _cwd_candidate = Path.cwd() / "bzcode_assets" / _scripts_folder
+            if _cwd_candidate.is_dir():
+                src_scripts = _cwd_candidate
+            else:
+                _cwd_candidate2 = Path.cwd() / "bzcode_assets" / "scripts"
+                if _cwd_candidate2.is_dir():
+                    src_scripts = _cwd_candidate2
+                else:
+                    print(f"[session] WARNING: bzcode_assets/scripts not found — agent scripts unavailable",
+                          file=sys.stderr)
     dst_scripts = cfg_dir / "scripts"
     dst_scripts.mkdir(exist_ok=True)
-    import shutil as _sh
     for script in src_scripts.glob("*.py"):
         dest = dst_scripts / script.name
-        # Only overwrite if source is newer (avoids redundant I/O on every reconnect)
         if not dest.exists() or script.stat().st_mtime > dest.stat().st_mtime:
             _sh.copy2(script, dest)
-    print(f"[session] scripts: {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)", file=sys.stderr)
+    print(f"[session] scripts ({_scripts_folder}): {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)", file=sys.stderr)
 
-    # Copy templates directory so bzcode can find templates/index.json on remote.
-    src_templates = _server_dir / "bzcode_assets" / "templates"
+    # Copy templates — variant chosen by model.
+    _templates_folder = f"templates{_asset_suffix}"
+    src_templates = _server_dir / "bzcode_assets" / _templates_folder
     if not src_templates.is_dir():
-        _cwd_tmpl = Path.cwd() / "bzcode_assets" / "templates"
-        if _cwd_tmpl.is_dir():
-            src_templates = _cwd_tmpl
+        if _asset_suffix:
+            src_templates = _server_dir / "bzcode_assets" / "templates"
+        if not src_templates.is_dir():
+            _cwd_tmpl = Path.cwd() / "bzcode_assets" / _templates_folder
+            if _cwd_tmpl.is_dir():
+                src_templates = _cwd_tmpl
+            else:
+                src_templates = Path.cwd() / "bzcode_assets" / "templates"
     if src_templates.is_dir():
         dst_templates = cfg_dir / "templates"
         if dst_templates.exists():
             _shutil.rmtree(dst_templates)
         _sh.copytree(src_templates, dst_templates)
-        print(f"[session] templates: {src_templates} → {dst_templates}", file=sys.stderr)
+        print(f"[session] templates ({_templates_folder}): {src_templates} → {dst_templates}", file=sys.stderr)
     else:
-        print(f"[session] WARNING: bzcode_assets/templates not found at {src_templates}", file=sys.stderr)
+        print(f"[session] WARNING: bzcode_assets/templates not found", file=sys.stderr)
 
     # {scripts_path} resolves to the session-local scripts directory.
     # Using the session config dir means no absolute paths leak into templates.
@@ -172,26 +200,28 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
             .replace("{widget_template_table}", _build_widget_template_table())
         )
 
-    # AGENTS.md — workflow instructions with all placeholders resolved.
-    agents_md = entry.get("agents_md")
+    # AGENTS.md — pick boltzbit or generic variant; fall back to the other if absent.
+    _agents_md_key = "agents_md" if is_boltzbit else "agents_md_generic"
+    agents_md = entry.get(_agents_md_key) or entry.get("agents_md", "")
     if agents_md:
         (cfg_dir / "AGENTS.md").write_text(_resolve(agents_md), encoding="utf-8")
     else:
         (cfg_dir / "AGENTS.md").unlink(missing_ok=True)
 
     # settings.json — tools, model, permissions, etc.
-    settings = entry.get("settings")
+    _settings_key = "settings" if is_boltzbit else "settings_generic"
+    settings = entry.get(_settings_key) or entry.get("settings")
     if settings:
         (cfg_dir / "settings.json").write_text(json.dumps(settings, indent=2), encoding="utf-8")
     else:
         (cfg_dir / "settings.json").unlink(missing_ok=True)
 
-    # skills/{name}/SKILL.md — session-specific skills (only available to this mode)
+    # skills/{name}/SKILL.md — pick boltzbit or generic variant.
     skills_dir = cfg_dir / "skills"
-    # Remove any stale skills from a previous mode first
     if skills_dir.exists():
         _shutil.rmtree(skills_dir)
-    skills = entry.get("skills", {})
+    _skills_key = "skills" if is_boltzbit else "skills_generic"
+    skills = entry.get(_skills_key) or entry.get("skills", {})
     for skill_name, skill_content in skills.items():
         skill_path = skills_dir / skill_name / "SKILL.md"
         skill_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +237,7 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "") -> 
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Bzcode session files live under BZ_HOME/sessions/
-SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit") / "sessions"
+SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser() / "sessions"
 
 # Per-file cursor positions: abs_path -> {selStart, selEnd}
 # Stored in-memory (survives tab switches, cleared on server restart).
@@ -400,7 +430,7 @@ def _write_bzcode_credentials(
     auth_url: str = "https://boltzhub.com",
 ) -> None:
     """Write access token to $BZ_HOME/credentials.json in the format bzcode expects."""
-    creds_dir  = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
+    creds_dir  = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
     creds_file = creds_dir / "credentials.json"
     creds_dir.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
@@ -446,7 +476,7 @@ def _write_bzcode_credentials(
 def _read_api_keys() -> dict:
     """Return only BZ_API_KEY from BZ_HOME/api_keys.json.
     No other keys are passed to bzcode spawns — this is intentional."""
-    keys_file = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit") / "api_keys.json"
+    keys_file = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser() / "api_keys.json"
     if not keys_file.exists():
         return {}
     try:
@@ -674,7 +704,7 @@ _PUSH_EXCLUDE  = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "ven
 def _boltzhub_token() -> Optional[str]:
     try:
         import json as _json
-        bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
+        bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
         creds = _json.loads((bz_home / "credentials.json").read_text())
         return creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
     except Exception:
@@ -684,7 +714,7 @@ def _boltzhub_token() -> Optional[str]:
 def _credentials_valid() -> Tuple[bool, str]:
     """Return (ok, reason). Accepts BZ_API_KEY in api_keys.json or a valid credentials.json."""
     import time as _time
-    bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit")
+    bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
     # BZ_API_KEY is sufficient — no OAuth credentials needed
     api_keys = _read_api_keys()
     if api_keys.get("BZ_API_KEY"):
@@ -1229,6 +1259,8 @@ class AgentPool:
         bzcode_path: str, cmd: list, env: dict,
     ) -> AgentPoolEntry:
         """Return existing entry for session_id, or create a new one."""
+        if session_id.startswith("bz-probe-"):
+            raise ValueError(f"probe session {session_id!r} must not enter the pool")
         async with self._lock:
             entry = self._entries.get(session_id)
 
@@ -1258,6 +1290,16 @@ class AgentPool:
             entry = self._entries.pop(session_id, None)
         if entry:
             await entry.shutdown(reason="explicit_remove")
+
+    async def flush_all(self, reason: str = "api_key_reset") -> int:
+        """Shut down all running agents so they restart with fresh env vars."""
+        async with self._lock:
+            entries = list(self._entries.items())
+            self._entries.clear()
+        for sid, entry in entries:
+            await entry.shutdown(reason=reason)
+            print(f"[pool] flushed {sid} ({reason})", file=sys.stderr)
+        return len(entries)
 
     async def _idle_sweeper(self) -> None:
         """Periodically check for idle agents and shut them down."""
@@ -1772,6 +1814,57 @@ def _blocks_to_docx(blocks: list) -> bytes:
     import docx as _docx
     import io, base64
     from docx.shared import Pt, RGBColor, Emu
+    from docx.oxml.ns import qn
+    from lxml import etree
+
+    PX_TO_EMU = 9525  # 1 CSS px at 96 DPI
+    WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+    A  = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+
+    def _make_float(run, wrap, placed_x_css):
+        """Convert the inline picture in `run` to a floating wp:anchor element."""
+        drawing = run._r.find(qn('w:drawing'))
+        if drawing is None: return
+        inline = drawing.find(f'{{{WP}}}inline')
+        if inline is None: return
+
+        extent  = inline.find(f'{{{WP}}}extent')
+        cx = extent.get('cx', '0') if extent is not None else '0'
+        cy = extent.get('cy', '0') if extent is not None else '0'
+
+        behind  = '1' if wrap == 'behind' else '0'
+        # imagePlacedX is from the canvas/page left edge; DOCX column-relative
+        # coordinates start at the text column left (~100 CSS px into the canvas).
+        CANVAS_LEFT_CSS = 100  # matches bz-agent START_X / SF
+        COLUMN_W_CSS    = 621  # matches bz-agent (END_X - START_X) / SF
+        col_x   = max(0, (placed_x_css or 0) - CANVAS_LEFT_CSS)
+        pos_x   = int(col_x * PX_TO_EMU)
+        # Float direction: image in left half → text wraps right; right half → text wraps left
+        wrap_side = 'right' if col_x < COLUMN_W_CSS / 2 else 'left'
+        wrap_el = ('<wp:wrapBehindDoc/>' if wrap == 'behind'
+                   else f'<wp:wrapSquare wrapText="{wrap_side}"/>')
+
+        anchor = etree.fromstring(
+            f'<wp:anchor xmlns:wp="{WP}"'
+            f' distT="0" distB="114300" distL="114300" distR="114300"'
+            f' simplePos="0" relativeHeight="251658240" behindDoc="{behind}"'
+            f' locked="0" layoutInCell="1" allowOverlap="0">'
+            f'<wp:simplePos x="0" y="0"/>'
+            f'<wp:positionH relativeFrom="column"><wp:posOffset>{pos_x}</wp:posOffset></wp:positionH>'
+            f'<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+            f'<wp:extent cx="{cx}" cy="{cy}"/>'
+            f'<wp:effectExtent l="0" t="0" r="0" b="0"/>'
+            f'{wrap_el}'
+            f'</wp:anchor>'
+        )
+        # Move docPr, cNvGraphicFramePr, graphic from inline → anchor
+        for tag in (f'{{{WP}}}docPr', f'{{{WP}}}cNvGraphicFramePr', f'{{{A}}}graphic'):
+            child = inline.find(tag)
+            if child is not None:
+                anchor.append(child)
+
+        drawing.remove(inline)
+        drawing.append(anchor)
 
     doc = _docx.Document()
 
@@ -1833,19 +1926,28 @@ def _blocks_to_docx(blocks: list) -> bytes:
                     if sr.get("imageUrl"):
                         try:
                             data_url = sr["imageUrl"]
-                            _, b64_data = data_url.split(",", 1)
-                            img_bytes = base64.b64decode(b64_data)
+                            if data_url.startswith("data:"):
+                                _, b64_data = data_url.split(",", 1)
+                                img_bytes = base64.b64decode(b64_data)
+                            else:
+                                import urllib.request as _req
+                                with _req.urlopen(data_url, timeout=10) as resp:
+                                    img_bytes = resp.read()
+                            wrap  = sr.get("imageWrap", "inline")
                             img_run = para.add_run()
-                            w_emu = sr.get("imageWidth",  64) * 9525
-                            h_emu = sr.get("imageHeight", 64) * 9525
+                            w_emu = sr.get("imageWidth",  64) * PX_TO_EMU
+                            h_emu = sr.get("imageHeight", 64) * PX_TO_EMU
                             img_run.add_picture(io.BytesIO(img_bytes), width=Emu(w_emu), height=Emu(h_emu))
+                            if wrap in ('square', 'behind'):
+                                _make_float(img_run, wrap, sr.get("imagePlacedX"))
                         except Exception:
                             para.add_run(text[s:e])
                     else:
                         run = para.add_run(text[s:e])
-                        run.bold      = sr.get("isBold", False)
-                        run.italic    = sr.get("isItalic", False)
-                        run.underline = sr.get("isUnderlined", False)
+                        run.bold            = sr.get("isBold", False)
+                        run.italic          = sr.get("isItalic", False)
+                        run.underline       = sr.get("isUnderlined", False)
+                        run.font.strike     = sr.get("isStrikethrough", False) or None
                         if sr.get("fontFamily"):
                             run.font.name = sr["fontFamily"]
                         if sr.get("fontSize"):

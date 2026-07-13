@@ -1,8 +1,6 @@
-import { DragIndicator } from '@mui/icons-material';
 import {
+  CURRENCIES,
   DATA_FORMAT_STR_TO_DATA_TYPE,
-  DATA_TYPE_TO_DATA_FORMAT_STR,
-  DATA_TYPES,
   SUPPORTED_FUNCTIONS,
 } from '../utils/excelModelsStub';
 import {
@@ -20,8 +18,6 @@ export const DraggableToolbarContainer = ({children, $docked, $top, $left, $drag
 const DragHandle = ({children, style={}, ...p}) => <div style={{width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--text-tertiary)',cursor:'grab',marginRight:4,flexShrink:0,...style}} {...p}>{children}</div>;
 
 export const ToolbarButton = ({children, isActive, style={}, ...p}) => <IconButton isActive={isActive} style={{position:'relative',width:26,height:26,color:'var(--text-secondary)',flexShrink:0,...style}} {...p}>{children}</IconButton>;
-
-const ToolbarDropdown = ({children, style={}, ...p}) => <button style={{display:'flex',alignItems:'center',gap:3,padding:'4px 8px',borderRadius:4,background:'transparent',color:'var(--text-secondary)',cursor:'pointer',fontSize:12,border:'none',flexShrink:0,...style}} {...p}>{children}</button>;
 
 const TooltipWrapper = ({children, style={}, ...p}) => <div style={{position:'relative',display:'flex',alignItems:'center',...style}} {...p}>{children}</div>;
 
@@ -130,7 +126,7 @@ const DockIndicator = ({children, $show, style={}, ...p}) => <div style={{positi
 
 // SVG Icons matching HTML design
 const BoldIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="none" fill="currentColor">
+  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
     <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
     <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
   </svg>
@@ -152,10 +148,14 @@ const TextColorIcon = ({ color }) => (
   </svg>
 );
 
-const FillColorIcon = () => (
+const FillColorIcon = ({ color = '#ffffff' }) => (
   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
     <path d="M19 11H5L12 4L19 11Z" />
-    <path d="M5 11V20H19V11" />
+    <path d="M5 11V18H19V11" />
+    <path d="M4 21h16" style={{ stroke: color === 'transparent' ? 'none' : color, strokeWidth: 3 }} />
+    {color === 'transparent' && (
+      <path d="M4 20h16" style={{ stroke: '#ccc', strokeWidth: 3, strokeDasharray: '3 2' }} />
+    )}
   </svg>
 );
 
@@ -192,6 +192,15 @@ const WrapTextIcon = () => (
   </svg>
 );
 
+const MergeIcon = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+    <rect x="2" y="4" width="20" height="16" rx="1" />
+    <line x1="12" y1="4" x2="12" y2="20" strokeDasharray="3 2" />
+    <polyline points="9,12 12,9 15,12" />
+    <polyline points="9,12 12,15 15,12" />
+  </svg>
+);
+
 const PercentIconSVG = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
     <circle cx="7" cy="7" r="3" />
@@ -216,12 +225,116 @@ const MoreIcon = () => (
   </svg>
 );
 
-const DollarIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+
+const ChevronDownTiny = () => (
+  <svg viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M2 3.5L5 6.5L8 3.5" />
   </svg>
 );
+
+// Adjust decimal places in an Excel format string (+1 or -1)
+const adjustDecimalPlaces = (fmt, delta) => {
+  if (!fmt || fmt === 'General' || fmt === '@' || fmt === '# ?/?') return fmt;
+  // Mask quoted sections so we don't match inside them
+  const masked = fmt.replace(/"[^"]*"/g, s => '\x00'.repeat(s.length));
+  const m = masked.match(/\.(\d+)/);
+  if (!m) {
+    if (delta <= 0) return fmt;
+    // No decimal section — insert .0 before %, E, or at end
+    const insertAt = fmt.search(/[%E]/);
+    return insertAt !== -1
+      ? fmt.slice(0, insertAt) + '.0' + fmt.slice(insertAt)
+      : fmt + '.0';
+  }
+  const currentDecimals = m[1].length;
+  const newDecimals = Math.max(0, currentDecimals + delta);
+  const start = m.index;
+  const end = start + 1 + currentDecimals;
+  const replacement = newDecimals > 0 ? '.' + '0'.repeat(newDecimals) : '';
+  return fmt.slice(0, start) + replacement + fmt.slice(end);
+};
+
+// Grouped format definitions for the 123 picker
+const FORMAT_PICKER_GROUPS = [
+  [
+    { label: 'Automatic',      format: 'General',           example: '1234' },
+    { label: 'Plain text',     format: '@',                 example: 'ABC' },
+  ],
+  [
+    { label: 'Number',         format: '#,##0.00',          example: '1,000.12' },
+    { label: 'Percent',        format: '0.00%',             example: '10.12%' },
+    { label: 'Scientific',     format: '0.00E+00',          example: '1.00E+03' },
+  ],
+  [
+    { label: 'Accounting',     format: '"$"#,##0',          example: '$ 1,000' },
+    { label: 'Currency',       format: '"$"#,##0.00',       example: '$1,000.12' },
+    { label: 'Currency rounded', format: '"$"#,##0',        example: '$1,000' },
+  ],
+  [
+    { label: 'Date',           format: 'yyyy-mm-dd',        example: '2024-01-01' },
+    { label: 'Time',           format: 'h:mm',              example: '15:59' },
+    { label: 'Date time',      format: 'yyyy-mm-dd h:mm',   example: '2024-01-01 15:59' },
+  ],
+];
+
+const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Detect active currency from the cell's dataFormatString
+  const activeCurrency = CURRENCIES.find(c => c.format === selectedCell?.dataFormatString) || null;
+  const label = activeCurrency ? activeCurrency.symbol : '$';
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <ToolbarButton
+        isActive={!!activeCurrency}
+        data-tooltip="Currency format"
+        style={{ gap: 1, width: 'auto', paddingInline: 4, minWidth: 26 }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1, minWidth: 10, textAlign: 'center' }}>{label}</span>
+        <ChevronDownTiny />
+      </ToolbarButton>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+          background: 'var(--bg-elevated, var(--bg-primary))',
+          border: '1px solid var(--border-default, var(--border-primary))',
+          borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          padding: 4, zIndex: 9999, minWidth: 200,
+        }}>
+          {CURRENCIES.map(c => (
+            <div
+              key={c.code}
+              onClick={() => { onUpdateAndPatchSelectedCell({ dataFormatString: c.format }); setOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
+                background: c.format === selectedCell?.dataFormatString ? 'var(--bg-secondary)' : 'transparent',
+                fontSize: 12, color: 'var(--text-primary)',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+              onMouseLeave={e => e.currentTarget.style.background = c.format === selectedCell?.dataFormatString ? 'var(--bg-secondary)' : 'transparent'}
+            >
+              <span style={{ width: 28, fontWeight: 600, fontSize: 13, color: 'var(--accent-blue)' }}>{c.symbol}</span>
+              <span style={{ flex: 1 }}>{c.name}</span>
+              <span style={{ color: 'var(--text-tertiary)', fontFamily: 'monospace', fontSize: 11 }}>{c.code}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const BorderTopIcon = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
@@ -262,6 +375,11 @@ const ExcelToolbar = ({
   onImageUpload,
   onInsertFunction,
   onResetGrid,
+  mergedMasterMap = {},
+  selectedCellLocation = '',
+  dragStartLocation = '',
+  dragEndLocation = '',
+  onMergeCells = () => {},
 }) => {
   const fileInputRef = useRef(null);
 
@@ -400,9 +518,37 @@ const ExcelToolbar = ({
 
   const toolbarContent = (
     <>
-      <DragHandle onMouseDown={handleMouseDown} data-drag-handle="true">
-        <DragIndicator />
+      <DragHandle
+        onMouseDown={handleMouseDown}
+        onDoubleClick={() => setIsDocked(true)}
+        data-drag-handle="true"
+        title="Double-click to dock"
+      >
+        <svg viewBox="0 0 24 24" style={{width:14,height:14,fill:'currentColor'}}>
+          <circle cx="9" cy="5" r="1.5" />
+          <circle cx="15" cy="5" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="19" r="1.5" />
+          <circle cx="15" cy="19" r="1.5" />
+        </svg>
       </DragHandle>
+      {!isDocked && (
+        <div
+          onClick={() => setIsDocked(true)}
+          title="Dock toolbar"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 20, height: 20, cursor: 'pointer', flexShrink: 0,
+            color: 'var(--text-tertiary)', borderRadius: 4, marginRight: 2,
+            fontSize: 14, lineHeight: 1,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-blue)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
+        >
+          ⊟
+        </div>
+      )}
 
       <ToolbarButton
         isActive={selectedCell?.fontBold}
@@ -484,18 +630,77 @@ const ExcelToolbar = ({
       </TooltipWrapper>
 
       <VerticalLine style={{ marginLeft: '10px' }} />
-      <ToolbarButton
-        onClick={() => onUpdateAndPatchSelectedCell({ dataFormatString: '"$"#,##0' })}
-        data-tooltip="Currency"
-      >
-        <DollarIcon />
-      </ToolbarButton>
+      <CurrencyPickerDropdown selectedCell={selectedCell} onUpdateAndPatchSelectedCell={onUpdateAndPatchSelectedCell} />
       <ToolbarButton
         onClick={() => onUpdateAndPatchSelectedCell({ dataFormatString: '0.00%' })}
         data-tooltip="Percent"
       >
         <PercentIconSVG />
       </ToolbarButton>
+      <ToolbarButton
+        data-tooltip="Decrease decimal places"
+        style={{ width: 30, fontSize: 11, fontFamily: 'monospace', gap: 0 }}
+        onClick={() => onUpdateAndPatchSelectedCell(cell => ({
+          dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', -1),
+        }))}
+      >
+        .0<span style={{ fontSize: 9, marginTop: 1 }}>←</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-tooltip="Increase decimal places"
+        style={{ width: 30, fontSize: 11, fontFamily: 'monospace' }}
+        onClick={() => onUpdateAndPatchSelectedCell(cell => ({
+          dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', +1),
+        }))}
+      >
+        .00
+      </ToolbarButton>
+      <CellFormatContainer className="toolbar-dropdown">
+        <CellFormatTrigger
+          $active={cellFormatOpen}
+          onClick={() => setCellFormatOpen(!cellFormatOpen)}
+          style={{ minWidth: 80, maxWidth: 110 }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {dataTypeValue === 'Custom' ? '123' : dataTypeValue}
+          </span>
+          <ChevronDownIcon />
+        </CellFormatTrigger>
+        <CellFormatDropdown
+          $open={cellFormatOpen}
+          style={{ minWidth: 220, padding: '6px 0' }}
+        >
+          {FORMAT_PICKER_GROUPS.map((group, gi) => (
+            <div key={gi}>
+              {gi > 0 && (
+                <div style={{ height: 1, background: 'var(--border-default, var(--border-primary))', margin: '4px 10px' }} />
+              )}
+              {group.map(item => {
+                const isActive = selectedCell?.dataFormatString === item.format;
+                return (
+                  <CellFormatItem
+                    key={item.label}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: isActive ? 'var(--bg-secondary)' : 'transparent',
+                      color: 'var(--text-primary)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = isActive ? 'var(--bg-secondary)' : 'transparent'; }}
+                    onClick={() => {
+                      onUpdateAndPatchSelectedCell({ dataFormatString: item.format });
+                      setCellFormatOpen(false);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11, marginLeft: 12, flexShrink: 0 }}>{item.example}</span>
+                  </CellFormatItem>
+                );
+              })}
+            </div>
+          ))}
+        </CellFormatDropdown>
+      </CellFormatContainer>
 
       <VerticalLine style={{ marginLeft: '0px' }} />
       <ColorPickerTooltip
@@ -513,14 +718,12 @@ const ExcelToolbar = ({
         }
         triggerIcon={
           <TooltipWrapper data-tooltip="Fill color">
-            <ColoredIconButtonBucket
-              color={
+            <ColoredIconButtonBucket>
+              <FillColorIcon color={
                 selectedCell?.bgPattern === 'NO_FILL'
                   ? 'transparent'
                   : `#${selectedCell?.bgColor?.slice(2) || 'FFFFFF'}`
-              }
-            >
-              <FillColorIcon />
+              } />
             </ColoredIconButtonBucket>
           </TooltipWrapper>
         }
@@ -575,34 +778,6 @@ const ExcelToolbar = ({
         <BorderLeftIcon />
       </ToolbarButton>
 
-      <TooltipWrapper data-tooltip="Cell format">
-        <CellFormatContainer className="toolbar-dropdown">
-          <CellFormatTrigger
-            $active={cellFormatOpen}
-            onClick={() => setCellFormatOpen(!cellFormatOpen)}
-          >
-            {dataTypeValue}
-            <ChevronDownIcon />
-          </CellFormatTrigger>
-          <CellFormatDropdown $open={cellFormatOpen}>
-            {DATA_TYPES.map(dataType => (
-              <CellFormatItem
-                key={dataType}
-                $selected={dataType === dataTypeValue}
-                onClick={() => {
-                  onUpdateAndPatchSelectedCell({
-                    dataFormatString: DATA_TYPE_TO_DATA_FORMAT_STR[dataType],
-                  });
-                  setCellFormatOpen(false);
-                }}
-              >
-                {dataType}
-              </CellFormatItem>
-            ))}
-          </CellFormatDropdown>
-        </CellFormatContainer>
-      </TooltipWrapper>
-
       <VerticalLine />
       <ToolbarButton
         isActive={selectedCellTextAlignment === 'LEFT'}
@@ -638,11 +813,35 @@ const ExcelToolbar = ({
         <AlignRightIcon />
       </ToolbarButton>
       <ToolbarButton
-        isActive={selectedCell?.wrap === true}
-        onClick={() => onUpdateAndPatchSelectedCell({ wrap: true })}
+        isActive={selectedCell?.wrapText === true}
+        onClick={() => onUpdateAndPatchSelectedCell(cell => ({ wrapText: !cell?.wrapText }))}
         data-tooltip="Wrap text"
       >
         <WrapTextIcon />
+      </ToolbarButton>
+      <ToolbarButton
+        isActive={!!mergedMasterMap?.[selectedCellLocation]}
+        onClick={() => {
+          const isMerged = !!mergedMasterMap?.[selectedCellLocation];
+          if (isMerged) {
+            onMergeCells({ action: 'unmerge', ref: selectedCellLocation });
+          } else if (dragStartLocation && dragEndLocation && dragStartLocation !== dragEndLocation
+            && !dragEndLocation.includes('ZZZZZZ') && !dragEndLocation.includes('100000')) {
+            // Normalize to topLeft:bottomRight
+            const colToIdx = s => { let n = 0; for (let i = 0; i < s.length; i++) n = n * 26 + s.charCodeAt(i) - 64; return n; };
+            const startColStr = dragStartLocation.match(/[A-Z]+/)?.[0] || 'A';
+            const endColStr   = dragEndLocation.match(/[A-Z]+/)?.[0]   || 'A';
+            const startRow = parseInt(dragStartLocation.match(/\d+/)?.[0] || '1');
+            const endRow   = parseInt(dragEndLocation.match(/\d+/)?.[0]   || '1');
+            const [leftCol, rightCol] = colToIdx(startColStr) <= colToIdx(endColStr) ? [startColStr, endColStr] : [endColStr, startColStr];
+            const topLeft     = `${leftCol}${Math.min(startRow, endRow)}`;
+            const bottomRight = `${rightCol}${Math.max(startRow, endRow)}`;
+            onMergeCells({ action: 'merge', range: `${topLeft}:${bottomRight}` });
+          }
+        }}
+        data-tooltip={mergedMasterMap?.[selectedCellLocation] ? 'Unmerge cells' : 'Merge cells'}
+      >
+        <MergeIcon />
       </ToolbarButton>
 
       <VerticalLine />

@@ -271,6 +271,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
   const [treeVersion,  setTreeVersion]  = useState(0);
   const [cursors,      setCursors]      = useState<Record<string, { selStart: number; selEnd: number }>>({});
   const cursorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const docAutoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploading, setUploading] = useState(false);
   const [processingPptx, setProcessingPptx] = useState<Set<string>>(new Set());
   const processingPollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -1084,7 +1085,17 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
                   blocks={currentTab.blocks}
                   defaultFont={currentTab.defaultFont}
                   initialCursor={cursors[currentTab.path]}
-                  onChange={(blocks: Block[]) => setTabs(prev => prev.map(t => t.path === activeTab ? { ...t, blocks, dirty: true } : t))}
+                  onChange={(blocks: Block[]) => {
+                    const path = activeTab;
+                    setTabs(prev => prev.map(t => t.path === path ? { ...t, blocks, dirty: true } : t));
+                    if (docAutoSaveTimer.current) clearTimeout(docAutoSaveTimer.current);
+                    docAutoSaveTimer.current = setTimeout(() => {
+                      if (!currentTab || !path) return;
+                      saveTab({ ...currentTab, blocks }).then(() => {
+                        setTabs(prev => prev.map(t => t.path === path ? { ...t, dirty: false } : t));
+                      }).catch(() => null);
+                    }, 3000);
+                  }}
                   onCursorChange={(cursor) => handleCursorChange(currentTab.path, cursor)}
                   style={{ flex: 1, minHeight: 0 }}
                 />

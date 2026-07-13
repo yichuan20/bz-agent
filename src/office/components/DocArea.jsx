@@ -287,6 +287,30 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     const clickX      = e.nativeEvent.offsetX * SF;
     const clickCanvasY = e.nativeEvent.offsetY * SF + scrollY;           // draw/canvas space
     const clickY       = drawYToContentY(clickCanvasY, topMargin);        // content space (for ys)
+
+    // Pre-check: hit-test placed (non-inline) images BEFORE findCursorIndex.
+    // findCursorIndex maps to the nearest text character, which may not be the image
+    // character even when the click lands squarely on the image.
+    for (let si = 0; si < (styles?.length || 0); si++) {
+      const s = styles?.[si];
+      if (!s?.imageUrl || s.imagePlacedX == null) continue;
+      // imagePlacedX/Y are in CSS px; convert to canvas px for comparison with clickX/Y
+      const spx = s.imagePlacedX * SF;
+      const spy = s.imagePlacedY * SF;
+      const imgW = (s.imageWidth  || 64) * SF;
+      const imgH = (s.imageHeight || 64) * SF;
+      if (
+        clickX >= spx && clickX <= spx + imgW &&
+        clickY >= spy - imgH && clickY <= spy
+      ) {
+        setSelectedImageIndex(si);
+        setIsFocussed(true);
+        onDocChange({ ...doc, selStart: si, selEnd: si });
+        setIsMouseDown(false);
+        return;
+      }
+    }
+
     const ind = findCursorIndex(clickX, clickY, xs, ys);
     let clampedInd = clamp(ind, 0, text?.length);
 
@@ -388,20 +412,57 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
   };
 
   const handleImageResizeComplete = ({ width, height }) => {
-    if (selectedImageIndex === null) {
-      return;
-    }
-
+    if (selectedImageIndex === null) return;
     const newDoc = cloneDeep(doc);
     const imageStyle = newDoc.styles[selectedImageIndex];
     if (imageStyle?.imageUrl) {
-      newDoc.styles[selectedImageIndex] = {
-        ...imageStyle,
-        imageWidth: width,
-        imageHeight: height,
-      };
+      newDoc.styles[selectedImageIndex] = { ...imageStyle, imageWidth: width, imageHeight: height };
       onDocChange(newDoc);
     }
+  };
+
+  const handleImageDelete = () => {
+    if (selectedImageIndex === null) return;
+    const newDoc = cloneDeep(doc);
+    const i = selectedImageIndex;
+    newDoc.text   = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
+    newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
+    newDoc.selStart = i;
+    newDoc.selEnd   = i;
+    setSelectedImageIndex(null);
+    onDocChange(newDoc);
+  };
+
+  const handleImageWrapChange = (wrap) => {
+    if (selectedImageIndex === null) return;
+    const newDoc = cloneDeep(doc);
+    const cur = newDoc.styles[selectedImageIndex];
+    const update = { ...cur, imageWrap: wrap };
+    // When switching to a non-inline mode for the first time, seed explicit coordinates
+    // from the image's current canvas position so it stays in place.
+    if (wrap !== 'inline' && cur.imagePlacedX == null && xs[selectedImageIndex] != null) {
+      // Store in CSS px (canvas px ÷ SF) so position is device-independent
+      update.imagePlacedX = xs[selectedImageIndex] / SF + 4; // +4px: xs stores raw x, spacePadding added at draw time
+      update.imagePlacedY = ys[selectedImageIndex] / SF;
+    }
+    // When switching back to inline, clear placed coordinates
+    if (wrap === 'inline') {
+      delete update.imagePlacedX;
+      delete update.imagePlacedY;
+    }
+    newDoc.styles[selectedImageIndex] = update;
+    onDocChange(newDoc);
+  };
+
+  const handleImageMove = ({ x, y }) => {
+    if (selectedImageIndex === null) return;
+    const newDoc = cloneDeep(doc);
+    newDoc.styles[selectedImageIndex] = {
+      ...newDoc.styles[selectedImageIndex],
+      imagePlacedX: x,
+      imagePlacedY: y,
+    };
+    onDocChange(newDoc);
   };
 
   const onCopy = e => {
@@ -667,6 +728,19 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       return;
     }
 
+    // Delete selected image (Backspace or Delete key)
+    if ((e.key === 'Backspace' || e.key === 'Delete') && selectedImageIndex !== null) {
+      const newDoc = cloneDeep(doc);
+      const i = selectedImageIndex;
+      newDoc.text   = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
+      newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
+      newDoc.selStart = i;
+      newDoc.selEnd   = i;
+      setSelectedImageIndex(null);
+      onDocChange(newDoc);
+      return;
+    }
+
     if (e.key === 'Backspace') {
       const newDoc = deleteText({ doc });
       onDocChange(newDoc);
@@ -694,6 +768,9 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
           scrollY={scrollY}
           topMargin={topMargin}
           onResizeComplete={handleImageResizeComplete}
+          onDelete={handleImageDelete}
+          onWrapChange={handleImageWrapChange}
+          onMove={handleImageMove}
         />
       )}
       <TableContextMenu
