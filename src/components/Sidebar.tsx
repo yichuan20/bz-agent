@@ -10,44 +10,97 @@
  */
 import {
   BrainIcon,
-  ChatCircleDotsIcon,
   GearIcon,
   HouseSimpleIcon,
   SignOutIcon,
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { useState, useEffect } from 'react';
 import { clearAccessToken } from '#/auth-store';
+import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
+
+const HTTP_BASE =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
+  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 const SIDEBAR_WIDTH = 220;   // px — matches bz-codespace --spacing-bl-sidebar
 
 const NAV_ITEMS = [
   { to: '/',          label: 'Home',     Icon: HouseSimpleIcon,    exact: true  },
-  { to: '/chat',      label: 'Chat',     Icon: ChatCircleDotsIcon, exact: false },
   { to: '/agent',     label: 'Agent',    Icon: TerminalIcon,       exact: false },
   { to: '/learning',  label: 'Learning', Icon: BrainIcon,          exact: false },
 ] as const;
 
+type SessionItem = {
+  sessionId: string;
+  workingDir: string;
+  dirName: string;
+  title: string;
+  lastModified: number;
+  mode?: string;
+};
+
 interface SidebarProps {
   open:             boolean;
+  overlay?:         boolean;   // true = position:absolute over content (hover reveal mode)
   onMouseLeave?:    () => void;
   onCollapse?:      () => void;
   bzcodeOutdated?:  boolean;
+  onNewChat?:       () => void;
 }
 
-export default function Sidebar({ open, onMouseLeave, onCollapse, bzcodeOutdated }: SidebarProps) {
+export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcodeOutdated, onNewChat }: SidebarProps) {
   const navigate = useNavigate();
   const { location } = useRouterState();
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+
+  // Read current sessionId from URL search params for active highlight
+  const currentSessionId = ((location.search as Record<string, string | undefined>).sessionId) ?? null;
+
+  // Fetch all sessions for the sidebar list
+  useEffect(() => {
+    function load() {
+      fetch(`${HTTP_BASE}/sessions`)
+        .then(r => r.json())
+        .then((d: { sessions: SessionItem[] }) => {
+          setSessions((d.sessions ?? []).sort((a, b) => b.lastModified - a.lastModified));
+        })
+        .catch(() => null);
+    }
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Re-fetch when a session is opened (sidebar may be showing stale list)
+  useEffect(() => {
+    if (!currentSessionId) return;
+    fetch(`${HTTP_BASE}/sessions`)
+      .then(r => r.json())
+      .then((d: { sessions: SessionItem[] }) => {
+        setSessions((d.sessions ?? []).sort((a, b) => b.lastModified - a.lastModified));
+      })
+      .catch(() => null);
+  }, [currentSessionId]);
+
+  function handleSessionClick(s: SessionItem) {
+    // Navigate first so URL reflects the new session
+    void navigate({ to: '/agent', search: { cwd: s.workingDir, sessionId: s.sessionId, mode: (s.mode ?? 'general') } as never });
+    // Dispatch event so agent page (if already mounted) switches session without a remount
+    window.dispatchEvent(new CustomEvent('bz:open-session', {
+      detail: { cwd: s.workingDir, sessionId: s.sessionId, mode: s.mode ?? 'general' },
+    }));
+  }
 
   function isActive(to: string, exact: boolean) {
     return exact ? location.pathname === to : location.pathname.startsWith(to);
   }
 
+
   function handleLogout() {
-    const httpBase = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-      || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
     const authUrl  = (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
-    fetch(`${httpBase}/auth/logout`, {
+    fetch(`${HTTP_BASE}/auth/logout`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authUrl }),
     }).finally(() => {
@@ -69,7 +122,12 @@ export default function Sidebar({ open, onMouseLeave, onCollapse, bzcodeOutdated
         overflow:   'hidden',
         background: 'var(--bg-primary)',
         borderRight: '1px solid var(--border-primary)',
-        /* exact bz-codespace: transition-[width] duration-300 ease-in-out */
+        /* When overlay: float over content so mouse can travel freely from expand zone into sidebar */
+        position:   overlay ? 'absolute' : 'relative',
+        top:        overlay ? 0 : undefined,
+        left:       overlay ? 0 : undefined,
+        zIndex:     overlay ? 50 : undefined,
+        boxShadow:  overlay && open ? '4px 0 20px rgba(0,0,0,0.12)' : 'none',
         transition: 'width 300ms ease-in-out',
         willChange: 'width',
       }}
@@ -92,6 +150,53 @@ export default function Sidebar({ open, onMouseLeave, onCollapse, bzcodeOutdated
           width: SIDEBAR_WIDTH,
           minWidth: SIDEBAR_WIDTH,
         }}>
+          {/* ── New chat button ── */}
+          <button
+            type="button"
+            onClick={() => onNewChat?.()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              width: '100%',
+              margin: '0 0 8px',
+              padding: '8px 8px',
+              borderRadius: 8,
+              border: '1px solid var(--border-primary)',
+              background: 'var(--bg-secondary)',
+              fontSize: 13,
+              fontWeight: 500,
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              whiteSpace: 'nowrap',
+              transition: 'background 120ms ease, border-color 120ms ease',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent-blue)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-secondary)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-primary)';
+            }}
+          >
+            <span style={{
+              flexShrink: 0,
+              width: 24, height: 24,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 6,
+              background: 'var(--accent-blue)',
+              color: '#fff',
+            }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </span>
+            <span>New chat</span>
+          </button>
+
           {NAV_ITEMS.map(({ to, label, Icon, exact }) => {
             const active = isActive(to, exact);
             return (
@@ -161,6 +266,88 @@ export default function Sidebar({ open, onMouseLeave, onCollapse, bzcodeOutdated
               </Link>
             );
           })}
+
+          {/* ── Recent sessions ── */}
+          {sessions.length > 0 && (
+            <>
+              <div style={{
+                height: 1,
+                background: 'var(--border-primary)',
+                margin: '8px 0 4px',
+              }} />
+              <div style={{
+                padding: '2px 8px 4px',
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.07em',
+                textTransform: 'uppercase',
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+              }}>
+                Recent
+              </div>
+              {sessions.map(s => {
+                const modeKey = s.mode === 'widget' ? 'canvas' : s.mode === 'worker' ? 'document' : s.mode === 'coder' ? 'code' : 'chat';
+                const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
+                const modeLabel = s.mode === 'widget' ? 'Widget' : s.mode === 'worker' ? 'Worker' : s.mode === 'coder' ? 'Coder' : 'General';
+                const label = s.title || s.dirName;
+                const isSessionActive = s.sessionId === currentSessionId;
+
+                return (
+                  <button
+                    key={s.sessionId}
+                    type="button"
+                    className="sidebar-session-row"
+                    data-tooltip={modeLabel}
+                    onClick={() => handleSessionClick(s)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      width: '100%',
+                      margin: '1px 0',
+                      padding: '5px 8px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: isSessionActive ? 'var(--bg-tertiary)' : 'transparent',
+                      fontSize: 12,
+                      color: isSessionActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                      transition: 'background 120ms ease, color 120ms ease',
+                      borderLeft: isSessionActive ? `2px solid ${accentColor}` : '2px solid transparent',
+                      paddingLeft: isSessionActive ? 6 : 6,
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSessionActive) {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSessionActive) {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                      }
+                    }}
+                  >
+                    <span style={{ flexShrink: 0, color: accentColor, display: 'flex', alignItems: 'center' }}>
+                      <ModeIconSvg iconKey={modeKey} size={12} />
+                    </span>
+                    <span style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: '1.3',
+                    }}>
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
       </div>
 

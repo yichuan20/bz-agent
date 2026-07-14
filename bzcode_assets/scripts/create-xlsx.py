@@ -27,7 +27,11 @@ Data JSON schema:
           "C2": "=A2+B2",
           "C3": "=SUM(A2:A10)"
         },
-        "col_widths": [20, 15, 10]      # optional: per-column width in characters
+        "col_widths": [20, 15, 10],     # optional: per-column width in characters
+        "styles": {                     # optional: per-cell style overrides
+          "A2": { "bg": "#FFF3E0", "fg": "#E65100" },
+          "B3": { "bold": true, "align": "center" }
+        }
       }
     ]
   }
@@ -115,6 +119,38 @@ def main() -> None:
     parser.add_argument("--out", required=True, help="Output .xlsx path.")
     args = parser.parse_args()
 
+    out_path = Path(args.out)
+    if out_path.suffix.lower() not in (".xlsx", ".xls"):
+        out_path = out_path.with_suffix(".xlsx")
+
+    # Prefer excel-worker.py which creates both the xlsx and the sidecar JSON
+    # (required for the frontend to display computed cross-sheet formula values).
+    worker = Path(__file__).parent / "excel-worker.py"
+    if worker.exists():
+        import subprocess
+        cmd = [sys.executable, str(worker)]
+        if args.data_file:
+            cmd += ["--data-file", args.data_file]
+        else:
+            cmd += ["--data", args.data]
+        cmd += ["--out", str(out_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            try:
+                w = json.loads(result.stdout)
+                print(json.dumps({
+                    "ok": True,
+                    "path": w.get("xlsx_path", str(out_path.resolve())),
+                    "sheets": w.get("sheets", 0),
+                    "rows": 0,
+                }))
+                return
+            except Exception:
+                pass
+        # If worker failed, fall through to openpyxl fallback
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+
     if args.data_file:
         f = Path(args.data_file)
         if not f.exists():
@@ -131,10 +167,6 @@ def main() -> None:
         except json.JSONDecodeError as e:
             print(json.dumps({"error": f"invalid JSON: {e}"}))
             sys.exit(1)
-
-    out_path = Path(args.out)
-    if out_path.suffix.lower() not in (".xlsx", ".xls"):
-        out_path = out_path.with_suffix(".xlsx")
 
     try:
         sheets, rows = make_workbook(data, out_path)

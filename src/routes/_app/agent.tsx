@@ -15,7 +15,6 @@ import {
   FolderIcon,
   MagnifyingGlassIcon,
   CheckCircleIcon,
-  ClockCounterClockwiseIcon,
   CloudArrowDownIcon,
   CloudArrowUpIcon,
   LightningIcon,
@@ -34,7 +33,7 @@ import {
 } from '@phosphor-icons/react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from 'react';
-import { AGENT_MODES, modeLSKey, type AgentMode } from '#/lib/agentModes';
+import { AGENT_MODES, MODE_FALLBACK, modeLSKey, type AgentMode } from '#/lib/agentModes';
 import { ModeBadge }    from '#/components/ModeBadge';
 import { ModeSelector } from '#/components/ModeSelector';
 import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
@@ -2235,22 +2234,32 @@ type SessionInfo = {
 
 type FsEntry = { name: string; path: string; isDir: boolean };
 
-function DirPickerPanel({ value, onChange }: { value: string; onChange: (path: string) => void }) {
-  const [browsePath,   setBrowsePath]   = useState('');
-  const [entries,      setEntries]      = useState<FsEntry[]>([]);
+function DirPickerPanel({ rootPath, onConfirm, onCancel }: {
+  rootPath: string;
+  onConfirm: (path: string) => void;
+  onCancel: () => void;
+}) {
+  const [browsePath,    setBrowsePath]   = useState('');
+  const [entries,       setEntries]      = useState<FsEntry[]>([]);
   const [newFolderName, setNewFolderName] = useState('');
-  const [showNewFolder, setShowNewFolder] = useState(false);
-  const [mkdirErr,     setMkdirErr]     = useState('');
+  const [mkdirErr,      setMkdirErr]     = useState('');
+
+  const root = rootPath.replace(/\/$/, '');
+  const rootParts = root.split('/').filter(Boolean);
+
+  function isAboveRoot(path: string) {
+    const p = path.replace(/\/$/, '');
+    return p !== root && !p.startsWith(root + '/');
+  }
 
   function loadPath(path: string) {
+    if (isAboveRoot(path)) return;
     fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(path)}`)
       .then(r => r.json())
       .then((d: { path?: string; entries?: FsEntry[] }) => {
         const resolved = d.path ?? path;
+        if (isAboveRoot(resolved)) return;
         setBrowsePath(resolved);
-        onChange(resolved);
-        setShowNewFolder(false);
-        setNewFolderName('');
         setMkdirErr('');
         const dirs = (d.entries ?? [])
           .filter(e => e.isDir && !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__');
@@ -2259,42 +2268,63 @@ function DirPickerPanel({ value, onChange }: { value: string; onChange: (path: s
       .catch(() => null);
   }
 
-  function createFolder() {
+  function handleOpen() {
     const name = newFolderName.trim();
-    if (!name || !browsePath) return;
-    fetch(`${HTTP_BASE}/files/mkdir`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parent: browsePath, name }),
-    })
-      .then(r => r.json())
-      .then((d: { path?: string; error?: string }) => {
-        if (d.error) { setMkdirErr(d.error); return; }
-        loadPath(d.path ?? browsePath);
+    if (name) {
+      // Create folder then open it
+      fetch(`${HTTP_BASE}/files/mkdir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent: browsePath, name }),
       })
-      .catch(() => setMkdirErr('Failed to create folder'));
+        .then(r => r.json())
+        .then((d: { path?: string; error?: string }) => {
+          if (d.error) { setMkdirErr(d.error); return; }
+          onConfirm(d.path ?? browsePath);
+        })
+        .catch(() => setMkdirErr('Failed to create folder'));
+    } else {
+      onConfirm(browsePath);
+    }
   }
 
-  useEffect(() => { loadPath(value || ''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPath(root); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const parts = browsePath.split('/').filter(Boolean);
   const parentPath = parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '/';
+  const atRoot = browsePath.replace(/\/$/, '') === root;
+
+  // Show only from the root folder name onwards
+  const visibleParts = parts.slice(rootParts.length - 1);
+  const visibleOffset = rootParts.length - 1;
 
   return (
     <div className="dir-picker">
-      {/* Breadcrumb */}
+      {/* Breadcrumb — root folder name + any subdirectories navigated into */}
       <div className="dir-picker-crumb">
-        <button type="button" onClick={() => loadPath('/')}>/</button>
-        {parts.map((seg, i) => (
-          <span key={i} className="dir-picker-crumb-seg">
-            <span className="dir-picker-crumb-sep">/</span>
-            <button type="button" onClick={() => loadPath('/' + parts.slice(0, i + 1).join('/'))}>{seg}</button>
-          </span>
-        ))}
+        {visibleParts.map((seg, vi) => {
+          const i = vi + visibleOffset;
+          const segPath = '/' + parts.slice(0, i + 1).join('/');
+          const isRootSeg = i === rootParts.length - 1;
+          return (
+            <span key={i} className="dir-picker-crumb-seg">
+              {vi > 0 && <span className="dir-picker-crumb-sep">/</span>}
+              <button
+                type="button"
+                onClick={() => !isRootSeg && loadPath(segPath)}
+                style={{ cursor: isRootSeg ? 'default' : 'pointer' }}
+                disabled={isRootSeg}
+              >
+                {seg}
+              </button>
+            </span>
+          );
+        })}
       </div>
-      {/* Entries */}
+
+      {/* Folder list */}
       <div className="dir-picker-list">
-        {parts.length > 0 && (
+        {!atRoot && (
           <button type="button" className="dir-picker-entry dir-picker-entry--up" onClick={() => loadPath(parentPath)}>
             <FolderIcon size={13} /> ..
           </button>
@@ -2307,30 +2337,27 @@ function DirPickerPanel({ value, onChange }: { value: string; onChange: (path: s
           </button>
         ))}
       </div>
-      {/* New folder row */}
-      {showNewFolder ? (
-        <div className="dir-picker-newfolder">
-          <input
-            className="dir-picker-newfolder-input"
-            placeholder="Folder name"
-            value={newFolderName}
-            onChange={e => { setNewFolderName(e.target.value); setMkdirErr(''); }}
-            onKeyDown={e => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
-            autoFocus
-          />
-          <button type="button" className="dir-picker-newfolder-ok" onClick={createFolder} disabled={!newFolderName.trim()}>Create</button>
-          <button type="button" className="dir-picker-newfolder-cancel" onClick={() => setShowNewFolder(false)}>✕</button>
-          {mkdirErr && <span className="dir-picker-newfolder-err">{mkdirErr}</span>}
-        </div>
-      ) : (
-        <button type="button" className="dir-picker-new-btn" onClick={() => setShowNewFolder(true)}>
-          + New folder
+
+      {/* New folder input + single Open button */}
+      <div className="dir-picker-newfolder">
+        <input
+          className="dir-picker-newfolder-input"
+          placeholder="New folder name (optional)"
+          value={newFolderName}
+          onChange={e => { setNewFolderName(e.target.value); setMkdirErr(''); }}
+          onKeyDown={e => { if (e.key === 'Enter') handleOpen(); }}
+        />
+        {mkdirErr && <span className="dir-picker-newfolder-err">{mkdirErr}</span>}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button type="button" className="dir-picker-open-btn" onClick={handleOpen}>
+          Open →
         </button>
-      )}
-      {/* Selected path display */}
-      <div className="dir-picker-selected">
-        <span className="dir-picker-selected-label">Selected:</span>
-        <code className="dir-picker-selected-path">{browsePath || '…'}</code>
+        <button type="button" className="new-session-cancel" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -2361,6 +2388,7 @@ function SessionCard({
   const [confirming, setConfirming] = useState(false);
   const modeKey = s.mode === 'widget' ? 'canvas' : s.mode === 'worker' ? 'document' : s.mode === 'coder' ? 'code' : 'chat';
   const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
+  const primaryLabel = s.title || s.dirName;
 
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -2377,7 +2405,7 @@ function SessionCard({
       onClick={onSelect}
     >
       <div className="agent-session-card-top">
-        <span className="agent-session-dirname">{s.dirName}</span>
+        <span className="agent-session-dirname">{primaryLabel}</span>
         <div className="agent-session-card-actions" onClick={e => e.stopPropagation()}>
           <span className="agent-session-time" title={absoluteTime(s.lastModified)}>
             {relativeTime(s.lastModified)}
@@ -2401,22 +2429,22 @@ function SessionCard({
                   className={`agent-session-menu-item agent-session-menu-item--danger${confirming ? ' confirming' : ''}`}
                   onClick={handleDelete}
                 >
-                  {confirming ? 'Click again to confirm' : 'Delete project'}
+                  {confirming ? 'Click again to confirm' : 'Delete session'}
                 </button>
                 <button type="button" className="agent-session-menu-item" onClick={e => { e.stopPropagation(); setMenuOpen(false); onSelect(); }}>
-                  Open project
+                  Open session
                 </button>
               </div>
             )}
           </div>
         </div>
       </div>
-      <CopyPathInline path={s.workingDir} />
       {s.lastMessage && (
         <div className="agent-session-preview">{s.lastMessage}</div>
       )}
-      <div className="agent-session-meta">
-        {s.messageCount} message{s.messageCount !== 1 ? 's' : ''}
+      <div className="agent-session-meta" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <span>{s.messageCount} message{s.messageCount !== 1 ? 's' : ''}</span>
+        {s.workingDir && <CopyPathInline path={s.workingDir} />}
       </div>
     </div>
   );
@@ -2427,13 +2455,11 @@ function SessionListPage({
   onNew,
 }: {
   onSelect: (sessionId: string, cwd: string) => void;
-  onNew: (cwd: string) => void;
+  onNew: () => void;
 }) {
   const [sessions,    setSessions]    = useState<SessionInfo[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [fetchErr,    setFetchErr]    = useState<string | null>(null);
-  const [showNew,     setShowNew]     = useState(false);
-  const [newCwd,      setNewCwd]      = useState('');
   const [search,      setSearch]      = useState('');
   const [sortKey,     setSortKey]     = useState<SortKey>('recent');
   const [modeFilter,  setModeFilter]  = useState(MODE_FILTER_ALL);
@@ -2452,7 +2478,6 @@ function SessionListPage({
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard shortcut: / focuses search
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
@@ -2464,24 +2489,14 @@ function SessionListPage({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  function handleNew() {
-    const cwd = newCwd.trim();
-    if (!cwd) return;
-    const existing = sessions.find(s => s.workingDir === cwd);
-    if (existing) onSelect(existing.sessionId, cwd);
-    else onNew(cwd);
-  }
-
   function handleDelete(sessionId: string) {
     fetch(`${HTTP_BASE}/sessions/${sessionId}`, { method: 'DELETE' })
       .then(() => setSessions(prev => prev.filter(s => s.sessionId !== sessionId)))
       .catch(() => null);
   }
 
-  // Unique modes present in sessions
   const presentModes = Array.from(new Set(sessions.map(s => s.mode ?? 'general')));
 
-  // Filter + sort
   const filtered = sessions
     .filter(s => {
       if (modeFilter !== MODE_FILTER_ALL && (s.mode ?? 'general') !== modeFilter) return false;
@@ -2504,47 +2519,24 @@ function SessionListPage({
 
   return (
     <div className="agent-session-page">
-      {/* Header */}
       <div className="agent-session-topbar">
         <div className="agent-session-topbar-left" onClick={load} title="Click to refresh">
           <h2 className="agent-session-page-title">
-            Agent Projects
+            Sessions
             {!loading && <span className="agent-session-count">{sessions.length}</span>}
           </h2>
-          <p className="agent-session-subtitle">4 modes · multiple conversations per project</p>
+          <p className="agent-session-subtitle">4 modes · start a new chat or resume a session</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button type="button" className="agent-session-refresh-btn" title="Refresh" onClick={load}>
             <ArrowCounterClockwiseIcon size={13} />
           </button>
-          <button type="button" className="agent-session-new-btn" onClick={() => { setShowNew(v => !v); }}>
-            + New project
+          <button type="button" className="agent-session-new-btn" onClick={onNew}>
+            + New chat
           </button>
         </div>
       </div>
 
-      {/* New project form */}
-      {showNew && (
-        <div className="agent-session-new-form animate-slide-in">
-          <div className="agent-session-new-form-header">
-            <label className="agent-session-new-label">Select project folder</label>
-            <button type="button" className="agent-session-new-close" onClick={() => setShowNew(false)}>
-              <XIcon size={13} />
-            </button>
-          </div>
-          <DirPickerPanel value={newCwd} onChange={setNewCwd} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button type="button" className="dir-picker-open-btn" onClick={handleNew} disabled={!newCwd.trim()}>
-              Open project →
-            </button>
-            <button type="button" className="agent-session-new-cancel" onClick={() => setShowNew(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Search + filter bar */}
       {!loading && sessions.length > 0 && (
         <div className="agent-session-toolbar">
           <div className="agent-session-search-wrap">
@@ -2552,7 +2544,7 @@ function SessionListPage({
             <input
               ref={searchRef}
               className="agent-session-search"
-              placeholder="Search projects… (/)"
+              placeholder="Search sessions… (/)"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -2574,7 +2566,6 @@ function SessionListPage({
         </div>
       )}
 
-      {/* Mode filter pills */}
       {!loading && presentModes.length > 1 && (
         <div className="agent-session-mode-filter">
           <button
@@ -2596,12 +2587,9 @@ function SessionListPage({
         </div>
       )}
 
-      {/* Session cards */}
       <div className="agent-session-list">
         {loading && (
-          <>
-            {[1,2,3].map(i => <div key={i} className="agent-session-skeleton" />)}
-          </>
+          <>{[1,2,3].map(i => <div key={i} className="agent-session-skeleton" />)}</>
         )}
         {fetchErr && (
           <div className="agent-session-empty">
@@ -2612,12 +2600,12 @@ function SessionListPage({
         {!loading && !fetchErr && sessions.length === 0 && (
           <div className="agent-session-empty">
             <TerminalIcon size={32} color="var(--text-tertiary)" weight="duotone" />
-            <p>No projects yet — click <strong>+ New project</strong> to start one.</p>
+            <p>No sessions yet — click <strong>+ New chat</strong> to start one.</p>
           </div>
         )}
         {!loading && !fetchErr && sessions.length > 0 && filtered.length === 0 && (
           <div className="agent-session-empty">
-            <p>No projects match <strong>{search || modeFilter}</strong></p>
+            <p>No sessions match <strong>{search || modeFilter}</strong></p>
             <button type="button" className="agent-session-refresh-btn" style={{ marginTop: 8 }}
               onClick={() => { setSearch(''); setModeFilter(MODE_FILTER_ALL); }}>
               Clear filters
@@ -2939,8 +2927,11 @@ function AgentPage() {
   const canvasPanelRef = useRef<CanvasPanelHandle>(null);
   const [docViewer, setDocViewer] = useState<{ path: string; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean } | null>(null);
   const [docViewerLoading, setDocViewerLoading] = useState(false);
-  // pendingNewCwd: set when user clicks "+" — shows mode selector before starting session
+  // pendingNewCwd: set when "new conversation" is clicked inside an existing chat session
   const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const [pendingNewMode,   setPendingNewMode]   = useState<AgentMode | null>(null);
+  const [defaultCwd,       setDefaultCwd]       = useState('');
   // Session creation state
   const [sessionCreating,     setSessionCreating]     = useState(false);
   const [sessionCreateError,  setSessionCreateError]  = useState<string | null>(null);
@@ -3057,6 +3048,8 @@ function AgentPage() {
     setSessionCreating(false);
     setSessionCreateError(null);
     setPendingNewCwd(null);
+    setShowModeSelector(false);
+    setPendingNewMode(null);
   }, []);
 
   const retrySessionCreate = useCallback(() => {
@@ -3100,6 +3093,38 @@ function AgentPage() {
   // Clear batch queue from sessionStorage on mount (already loaded into state)
   useEffect(() => { sessionStorage.removeItem('agent:batchQueue'); }, []);
 
+  // Sidebar session clicks dispatch this event to open a session while already on the agent page
+  useEffect(() => {
+    function handler(e: Event) {
+      const { cwd, sessionId, mode } = (e as CustomEvent<{ cwd: string; sessionId: string; mode: string }>).detail;
+      void connectAndOpenSession(cwd, sessionId, mode as AgentMode);
+    }
+    window.addEventListener('bz:open-session', handler);
+    return () => window.removeEventListener('bz:open-session', handler);
+  }, [connectAndOpenSession]);
+
+  // route.tsx "New chat" modal dispatches this after mode is chosen
+  useEffect(() => {
+    function handler(e: CustomEvent<{ mode: AgentMode }>) {
+      const mode = e.detail.mode;
+      if (mode === 'worker' || mode === 'coder') {
+        setPendingNewMode(mode);
+      } else {
+        void startNewSession(defaultCwd, mode);
+      }
+    }
+    window.addEventListener('bz:start-new-session', handler as EventListener);
+    return () => window.removeEventListener('bz:start-new-session', handler as EventListener);
+  }, [startNewSession, defaultCwd]);
+
+  // Fetch server-configured default cwd (from --cwd arg or deployment config)
+  useEffect(() => {
+    fetch(`${HTTP_BASE}/api/home`)
+      .then(r => r.json())
+      .then((d: { defaultCwd?: string }) => { if (d.defaultCwd) setDefaultCwd(d.defaultCwd); })
+      .catch(() => null);
+  }, []);
+
   // On first mount pick up pending message from sessionStorage (cwd/sessionId come via URL now)
   useEffect(() => {
     const msg = sessionStorage.getItem('agent:pendingMessage');
@@ -3117,6 +3142,8 @@ function AgentPage() {
   const [streamingBlocks, setStreamingBlocks] = useState<AssistantBlock[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('connecting');
+  const [currentModel, setCurrentModel] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<{id: string; displayName: string}[]>([]);
   const [mode, setMode] = useState<SessionMode>('default');
   const modeRef = useRef<SessionMode>('default');        // always current — readable inside stale closures
   const pendingModeRef = useRef<SessionMode | null>(null); // mode user explicitly requested, waiting for bzcode confirmation
@@ -3127,12 +3154,14 @@ function AgentPage() {
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [pendingPermission, setPendingPermission] = useState<PermissionPrompt | null>(null);
   const [pendingInput, setPendingInput] = useState<InputPromptData | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<AnyAttachment[]>([]);
   const [bzHubModal,        setBzHubModal]        = useState<BzHubModal | null>(null);
-  const [showConversations, setShowConversations] = useState(false);
   const [isCompacting,      setIsCompacting]      = useState(false);
   const [compactDoneMsg,    setCompactDoneMsg]    = useState<string | null>(null);
   const [authExpired,       setAuthExpired]       = useState(false);
@@ -3464,6 +3493,12 @@ function AgentPage() {
 
       else if (type === 'status') {
         const s = msg['status'] as string;
+        // Track current model from bzcode status messages
+        if (msg['model']) {
+          const minfo = msg['model'] as Record<string, string>;
+          const mname = minfo['name'] || minfo['displayName'] || '';
+          if (mname) setCurrentModel(mname);
+        }
         if (s === 'running') {
           setIsStreaming(true);
           streamingBlocksRef.current.clear();
@@ -3626,6 +3661,14 @@ function AgentPage() {
         }
         if (connData.modes?.length) setAvailableModes(connData.modes);
         if (connData.commands?.length) setAvailableCommands(connData.commands);
+        // Fetch available models and current model for this session
+        fetch(`${HTTP_BASE}/api/models?session_id=${encodeURIComponent(sid)}`)
+          .then(r => r.json())
+          .then((d: { models: {id: string; displayName: string}[]; current: string }) => {
+            if (d.models?.length) setAvailableModels(d.models);
+            if (d.current) setCurrentModel(d.current);
+          })
+          .catch(() => null);
         setConnStatus('connected');
         reconnectAttemptsRef.current = 0;
 
@@ -3711,6 +3754,18 @@ function AgentPage() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [connectParams ? JSON.stringify(connectParams) : null, wsKey]);
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [modelDropdownOpen]);
 
   const handlePermission = useCallback((requestId: string, behavior: 'allow' | 'deny' | 'always') => {
     sendRaw({ type: 'user', subtype: 'permission', requestId, behavior });
@@ -3969,87 +4024,75 @@ function AgentPage() {
 
   const modeColor = MODE_META[mode].color;
 
+  // ── Shared session-creation overlay (used in both list and chat views) ────────
+  const newSessionOverlay = (pendingNewMode !== null || sessionCreating || sessionCreateError) ? (
+    <div className="new-session-overlay">
+      <div className="new-session-panel">
+        {sessionCreating && (
+          <>
+            <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
+            <div className="new-session-steps">
+              <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
+              <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
+              <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
+            </div>
+            {showApiKeyPrompt && (
+              <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
+                <input type="password" className="conv-search-input" placeholder="Paste API key…" value={apiKeyValue}
+                  onChange={e => setApiKeyValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
+                  style={{ width: '100%', boxSizing: 'border-box' }} autoFocus />
+                <button type="button" className="new-session-cancel" disabled={apiKeySaving || !apiKeyValue.trim()}
+                  onClick={handleSaveApiKey} style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}>
+                  {apiKeySaving ? 'Saving…' : 'Save & restart'}
+                </button>
+              </div>
+            )}
+            <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
+          </>
+        )}
+        {sessionCreateError && !sessionCreating && (
+          <SessionCreateErrorPanel error={sessionCreateError} apiKeyValue={apiKeyValue} apiKeySaving={apiKeySaving}
+            onApiKeyValueChange={setApiKeyValue} onSaveApiKey={handleSaveApiKey} onRetry={retrySessionCreate}
+            onSignOut={handleSignOut} onBack={() => { setSessionCreateError(null); setPendingNewMode(null); }} />
+        )}
+        {pendingNewMode !== null && !sessionCreating && !sessionCreateError && (
+          <>
+            <div className="new-session-header">
+              <span className="new-session-title">Select working directory</span>
+            </div>
+            <p className="new-session-hint">Choose the project folder for this {pendingNewMode} session.</p>
+            <DirPickerPanel rootPath={defaultCwd}
+              onConfirm={cwd => { const mode = pendingNewMode; setPendingNewMode(null); void startNewSession(cwd, mode!); }}
+              onCancel={() => setPendingNewMode(null)} />
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   // ── Session list (early return — all hooks above already ran) ────────────────
   if (view === 'list') {
     return (
       <div className="agent-page">
         <SessionListPage
           onSelect={(sessionId, cwd) => void connectAndOpenSession(cwd, sessionId)}
-          onNew={(cwd) => setPendingNewCwd(cwd)}
+          onNew={() => setShowModeSelector(true)}
         />
-        {(pendingNewCwd || sessionCreating || sessionCreateError) && (
+        {showModeSelector && (
           <div className="new-session-overlay">
             <div className="new-session-panel">
-              {sessionCreating && (
-                <>
-                  <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
-                  <div className="new-session-steps">
-                    <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
-                    <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
-                    <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
-                  </div>
-                  {showApiKeyPrompt && (
-                    <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
-                      <input
-                        type="password"
-                        className="conv-search-input"
-                        placeholder="Paste API key…"
-                        value={apiKeyValue}
-                        onChange={e => setApiKeyValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
-                        style={{ width: '100%', boxSizing: 'border-box' }}
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        className="new-session-cancel"
-                        disabled={apiKeySaving || !apiKeyValue.trim()}
-                        onClick={handleSaveApiKey}
-                        style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
-                      >
-                        {apiKeySaving ? 'Saving…' : 'Save & restart'}
-                      </button>
-                    </div>
-                  )}
-                  <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
-                </>
-              )}
-              {sessionCreateError && !sessionCreating && (
-                <SessionCreateErrorPanel
-                  error={sessionCreateError}
-                  apiKeyValue={apiKeyValue}
-                  apiKeySaving={apiKeySaving}
-                  onApiKeyValueChange={setApiKeyValue}
-                  onSaveApiKey={handleSaveApiKey}
-                  onRetry={retrySessionCreate}
-                  onSignOut={handleSignOut}
-                  onBack={() => { setSessionCreateError(null); setPendingNewCwd(null); }}
-                />
-              )}
-              {pendingNewCwd && !sessionCreating && !sessionCreateError && (
-                <>
-                  <div className="new-session-header">
-                    <span className="new-session-title">Choose a mode</span>
-                    <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
-                  </div>
-                  <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
-                  <ModeSelector
-                    selected={agentMode}
-                    onSelect={m => {
-                      const cwd = pendingNewCwd;
-                      setPendingNewCwd(null);
-                      void startNewSession(cwd, m);
-                    }}
-                  />
-                  <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
-                    Cancel
-                  </button>
-                </>
-              )}
+              <div className="new-session-header"><span className="new-session-title">New chat</span></div>
+              <p className="new-session-hint">Select how this agent should behave.</p>
+              <ModeSelector selected={agentMode} onSelect={m => {
+                setShowModeSelector(false);
+                if (m === 'worker' || m === 'coder') { setPendingNewMode(m); } else { void startNewSession(defaultCwd, m); }
+              }} />
+              <button type="button" className="new-session-cancel" onClick={() => setShowModeSelector(false)}>Cancel</button>
             </div>
           </div>
         )}
+        {newSessionOverlay}
       </div>
     );
   }
@@ -4123,32 +4166,102 @@ function AgentPage() {
         <LlEvalBadge gain={llGain} />
 
         {/* Mode badge */}
-        <ModeBadge
-          mode={agentMode}
-          onSwitch={m => openSession(activeCwd, null, m)}
-        />
+        <ModeBadge mode={agentMode} />
 
-        {/* Conversations panel — anchored to far right so it never overlaps the breadcrumb */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button
-            type="button"
-            className={`agent-ctrl-btn${showConversations ? ' agent-ctrl-btn--active' : ''}`}
-            title="Conversations"
-            onClick={() => setShowConversations(v => !v)}
-          >
-            <ClockCounterClockwiseIcon size={15} />
-          </button>
-          {showConversations && (
-            <ConversationsPanel
-              cwd={activeCwd}
-              activeSessionId={activeSessionId}
-              httpBase={HTTP_BASE}
-              onSelect={sessionId => { void connectAndOpenSession(activeCwd, sessionId); setShowConversations(false); }}
-              onNew={() => { setShowConversations(false); setPendingNewCwd(activeCwd); }}
-              onClose={() => setShowConversations(false)}
-            />
-          )}
-        </div>
+        {/* Model selector */}
+        {activeSessionId && (
+          <div ref={modelDropdownRef} className="agent-model-dropdown-wrap">
+            <button
+              type="button"
+              className={`agent-model-dropdown-trigger${isStreaming ? ' agent-model-dropdown-trigger--disabled' : ''}${modelDropdownOpen ? ' agent-model-dropdown-trigger--open' : ''}`}
+              disabled={isStreaming}
+              title={isStreaming ? 'Cannot change model while agent is running' : 'Select model'}
+              onClick={() => { if (!isStreaming) { setModelSearch(''); setModelDropdownOpen(o => !o); } }}
+            >
+              <span className="agent-model-dropdown-label">
+                {(currentModel && availableModels.find(m => m.id === currentModel)?.displayName)
+                  || currentModel || 'Model'}
+              </span>
+              <svg className="agent-model-dropdown-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+
+            {modelDropdownOpen && (() => {
+              const MODEL_GROUPS: { label: string; test: (name: string) => boolean }[] = [
+                { label: 'Boltzbit',   test: n => n.startsWith('Boltzbit') },
+                { label: 'Anthropic',  test: n => n.startsWith('Claude') },
+                { label: 'Google',     test: n => n.startsWith('Gemini') },
+                { label: 'OpenAI',     test: n => n.startsWith('GPT') || n.startsWith('o1') || n.startsWith('o3') },
+                { label: 'Open Source', test: () => true },
+              ];
+              const q = modelSearch.toLowerCase();
+              const filteredModels = q ? availableModels.filter(m => m.displayName.toLowerCase().includes(q)) : availableModels;
+              const grouped: { label: string; models: typeof availableModels }[] = MODEL_GROUPS.map(g => ({ label: g.label, models: [] }));
+              for (const m of filteredModels) {
+                const gi = MODEL_GROUPS.findIndex(g => g.test(m.displayName));
+                grouped[gi === -1 ? grouped.length - 1 : gi].models.push(m);
+              }
+              const renderOption = (m: { id: string; displayName: string }) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`agent-model-dropdown-option${m.id === currentModel ? ' agent-model-dropdown-option--active' : ''}`}
+                  onClick={() => {
+                    setCurrentModel(m.id);
+                    setModelDropdownOpen(false);
+                    const sid = activeSessionId;
+                    fetch(`${HTTP_BASE}/api/sessions/${encodeURIComponent(sid)}/model`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ model: m.id }),
+                    }).catch(() => null);
+                  }}
+                >
+                  <span className="agent-model-dropdown-option-name">{m.displayName}</span>
+                  {m.id === currentModel && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="agent-model-dropdown-check">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              );
+              return (
+                <div className="agent-model-dropdown-panel">
+                  <div className="agent-model-dropdown-search-wrap">
+                    <svg className="agent-model-dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input
+                      className="agent-model-dropdown-search"
+                      type="text"
+                      placeholder="Search models…"
+                      value={modelSearch}
+                      autoFocus
+                      onChange={e => setModelSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Escape' && setModelDropdownOpen(false)}
+                    />
+                  </div>
+                  {grouped.filter(g => g.models.length > 0).map(g => (
+                    <div key={g.label} className="agent-model-dropdown-group">
+                      <div className="agent-model-dropdown-group-label">{g.label}</div>
+                      {g.models.map(renderOption)}
+                    </div>
+                  ))}
+                  {currentModel && availableModels.length > 0 && !availableModels.find(m => m.id === currentModel) && (
+                    <button type="button" className="agent-model-dropdown-option agent-model-dropdown-option--active">
+                      <span className="agent-model-dropdown-option-name">{currentModel}</span>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="agent-model-dropdown-check">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
 
       {/* Body — layout depends on mode */}
@@ -4830,6 +4943,9 @@ function AgentPage() {
         </div>
       </div>
     )}
+
+    {/* New-session overlay (dir picker / creating spinner) triggered from sidebar New chat */}
+    {newSessionOverlay}
 
     {/* BoltzHub modals — rendered inside agent-page so they overlay the chat */}
     {(() => {

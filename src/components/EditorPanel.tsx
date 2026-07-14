@@ -9,7 +9,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
-import { FileIcon, FolderIcon, FolderOpenIcon, UploadSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { UploadSimpleIcon, XIcon } from '@phosphor-icons/react';
 import { WordDocEditor, type Block } from '#/office';
 import { ExcelEditor } from '#/excel';
 import { PptEditor } from '#/ppt';
@@ -33,6 +33,115 @@ const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ??
 // Structural colours come from CSS variables (theme-adaptive).
 // Token colours are handled by .tok-* CSS classes in app.css.
 const FOLDER_COLOR = 'var(--accent-orange)';
+
+// ── File-type icon palette (VS Code-inspired colours per extension) ────────────
+const EXT_COLOR: Record<string, string> = {
+  html: '#E34C26', htm: '#E34C26',
+  css: '#264DE4', scss: '#CC6699', sass: '#CC6699', less: '#1D365D',
+  js: '#F7DF1E', jsx: '#61DAFB', mjs: '#F7DF1E', cjs: '#F7DF1E',
+  ts: '#3178C6', tsx: '#3178C6',
+  py: '#3776AB', pyw: '#3776AB', ipynb: '#F37626',
+  json: '#CBCB41', jsonc: '#CBCB41',
+  yaml: '#CC3D47', yml: '#CC3D47',
+  toml: '#9C4221', env: '#ECD53F', ini: '#9C4221',
+  md: '#519ABA', markdown: '#519ABA', mdx: '#0088CC',
+  txt: '#6B7280', rst: '#6B7280',
+  pdf: '#E53E3E',
+  docx: '#1473df', doc: '#1473df',
+  xlsx: '#22c55e', xls: '#22c55e', csv: '#22c55e',
+  pptx: '#f97316', ppt: '#f97316',
+  png: '#A855F7', jpg: '#A855F7', jpeg: '#A855F7',
+  gif: '#A855F7', webp: '#A855F7', svg: '#FFB13B', ico: '#A855F7', bmp: '#A855F7',
+  sh: '#4EAA25', bash: '#4EAA25', zsh: '#4EAA25', fish: '#4EAA25',
+  zip: '#F59E0B', tar: '#F59E0B', gz: '#F59E0B', rar: '#F59E0B',
+  xml: '#F16529', sql: '#CC2927',
+  go: '#00ADD8', rs: '#DEA584', java: '#B07219', kt: '#A97BFF',
+  rb: '#701516', php: '#777BB3', cpp: '#F34B7D', cs: '#178600',
+  swift: '#FA7343', dart: '#40C4FF', r: '#276DC3', lua: '#000080',
+  c: '#A9B7C6', h: '#A9B7C6',
+};
+const SPECIAL_FILE_COLOR: Record<string, string> = {
+  dockerfile: '#2496ED', makefile: '#6D8086',
+  '.gitignore': '#F14E32', '.env': '#ECD53F', '.gitattributes': '#F14E32',
+};
+const SPECIAL_FOLDER_COLOR: Record<string, string> = {
+  src: '#E8834D', source: '#E8834D',
+  dist: '#E8C84D', build: '#E8C84D', out: '#E8C84D', output: '#E8C84D',
+  node_modules: '#8B8B8B',
+  public: '#67C3C8', static: '#67C3C8', assets: '#67C3C8',
+  test: '#6DBF6D', tests: '#6DBF6D', __tests__: '#6DBF6D', spec: '#6DBF6D',
+  docs: '#519ABA', doc: '#519ABA', documentation: '#519ABA',
+  config: '#9BA8B5', configs: '#9BA8B5',
+  scripts: '#A855F7', script: '#A855F7',
+  components: '#61DAFB', pages: '#61DAFB', views: '#61DAFB',
+  api: '#FF7A18', routes: '#FF7A18', controllers: '#FF7A18',
+  models: '#FC836F', types: '#3178C6', interfaces: '#3178C6',
+  hooks: '#9C6ADE', utils: '#F7C948', helpers: '#F7C948', lib: '#F7C948',
+  styles: '#CC6699',
+  images: '#A855F7', img: '#A855F7', icons: '#A855F7',
+  data: '#48B5DB', db: '#CC2927',
+  '.git': '#F14E32', '.github': '#F14E32',
+};
+
+const APP_ICON_STROKE = { fill: 'none' as const, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, strokeWidth: 1.75 };
+
+function FileTypeIcon({ name, size = 13 }: { name: string; size?: number }) {
+  const lower = name.toLowerCase();
+  const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() ?? '' : '';
+  const color = SPECIAL_FILE_COLOR[lower] ?? EXT_COLOR[ext] ?? '#6B7280';
+
+  // Design-spec line-art icons for the three app types
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden style={{ flexShrink: 0 }} stroke="#22c55e" {...APP_ICON_STROKE}>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <line x1="3" y1="9" x2="21" y2="9" />
+        <line x1="3" y1="15" x2="21" y2="15" />
+        <line x1="9" y1="3" x2="9" y2="21" />
+        <line x1="15" y1="3" x2="15" y2="21" />
+      </svg>
+    );
+  }
+  if (ext === 'docx' || ext === 'doc') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden style={{ flexShrink: 0 }} stroke="#1473df" {...APP_ICON_STROKE}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14,2 14,8 20,8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    );
+  }
+  if (ext === 'pptx' || ext === 'ppt') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden style={{ flexShrink: 0 }} stroke="#f97316" {...APP_ICON_STROKE}>
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden style={{ flexShrink: 0 }}>
+      <path d="M2 2C2 1.45 2.45 1 3 1H9L13 5V12C13 12.55 12.55 13 12 13H3C2.45 13 2 12.55 2 12V2Z" fill={color} />
+      <path d="M9 1L13 5H9.5C9.22 5 9 4.78 9 4.5V1Z" fill="white" fillOpacity="0.25" />
+    </svg>
+  );
+}
+
+function FolderTypeIcon({ name, open, size = 13 }: { name: string; open: boolean; size?: number }) {
+  const color = SPECIAL_FOLDER_COLOR[name.toLowerCase()] ?? FOLDER_COLOR;
+  // Single path: tab on top-left + body, open variant is slightly brighter
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path
+        d="M1.5 3C1.22 3 1 3.22 1 3.5V11.5C1 11.78 1.22 12 1.5 12H12.5C12.78 12 13 11.78 13 11.5V4.5H7L6 3H1.5Z"
+        fill={color} fillOpacity={open ? 1 : 0.82}
+      />
+    </svg>
+  );
+}
 
 // ── Identical font settings used by BOTH the highlight layer and the textarea ─
 const FONT_STYLE = {
@@ -206,10 +315,8 @@ function TreeNode({ entry, depth, selected, onSelect, ctxMenu, onCtxMenu, renami
         onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
       >
         {entry.isDir
-          ? open
-            ? <FolderOpenIcon size={13} style={{ color: FOLDER_COLOR, flexShrink: 0 }} weight="duotone" />
-            : <FolderIcon     size={13} style={{ color: FOLDER_COLOR, flexShrink: 0 }} weight="duotone" />
-          : <FileIcon         size={13} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+          ? <FolderTypeIcon name={entry.name} open={open} size={13} />
+          : <FileTypeIcon name={entry.name} size={13} />
         }
         {isRenaming ? (
           <input
@@ -496,6 +603,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
   // Persist open tabs to localStorage whenever tabs or activeTab change
   useEffect(() => {
     if (!sessionId || isRestoringRef.current) return;
+    if (lastRestoredSession.current !== sessionId) return; // session not yet restored — don't clobber new session's saved tabs with stale ones
     if (tabs.length === 0) return; // don't overwrite saved state with empty
     localStorage.setItem(`bz-editor-tabs-${sessionId}`, JSON.stringify({ paths: tabs.map(t => t.path), activeTab }));
   }, [tabs, activeTab, sessionId]);
@@ -512,9 +620,13 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
     try {
       const { paths, activeTab: savedActive } = JSON.parse(saved) as { paths: string[]; activeTab: string | null };
       if (!paths?.length) { isRestoringRef.current = false; return; }
+      const restoringForSession = sessionId;
       (async () => {
-        for (const p of paths) { await openFile(p); }
-        if (savedActive) setActiveTab(savedActive);
+        for (const p of paths) {
+          if (lastRestoredSession.current !== restoringForSession) break; // session switched mid-restore
+          await openFile(p);
+        }
+        if (lastRestoredSession.current === restoringForSession && savedActive) setActiveTab(savedActive);
         isRestoringRef.current = false;
       })();
     } catch { isRestoringRef.current = false; }
@@ -710,7 +822,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
           onContextMenu={handleTreeBgCtxMenu}
         >
           <TreeNode
-            key={treeVersion}
+            key={`${cwd}-${treeVersion}`}
             entry={rootEntry} depth={0} selected={activeTab} onSelect={openFile}
             ctxMenu={ctxMenu} onCtxMenu={handleCtxMenu}
             renamingPath={renamingPath} onRenameCommit={handleRenameCommit}
@@ -720,7 +832,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
           {/* Inline new-folder input */}
           {newFolderDir && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 22px' }}>
-              <FolderIcon size={13} style={{ color: FOLDER_COLOR, flexShrink: 0 }} weight="duotone" />
+              <FolderTypeIcon name="folder" open={false} size={13} />
               <input
                 ref={newFolderInputRef}
                 value={newFolderName}
@@ -798,28 +910,30 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', overflow: 'visible' }}>
 
         {/* Tab bar — tabs are draggable to reorder */}
-        <div style={{
-          display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)',
-          borderBottom: `1px solid var(--border-primary)`, minHeight: 35, flexShrink: 0,
-        }}>
+        <div className="editor-tab-bar" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', borderBottom: `1px solid var(--border-primary)`, flexShrink: 0 }}>
           {/* Scrollable tab list */}
-          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', overflowX: 'auto', minWidth: 0, height: '100%' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflowX: 'auto', minWidth: 0 }}>
           {tabs.length === 0
-            ? <span style={{ padding: '8px 16px', fontSize: 12, color: 'var(--text-tertiary)' }}>No file open</span>
+            ? <span style={{ padding: '8px 16px', fontSize: 12, color: 'var(--text-tertiary)', alignSelf: 'center' }}>No file open</span>
             : tabs.map(tab => {
               const active    = tab.path === activeTab;
               const isDragged = dragTab === tab.path;
               const isTarget  = dragOver === tab.path && dragOver !== dragTab;
+              const ext = tab.name.split('.').pop()?.toLowerCase() ?? '';
+              const typeClass = (['xlsx','xls','csv'].includes(ext)) ? 't-sheets'
+                : (['docx','doc','pdf','md','markdown','html','htm'].includes(ext)) ? 't-docs'
+                : (['pptx','ppt'].includes(ext)) ? 't-slides'
+                : (['ts','tsx','js','jsx','py','go','rs','java','kt','rb','cpp','cs','c','h','sh','bash','zsh'].includes(ext)) ? 't-code'
+                : '';
+              const cls = ['editor-tab', active && 'editor-tab--active', isDragged && 'editor-tab--drag', isTarget && 'editor-tab--drop', typeClass].filter(Boolean).join(' ');
               return (
                 <button
                   key={tab.path}
                   type="button"
                   draggable
+                  className={cls}
                   onClick={() => setActiveTab(tab.path)}
-                  onDragStart={e => {
-                    setDragTab(tab.path);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
+                  onDragStart={e => { setDragTab(tab.path); e.dataTransfer.effectAllowed = 'move'; }}
                   onDragOver={e => { e.preventDefault(); setDragOver(tab.path); }}
                   onDragLeave={() => setDragOver(null)}
                   onDrop={e => {
@@ -834,41 +948,18 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId }: Props) {
                       next.splice(to, 0, moved!);
                       return next;
                     });
-                    setDragTab(null);
-                    setDragOver(null);
+                    setDragTab(null); setDragOver(null);
                   }}
                   onDragEnd={() => { setDragTab(null); setDragOver(null); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-                    fontSize: 12, flexShrink: 0, cursor: 'grab',
-                    border: 'none', borderRight: `1px solid var(--border-primary)`,
-                    borderTop: active ? `1px solid var(--accent-blue)` : '1px solid transparent',
-                    borderLeft: isTarget ? `2px solid var(--accent-blue)` : '2px solid transparent',
-                    background: active ? 'var(--bg-primary)' : 'transparent',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    opacity: isDragged ? 0.4 : 1,
-                    fontFamily: FONT_STYLE.fontFamily,
-                    transition: 'opacity 80ms, border-color 80ms',
-                  }}
                 >
-                  {tab.docType
-                    ? <span style={{ fontSize: 12, lineHeight: 1, flexShrink: 0 }}>{DOC_ICONS[tab.docType] ?? '📄'}</span>
-                    : <FileIcon size={12} style={{ color: active ? 'var(--text-primary)' : 'var(--text-tertiary)', flexShrink: 0 }} />
-                  }
-                  <span>{tab.name}</span>
-                  {tab.dirty && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />}
+                  <FileTypeIcon name={tab.name} size={13} />
+                  <span className="editor-tab-name">{tab.name}</span>
+                  {tab.dirty && <span className="editor-tab-dirty" />}
                   <span
                     role="button" tabIndex={0}
+                    className="editor-tab-close"
                     onClick={e => closeTab(e, tab.path)}
                     onKeyDown={e => e.key === 'Enter' && closeTab(e as unknown as React.MouseEvent, tab.path)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: 16, height: 16, borderRadius: 3,
-                      opacity: active ? 0.6 : 0, color: 'var(--text-primary)', cursor: 'pointer',
-                      transition: 'opacity 80ms, background 80ms',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.15)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = active ? '0.6' : '0'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   >
                     <XIcon size={10} weight="bold" />
                   </span>

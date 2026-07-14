@@ -30,6 +30,7 @@ rm -f "$ZIP_FILE"
 zip -r "$ZIP_FILE" \
   app.py \
   server.py \
+  ppt_layout.py \
   requirements.txt \
   agent_modes.json \
   CHANGELOG.md \

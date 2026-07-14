@@ -7,7 +7,7 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.3.9"
+BACKEND_VERSION = "0.6.1"
 
 import asyncio
 import json
@@ -243,10 +243,10 @@ SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expandus
 # Stored in-memory (survives tab switches, cleared on server restart).
 _cursor_store: dict = {}
 
-# Tracks cwds with an active WebSocket / bzcode process
-_active_cwds  = set()  # type: ignore[var-annotated]
-# Tracks cwds where bzcode is actively processing a request (status: running)
-_running_cwds = set()  # type: ignore[var-annotated]
+# Tracks session IDs with an active WebSocket / bzcode process
+_active_sessions  = set()  # type: ignore[var-annotated]
+# Tracks session IDs where bzcode is actively processing a request (status: running)
+_running_sessions = set()  # type: ignore[var-annotated]
 _TITLES_FILE   = SESSIONS_DIR / "_titles.json"
 _DEFAULTS_FILE = SESSIONS_DIR / "_defaults.json"  # cwd -> sessionId
 
@@ -798,7 +798,7 @@ class _BatchItem:
 
     async def run(self, message: str) -> None:
         self.status = "running"
-        _running_cwds.add(self.cwd)
+        _running_sessions.add(self.resume_session_id or self.session_id)
         try:
             if not self.resume_session_id:
                 import secrets as _sec
@@ -839,7 +839,7 @@ class _BatchItem:
             self.status    = "error"
             self.error_msg = str(exc)
         finally:
-            _running_cwds.discard(self.cwd)
+            _running_sessions.discard(self.resume_session_id or self.session_id)
             if self._proc:
                 try:
                     # Close stdin gracefully — signals bzcode to save session and exit
@@ -954,7 +954,7 @@ class AgentPoolEntry:
         )
         self._stdout_task = asyncio.create_task(
             read_bzcode_stdout(self.proc, self._out_queue, self._ready_event,
-                               cwd=self.cwd, mode=self.mode))
+                               session_id=self.session_id, mode=self.mode))
         self._stderr_task = asyncio.create_task(
             drain_bzcode_stderr(self.proc, self._out_queue))
         self._dispatcher_task = asyncio.create_task(self._dispatch_stdout())
@@ -1208,8 +1208,8 @@ class AgentPoolEntry:
                     await task
                 except (asyncio.CancelledError, Exception):
                     pass
-        _active_cwds.discard(self.cwd)
-        _running_cwds.discard(self.cwd)
+        _active_sessions.discard(self.session_id)
+        _running_sessions.discard(self.session_id)
 
     @property
     def is_dead(self) -> bool:
@@ -2206,7 +2206,7 @@ async def read_bzcode_stdout(
     proc: asyncio.subprocess.Process,
     out_queue: asyncio.Queue,
     ready_event: asyncio.Event,
-    cwd: str = "",
+    session_id: str = "",
     mode: str = "general",
 ) -> None:
     try:
@@ -2235,13 +2235,13 @@ async def read_bzcode_stdout(
                     mstatus = msg.get("status")
                     if mtype == "status" and mstatus == "running":
                         ready_event.clear()
-                        if cwd: _running_cwds.add(cwd)
+                        if session_id: _running_sessions.add(session_id)
                     elif mtype == "status" and mstatus == "idle":
                         ready_event.set()
-                        if cwd: _running_cwds.discard(cwd)
+                        if session_id: _running_sessions.discard(session_id)
                     elif mtype == "result":
                         ready_event.set()
-                        if cwd: _running_cwds.discard(cwd)
+                        if session_id: _running_sessions.discard(session_id)
                         if msg.get("usage"):
                             _add_tokens(msg["usage"])
                 except Exception:
@@ -2249,7 +2249,7 @@ async def read_bzcode_stdout(
     finally:
         await out_queue.put(None)
         ready_event.set()
-        if cwd: _running_cwds.discard(cwd)
+        if session_id: _running_sessions.discard(session_id)
 
 
 async def send_to_client(queue: asyncio.Queue, ws: "web.WebSocketResponse") -> None:
@@ -2345,7 +2345,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     cmd = [bzcode_path, "--stdio", "--resume", req_session_id]
 
     print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}  mode={req_mode}", file=sys.stderr)
-    _active_cwds.add(effective_cwd)
+    _active_sessions.add(req_session_id)
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -2377,7 +2377,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     try:
         await asyncio.gather(
             read_bzcode_stdout(proc, out_queue, ready_event,
-                               cwd=effective_cwd, mode=req_mode),
+                               session_id=req_session_id, mode=req_mode),
             send_to_client(out_queue, ws),
             drain_bzcode_stderr(proc, out_queue),
             relay_client_messages(proc, ws, ready_event),
@@ -2385,7 +2385,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     except (BrokenPipeError, ConnectionResetError, asyncio.CancelledError):
         pass
     finally:
-        _active_cwds.discard(effective_cwd)
+        _active_sessions.discard(req_session_id)
         # Check exit code — if bzcode crashed (non-zero), notify the client before
         # the handler returns so the frontend shows a meaningful error instead of a
         # silent disconnect.

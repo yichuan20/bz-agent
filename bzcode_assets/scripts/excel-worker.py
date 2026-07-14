@@ -19,9 +19,23 @@ RECALC mode  — re-evaluate formulas in an existing sidecar JSON, rewrite xlsx:
     "headers": ["#", "Value"],
     "rows": [[1, 10], [2, 20], ["Total", null]],
     "formulas": { "B4": "=SUM(B2:B3)*2" },
-    "col_widths": [20, 15]
+    "col_widths": [20, 15],
+    "styles": {
+      "A2": { "bg": "#FFF3E0", "fg": "#E65100" },
+      "B2": { "bold": true, "align": "right" }
+    }
   }]
 }
+
+styles  — optional per-cell style overrides applied after headers/rows/formulas.
+  Keys are cell refs (e.g. "A2"). Values are style objects with any of:
+    bg      hex color string "#RRGGBB"  — cell background
+    fg      hex color string "#RRGGBB"  — font color
+    bold    boolean
+    italic  boolean
+    align   "left"|"center"|"right"
+    format  number format string (e.g. "#,##0.00")
+    wrap    boolean — wrap text
 
 ─── Sidecar schema  (.{name}.xlsx.excel.json) ───────────────────────────────
 {
@@ -394,6 +408,16 @@ def compute_sheet(sheet_def: dict) -> dict:
             cd["v"] = val
         cells[ref_upper] = cd
 
+    # Apply per-cell style overrides from the optional "styles" dict.
+    # Keys are cell refs; values are style objects merged into cells[ref]['s'].
+    for ref, style in sheet_def.get('styles', {}).items():
+        if not isinstance(style, dict):
+            continue
+        ref_upper = ref.strip().upper()
+        existing = dict(cells.get(ref_upper, {}))
+        existing['s'] = {**existing.get('s', {}), **style}
+        cells[ref_upper] = existing
+
     return {"name": name, "col_widths": col_widths, "cells": cells}
 
 
@@ -476,7 +500,7 @@ def recalc_all_sheets(sheets: list[dict]) -> tuple[list[dict], dict]:
         # that reference it get the recalculated (not stale) values.
         name = sheet.get('name', '')
         for ref, val in computed.items():
-            if isinstance(val, (int, float)) and _is_valid_ref(ref):
+            if isinstance(val, (int, float, str)) and _is_valid_ref(ref):
                 try:
                     row, col = _parse_ref(ref)
                     grids[name].set(row, col + 1, val)

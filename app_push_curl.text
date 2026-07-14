@@ -1,0 +1,51 @@
+"bz-pricing-fe"
+curl -X 'POST' \
+  'https://flow.boltzbit.com/bz-infra-api/v1/deployments/dep_3df53a0f22734e63866a38d0198748cd/redeploy' \
+  -H 'accept: application/json' \
+  -H 'X-API-KEY: bz_du5FegSTCSKs2bmZ92tR6YVItpdjSVJ3' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "imageTag": "2b2d48f_1783612611405_new-look-launch"
+}'
+
+"name": "bz-cloud"
+curl -X 'POST' \
+  'https://flow.boltzbit.com/bz-infra-api/v1/deployments/dep_7b68357c882a43f2a3587f381d87b5ad/redeploy' \
+  -H 'accept: application/json' \
+  -H 'X-API-KEY: bz_du5FegSTCSKs2bmZ92tR6YVItpdjSVJ3' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "imageTag": "e1a30b4_1783094212481_new-look-launch"
+}'
+
+"name": "bz-agent"
+w
+
+"name": "bz-learn"
+curl -X 'POST' \
+  'https://flow.boltzbit.com/bz-infra-api/v1/deployments/dep_880b349f9f1649468d6472343f2001f9/redeploy' \
+  -H 'accept: application/json' \
+  -H 'X-API-KEY: bz_du5FegSTCSKs2bmZ92tR6YVItpdjSVJ3' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "imageTag": "8f7a2ff_1783528752631_fix-dockerignore"
+}'
+
+[
+  {
+    "id": "dep_7b68357c882a43f2a3587f381d87b5ad",
+    "name": "bz-cloud"
+  },
+  {
+    "id": "dep_f6004d2b2f864ed3bdb10560daa68712",
+    "name": "bz-agent"
+  },
+  {
+    "id": "dep_880b349f9f1649468d6472343f2001f9",
+    "name": "bz-learn"
+  },
+  {
+    "id": "dep_3df53a0f22734e63866a38d0198748cd",
+    "name": "bz-pricing-fe"
+  }
+]

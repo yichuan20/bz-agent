@@ -452,10 +452,21 @@ const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
   const fontFamily = cell?.fontFamily || 'Arial';
   ctx.font = `${fontStyle}${fontWeight}${fontSize}px "${fontFamily}"`;
 
-  // Use custom color if set and not default black, otherwise use theme text color
-  const cellColor = cell?.fontColor?.slice(2);
+  // Use custom color if set and not default black/auto, otherwise use theme text color.
+  // When a cell has an explicit background but no explicit font color, pick a contrasting
+  // text color based on background luminance so it reads in both light and dark theme.
+  const cellColor = cell?.fontColor?.slice(2); // FFRRGGBB → RRGGBB
   const isDefaultBlack = !cellColor || cellColor === '000000';
-  ctx.fillStyle = isDefaultBlack ? getCSSVar('--text-primary') : `#${cellColor}`;
+  if (isDefaultBlack && cell?.bgColor) {
+    const bg = cell.bgColor.slice(2); // strip leading AA byte
+    const r = parseInt(bg.slice(0, 2), 16) / 255;
+    const g = parseInt(bg.slice(2, 4), 16) / 255;
+    const b = parseInt(bg.slice(4, 6), 16) / 255;
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    ctx.fillStyle = lum > 0.5 ? '#333333' : getCSSVar('--text-primary');
+  } else {
+    ctx.fillStyle = isDefaultBlack ? getCSSVar('--text-primary') : `#${cellColor}`;
+  }
 
   if (cell?.dataFormatString?.includes('[Red]')) {
     const rawNum = parseFloat(cell?.['f-value'] ?? cell?.value);

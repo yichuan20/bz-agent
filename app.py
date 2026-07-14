@@ -53,7 +53,7 @@ from server import (
     BOLTZHUB_AUTH,
     SESSIONS_DIR,
     SERVER_DATA_DIR,
-    _active_cwds,
+    _active_sessions,
     _batch_store,
     _boltzhub_token,
     _credentials_valid,
@@ -64,7 +64,7 @@ from server import (
     _now,
     _read_app_config,
     _read_session_file,
-    _running_cwds,
+    _running_sessions,
     _save_code,
     _save_default,
     _save_index,
@@ -896,14 +896,14 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
         print(f"[ws] connect  cwd={effective_cwd}  sessionId={req_session_id}  mode={req_mode}",
               file=sys.stderr)
-        _active_cwds.add(effective_cwd)
+        _active_sessions.add(req_session_id)
 
         try:
             entry = await agent_pool.get_or_create(
                 req_session_id, effective_cwd, req_mode,
                 _bzcode, cmd, env)
         except (FileNotFoundError, PermissionError) as exc:
-            _active_cwds.discard(effective_cwd)
+            _active_sessions.discard(req_session_id)
             await websocket.send_text(json.dumps({
                 "type": "result", "status": "error",
                 "error": f"Failed to start bzcode ({type(exc).__name__}): {exc}",
@@ -929,7 +929,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             pass
         finally:
             await entry.detach_ws()
-            _active_cwds.discard(effective_cwd)
+            _active_sessions.discard(req_session_id)
             if entry.is_dead:
                 try:
                     await websocket.send_text(json.dumps({
@@ -985,10 +985,10 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     @misc_router.get("/api/home")
     async def api_home():
         home = str(Path.home())
-        default_cwd = os.getcwd()
+        cwd = app.state.default_cwd or os.getcwd()
         return {
             "home": home,
-            "defaultCwd": default_cwd if os.path.isdir(default_cwd) else home,
+            "defaultCwd": cwd if os.path.isdir(cwd) else home,
         }
 
     @misc_router.get("/api/apikey-verify")
@@ -1282,7 +1282,17 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         entries = []
         for entry in sorted(p.iterdir(), key=lambda e: (e.is_file(), e.name.lower())):
             if entry.name.startswith('.'):
-                continue  # hide dotfiles (including pptx JSON sidecars)
+                continue  # hide dotfiles (including pptx / excel JSON sidecars)
+            # Hide doc sidecars: {name}.{ext}.json where ext is a known document type
+            _n = entry.name.lower()
+            if _n.endswith('.json') and any(
+                _n.endswith(s) for s in (
+                    '.docx.json', '.doc.json', '.pdf.json',
+                    '.html.json', '.htm.json',
+                    '.md.json', '.markdown.json',
+                )
+            ):
+                continue
             try:
                 stat = entry.stat()
                 entries.append({"name": entry.name, "path": str(entry),
@@ -1509,26 +1519,17 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     async def get_sessions(cwd: str = Query("")):
         if not SESSIONS_DIR.exists():
             return {"sessions": []}
+        all_sessions = [m for p in SESSIONS_DIR.glob("*.jsonl") if (m := _read_session_file(p))]
         if cwd:
-            sessions = [m for p in SESSIONS_DIR.glob("*.jsonl")
-                        if (m := _read_session_file(p)) and m["workingDir"] == cwd]
-            sessions.sort(key=lambda s: s["lastModified"], reverse=True)
-        else:
-            by_dir: dict = {}
-            for p in SESSIONS_DIR.glob("*.jsonl"):
-                m = _read_session_file(p)
-                if m is None:
-                    continue
-                wd = m["workingDir"]
-                if wd not in by_dir or m["lastModified"] > by_dir[wd]["lastModified"]:
-                    by_dir[wd] = m
-            sessions = sorted(by_dir.values(), key=lambda s: s["lastModified"], reverse=True)
+            all_sessions = [s for s in all_sessions if s["workingDir"] == cwd]
+        sessions = sorted(all_sessions, key=lambda s: s["lastModified"], reverse=True)
         defaults = _load_defaults()
         for s in sessions:
-            wd = s["workingDir"]
-            s["isActive"]         = wd in _active_cwds
-            s["isRunning"]        = wd in _running_cwds
-            s["isDefault"]        = defaults.get(wd) == s["sessionId"]
+            sid = s["sessionId"]
+            wd  = s["workingDir"]
+            s["isActive"]         = sid in _active_sessions
+            s["isRunning"]        = sid in _running_sessions
+            s["isDefault"]        = defaults.get(wd) == sid
             s["defaultSessionId"] = defaults.get(wd)
         return {"sessions": sessions}
 
@@ -1693,7 +1694,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         # not by this endpoint.
         messages = entry._read_session_messages()
 
-        _active_cwds.add(effective_cwd)
+        _active_sessions.add(req_session_id)
         return {
             "sessionId": req_session_id,
             "cwd": effective_cwd,
@@ -1776,6 +1777,90 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
     @misc_router.get("/agent-modes")
     async def agent_modes():
         return _load_mode_config()
+
+    # Cache for the live model list fetched from the BoltzBit API
+    _models_cache: list = []
+    _models_cache_ts: float = 0.0
+    _MODELS_CACHE_TTL = 300  # 5 minutes
+    _BZ_MODELS_URL = "https://flow.boltzbit.com/bz-api/v1/ai/models"
+
+    async def _fetch_bz_models(api_key: str) -> list:
+        import time, aiohttp
+        nonlocal _models_cache, _models_cache_ts
+        now = time.monotonic()
+        if _models_cache and (now - _models_cache_ts) < _MODELS_CACHE_TTL:
+            return _models_cache
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(
+                    _BZ_MODELS_URL,
+                    headers={"x-api-key": api_key},
+                    timeout=aiohttp.ClientTimeout(total=8),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        _models_cache = [
+                            {"id": m["codename"], "displayName": m["displayName"]}
+                            for m in data if m.get("codename") and m.get("displayName")
+                        ]
+                        _models_cache_ts = now
+        except Exception as exc:
+            print(f"[models] failed to fetch model list: {exc}", file=sys.stderr)
+        return _models_cache
+
+    @misc_router.get("/api/models")
+    async def list_models(session_id: str = Query("")):
+        api_keys = _read_api_keys()
+        bz_api_key = api_keys.get("BZ_API_KEY", "")
+        models = await _fetch_bz_models(bz_api_key) if bz_api_key else []
+        current = ""
+        if session_id:
+            entry = agent_pool._entries.get(session_id)
+            if entry:
+                current = entry.model_info.get("name", "") or entry.model_info.get("displayName", "")
+            if not current:
+                _meta_file = SESSIONS_DIR / session_id / "meta.json"
+                if _meta_file.exists():
+                    try:
+                        current = json.loads(_meta_file.read_text()).get("model", "")
+                    except Exception:
+                        pass
+        return {"models": models, "current": current}
+
+    @misc_router.post("/api/sessions/{session_id}/model")
+    async def set_session_model(session_id: str, request: Request):
+        body = await request.json()
+        model_id = body.get("model", "")
+        if not model_id:
+            raise HTTPException(400, "model is required")
+        entry = agent_pool._entries.get(session_id)
+        req_mode = "general"
+        effective_cwd = str(app.state.default_cwd)
+        if entry:
+            req_mode = entry.mode
+            effective_cwd = entry.cwd
+        else:
+            _meta_file = SESSIONS_DIR / session_id / "meta.json"
+            if _meta_file.exists():
+                try:
+                    _meta = json.loads(_meta_file.read_text())
+                    req_mode = _meta.get("mode", req_mode)
+                    effective_cwd = _meta.get("workingDir", effective_cwd)
+                except Exception:
+                    pass
+        _write_session_config(session_id, req_mode, working_dir=effective_cwd, model_name=model_id)
+        # Update live settings.json with model field so bzcode picks it up on next turn
+        _cfg_dir = SESSIONS_DIR / session_id
+        _settings_path = _cfg_dir / "settings.json"
+        try:
+            _settings = {}
+            if _settings_path.exists():
+                _settings = json.loads(_settings_path.read_text())
+            _settings["model"] = model_id
+            _settings_path.write_text(json.dumps(_settings, indent=2))
+        except Exception as exc:
+            print(f"[model] failed to patch settings.json: {exc}", file=sys.stderr)
+        return {"ok": True, "sessionId": session_id, "model": model_id}
 
     # ── File read / write ─────────────────────────────────────────────────────
 
@@ -2254,6 +2339,11 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                             f = cell.font
                             if f.bold:   cd["fontBold"]  = True
                             if f.italic: cd["fontItalic"] = True
+                            # Read explicit font color; skip Excel "auto" colors (alpha=00)
+                            if f.color and f.color.type == 'rgb':
+                                rgb = f.color.rgb  # AARRGGBB string
+                                if rgb[:2].upper() not in ('00', ''):
+                                    cd["fontColor"] = rgb
                         except Exception:
                             pass
                         try:
