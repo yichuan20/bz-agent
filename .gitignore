@@ -19,3 +19,4 @@ twilio_config.sh
 *.zip
 __pycache__
 ws-doc-1
+logs/
