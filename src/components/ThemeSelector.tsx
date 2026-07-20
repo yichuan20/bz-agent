@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type ThemeMode, applyTheme, getCurrentMode } from '#/design-tokens';
+import { applyTheme, getCurrentMode, type ThemeMode } from '#/design-tokens';
 
 interface ThemeSelectorProps {
   onModeChange?: (mode: ThemeMode) => void;
@@ -25,7 +25,14 @@ export default function ThemeSelector({ onModeChange }: ThemeSelectorProps) {
 
   return (
     <div>
-      <p style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+      <p
+        style={{
+          marginBottom: '8px',
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+          fontWeight: 600,
+        }}
+      >
         Appearance
       </p>
       <div className="flex-row">

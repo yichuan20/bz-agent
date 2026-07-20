@@ -9,9 +9,9 @@ export const LINE_HEIGHT = FONT_SIZE * 3.5;
 export const PADDING = 10;
 
 // Page dimensions (US Letter: 8.5" x 11" at 96 DPI)
-export const PAGE_WIDTH = VIEW_W * SF;  // Full width of canvas
-export const PAGE_HEIGHT = 1056 * SF;   // ~11 inches at 96 DPI, scaled
-export const PAGE_GAP = 40 * SF;        // Gray gap between pages
+export const PAGE_WIDTH = VIEW_W * SF; // Full width of canvas
+export const PAGE_HEIGHT = 1056 * SF; // ~11 inches at 96 DPI, scaled
+export const PAGE_GAP = 40 * SF; // Gray gap between pages
 export const PAGE_MARGIN_TOP = 96 * SF;
 export const PAGE_MARGIN_BOTTOM = 96 * SF;
 export const PAGE_CONTENT_HEIGHT = PAGE_HEIGHT - PAGE_MARGIN_TOP - PAGE_MARGIN_BOTTOM;

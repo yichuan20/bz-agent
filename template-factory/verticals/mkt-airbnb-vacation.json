@@ -1,0 +1,13 @@
+{
+  "id": "mkt-airbnb-vacation",
+  "name": "Vacation Rental Marketplace",
+  "description": "Property rental marketplace — search, browse by category, and detailed listing pages.",
+  "tags": ["rental", "marketplace", "marketing", "travel"],
+  "text_replacements": [
+    { "from": "Airbnb", "to": "StayFinder" },
+    { "from": "Experiences", "to": "Activities" },
+    { "from": "Homes", "to": "Properties" },
+    { "from": "Superhosts", "to": "Top Hosts" },
+    { "from": "Host", "to": "Owner" }
+  ]
+}

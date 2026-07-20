@@ -1,6 +1,6 @@
 import { MoonIcon, SunIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { type ThemeMode, applyTheme, getCurrentMode } from '#/design-tokens';
+import { applyTheme, getCurrentMode, type ThemeMode } from '#/design-tokens';
 
 export default function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>(getCurrentMode);

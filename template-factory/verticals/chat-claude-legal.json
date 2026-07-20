@@ -1,0 +1,15 @@
+{
+  "id": "chat-claude-legal",
+  "name": "Legal Research AI",
+  "description": "AI assistant for legal research — case analysis, document drafting, and citation management.",
+  "tags": ["legal", "ai", "chatbot", "research"],
+  "text_replacements": [
+    { "from": "Projects", "to": "Matters" },
+    { "from": "Project", "to": "Matter" },
+    { "from": "Artifacts", "to": "Documents" },
+    { "from": "Artifact", "to": "Document" },
+    { "from": "Chats", "to": "Research Sessions" },
+    { "from": "New chat", "to": "New Research Session" },
+    { "from": "Claude", "to": "LexAI" }
+  ]
+}

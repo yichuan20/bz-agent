@@ -85,7 +85,9 @@ from server import (
     _whatsapp_sessions,
     _whatsapp_lock,
     _bz_headers,
+    _bz_auth,
     _write_app_config,
+    _sync_env_oauth_client_id,
     _load_code,
     _code_path,
     handle_ws_client,
@@ -3627,6 +3629,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 if not cfg:
                     yield emit("error", "No .bzhub/app_config.json found"); return
                 app_id    = cfg["id"]
+                _sync_env_oauth_client_id(cwd, app_id)
                 build_cmd = cfg.get("buildCommand") or "pnpm build"
                 yield emit("build", f"Running: {build_cmd}")
                 proc = await asyncio.create_subprocess_shell(
@@ -3648,7 +3651,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 if proc2.returncode not in (0, 12):
                     yield emit("error", f"Archive failed: {zip_err.decode()[:300]}"); return
                 zip_bytes = zip_path.read_bytes()
-                auth = {"Authorization": f"Bearer {token}"}
+                auth = _bz_auth(token)
                 connector = _aio.TCPConnector(ssl=False)
                 async with _aio.ClientSession(connector=connector) as sess:
                     yield emit("upload", f"Uploading {len(zip_bytes)//1024} KB…")
@@ -3706,7 +3709,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         connector = _aio.TCPConnector(ssl=False)
         async with _aio.ClientSession(connector=connector) as sess:
             async with sess.get(f"{BOLTZHUB_API}/v1/creator/apps",
-                                 headers={"Authorization": f"Bearer {token}"}) as r:
+                                 headers=_bz_auth(token)) as r:
                 if r.status != 200:
                     raise HTTPException(r.status, await r.text())
                 return await r.json()
@@ -3720,7 +3723,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         connector = _aio.TCPConnector(ssl=False)
         async with _aio.ClientSession(connector=connector) as sess:
             async with sess.get(f"{BOLTZHUB_API}/v1/creator/apps/{appId}/versions",
-                                 headers={"Authorization": f"Bearer {token}"}) as r:
+                                 headers=_bz_auth(token)) as r:
                 if r.status != 200:
                     raise HTTPException(r.status, await r.text())
                 data = await r.json()
@@ -3744,7 +3747,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         async with _aio.ClientSession(connector=connector) as sess:
             async with sess.get(
                 f"{BOLTZHUB_API}/v1/creator/tokens/usage/history?period={period}&limit=100",
-                headers={"Authorization": f"Bearer {token}"},
+                headers=_bz_auth(token),
             ) as r:
                 if r.status != 200:
                     raise HTTPException(r.status, await r.text())
@@ -3775,7 +3778,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 async with _aio.ClientSession(connector=connector) as sess:
                     async with sess.get(
                         f"{BOLTZHUB_API}/v1/creator/apps/{_app_id}/code",
-                        headers={"Authorization": f"Bearer {token}"},
+                        headers=_bz_auth(token),
                     ) as r:
                         if r.status != 200:
                             yield emit("error", f"Download failed ({r.status})"); return
@@ -3810,7 +3813,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             async with sess.post(
                 f"{BOLTZHUB_API}/v1/creator/apps/{body.appId}/versions",
                 json={"releaseNotes": body.releaseNotes, "versionNumber": body.versionNumber},
-                headers={"Authorization": f"Bearer {token}"},
+                headers=_bz_auth(token),
             ) as r:
                 result = await r.json() if r.content_type == "application/json" else {"status": r.status}
                 if r.status not in (200, 201):
@@ -3827,7 +3830,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         async with _aio.ClientSession(connector=connector) as sess:
             async with sess.put(
                 f"{BOLTZHUB_API}/v1/creator/apps/{body.appId}/publish",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers=_bz_headers(token),
             ) as r:
                 result = await r.json() if r.content_type == "application/json" else {"status": r.status}
                 if r.status not in (200, 201):

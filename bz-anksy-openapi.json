@@ -1,0 +1,875 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Anksy — API Networking System",
+    "description": "Dynamic API routing service. Register routes at runtime, then mock or\nproxy live traffic on those routes.\n\n## Concepts\n\n- **Namespace**: Isolation scope for routes, keyed by app ID.\n- **Route**: HTTP method + path pattern registered within a namespace,\n  with a **handler** that defines how requests are fulfilled.\n- **Handler modes**: `mock` returns a static response; `proxy` forwards\n  to a backend URL (with optional request remapping via templates).\n- **Contract**: Optional `parameters`, `request_body`, and `responses`\n  on a route. When present, the gateway validates live traffic against\n  these schemas.\n\n## How it works\n\n1. Register a route via `POST /apps/{app_id}/routes` (or batch-import\n   from an OpenAPI spec via `POST /apps/{app_id}/import`).\n2. Call `{base_url}/api/your/path` with the `X-App-Id` header.\n3. The gateway matches the route and dispatches to the handler.\n\n## Gateway API docs\n\nGateway endpoints (`/api/**`) are not listed in this spec because\ntheir contracts are defined dynamically by registered routes. Use\nthe per-app documentation endpoints instead:\n- `GET /apps/{app_id}/docs` — interactive Swagger UI\n- `GET /apps/{app_id}/openapi.json` — machine-readable OpenAPI spec\n\n## Running example\n\nAll examples use a consistent scenario: an **orders** app\n(`app_id = \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"`).\n",
+    "version": "0.1.0"
+  },
+  "servers": [
+    { "url": "/bz-anksy" },
+    { "url": "/", "description": "Default (adapts to host and port)" }
+  ],
+  "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }],
+  "tags": [
+    { "name": "Health", "description": "Server health checks" },
+    { "name": "Routes", "description": "Route CRUD scoped to an app namespace" },
+    { "name": "Docs", "description": "Auto-generated API documentation for user-registered routes" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "healthCheck",
+        "tags": ["Health"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status"],
+                  "properties": { "status": { "type": "string", "example": "ok" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/apps": {
+      "get": {
+        "summary": "List app namespaces",
+        "description": "List app namespaces created by the authenticated user. Returns\npaginated results with `limit` and `offset`.\n",
+        "operationId": "listApps",
+        "tags": ["Routes"],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of results to return",
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 },
+            "example": 20
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Number of results to skip",
+            "schema": { "type": "integer", "default": 0, "minimum": 0 },
+            "example": 0
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of app namespaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "limit", "offset", "total"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AppNamespace" }
+                    },
+                    "limit": { "type": "integer", "example": 20 },
+                    "offset": { "type": "integer", "example": 0 },
+                    "total": {
+                      "type": "integer",
+                      "description": "Total number of app namespaces",
+                      "example": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/apps/{app_id}/openapi.json": {
+      "parameters": [{ "$ref": "#/components/parameters/appId" }],
+      "get": {
+        "summary": "Get OpenAPI spec for an app's routes",
+        "description": "Generates an OpenAPI 3.1 spec from all routes in this app namespace.\nRequires app-creator authorization or app access.\n",
+        "operationId": "getAppOpenApi",
+        "tags": ["Docs"],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 specification",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/apps/{app_id}/docs": {
+      "parameters": [{ "$ref": "#/components/parameters/appId" }],
+      "get": {
+        "summary": "Swagger UI for an app's routes",
+        "description": "Serves a Swagger UI page for this app's routes. The page is public;\nauthentication happens client-side when fetching the spec.\n",
+        "operationId": "getAppDocs",
+        "tags": ["Docs"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Swagger UI HTML page",
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "/apps/{app_id}": {
+      "parameters": [{ "$ref": "#/components/parameters/appId" }],
+      "delete": {
+        "summary": "Delete an app namespace and all its routes",
+        "description": "Removes the app namespace and every route registered under it.\nRequires app-creator authorization.\n",
+        "operationId": "deleteAppNamespace",
+        "tags": ["Routes"],
+        "responses": {
+          "204": { "description": "Namespace and all routes deleted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/apps/{app_id}/import": {
+      "parameters": [{ "$ref": "#/components/parameters/appId" }],
+      "post": {
+        "summary": "Import routes from an OpenAPI spec",
+        "description": "Upload an OpenAPI 3.x spec file (YAML or JSON) to batch-create mock\nroutes. Best-effort: routes that fail are reported, others proceed.\n`$ref` pointers are resolved automatically.\n\n**How mock responses are extracted** (first match wins):\n1. `responses[2xx].content[type].example` — inline example value\n2. `responses[2xx].content[type].examples[first].value` — named examples, first entry used\n3. If no example is found for any 2xx response, the route is skipped\n\n`application/json` is preferred when multiple content types exist.\nThe mock's `status_code` and `content_type` are taken from the matched response.\n\n**Paths** must start with `/api/` — others are skipped.\nRequires app-creator authorization.\n",
+        "operationId": "importRoutes",
+        "tags": ["Routes"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "OpenAPI spec file (.yaml, .yml, or .json)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["created", "skipped", "failed"],
+                  "properties": {
+                    "created": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "method": { "type": "string" },
+                          "path": { "type": "string" },
+                          "id": { "type": "string" }
+                        }
+                      }
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "method": { "type": "string" },
+                          "path": { "type": "string" },
+                          "reason": { "type": "string" }
+                        }
+                      }
+                    },
+                    "failed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "method": { "type": "string" },
+                          "path": { "type": "string" },
+                          "reason": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/apps/{app_id}/routes": {
+      "parameters": [{ "$ref": "#/components/parameters/appId" }],
+      "post": {
+        "summary": "Create a route",
+        "description": "Register a new route under the app namespace. If the app namespace does\nnot exist yet, it is created implicitly.\n\nThe `handler` field determines how requests are fulfilled:\n- `mock` — return a static response defined in `mock_response`\n- `proxy` — forward to `target_url`, with optional `request_template`\n  for remapping the request body, headers, query, or path params\n\nOptional `parameters`, `request_body`, and `responses` fields define an\nAPI contract. When present, the gateway validates live traffic against\nthese schemas.\n",
+        "operationId": "createRoute",
+        "tags": ["Routes"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RouteCreate" },
+              "examples": {
+                "mock": {
+                  "summary": "Mock route with static response",
+                  "value": {
+                    "method": "GET",
+                    "path": "/api/orders/{id}",
+                    "description": "Get order by ID (mock)",
+                    "tags": ["Orders"],
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "The unique order identifier"
+                      }
+                    ],
+                    "responses": {
+                      "200": {
+                        "content_type": "application/json",
+                        "schema": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "status": { "type": "string" },
+                            "total": { "type": "number" }
+                          },
+                          "required": ["id", "status"]
+                        },
+                        "description": "Order details"
+                      }
+                    },
+                    "handler": {
+                      "mode": "mock",
+                      "mock_response": {
+                        "status_code": 200,
+                        "content_type": "application/json",
+                        "body": { "id": "ord_123", "status": "pending", "total": 49.99 }
+                      }
+                    }
+                  }
+                },
+                "proxy": {
+                  "summary": "Proxy route with request remapping",
+                  "value": {
+                    "method": "POST",
+                    "path": "/api/orders/{id}/confirm",
+                    "description": "Confirm an order by ID",
+                    "tags": ["Orders"],
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" },
+                        "description": "The unique order identifier"
+                      }
+                    ],
+                    "request_body": {
+                      "content_type": "application/json",
+                      "required": true,
+                      "schema": {
+                        "type": "object",
+                        "properties": { "quantity": { "type": "integer", "minimum": 1 } },
+                        "required": ["quantity"]
+                      },
+                      "description": "Order confirmation payload with quantity"
+                    },
+                    "responses": {
+                      "200": {
+                        "content_type": "application/json",
+                        "schema": {
+                          "type": "object",
+                          "properties": {
+                            "order_id": { "type": "string" },
+                            "status": { "type": "string" }
+                          },
+                          "required": ["order_id", "status"]
+                        },
+                        "description": "Confirmed order with updated status"
+                      }
+                    },
+                    "handler": {
+                      "mode": "proxy",
+                      "target_url": "https://orders-backend.internal/orders/{id}/confirm",
+                      "request_template": {
+                        "body": { "order_id": "{{path.id}}", "qty": "{{body.quantity}}" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Route created",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/RouteOut" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "get": {
+        "summary": "List routes",
+        "description": "List all routes in the app namespace. Supports optional filters by\nHTTP method and path prefix. Requires app-creator authorization.\n",
+        "operationId": "listRoutes",
+        "tags": ["Routes"],
+        "parameters": [
+          {
+            "name": "method",
+            "in": "query",
+            "required": false,
+            "description": "Filter by HTTP method",
+            "schema": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+            "example": "POST"
+          },
+          {
+            "name": "path_prefix",
+            "in": "query",
+            "required": false,
+            "description": "Filter routes whose path starts with this prefix",
+            "schema": { "type": "string" },
+            "example": "/api/orders"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of routes",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RouteOut" } }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/apps/{app_id}/routes/{route_id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/appId" },
+        { "$ref": "#/components/parameters/routeId" }
+      ],
+      "get": {
+        "summary": "Get a route",
+        "description": "Requires app-creator authorization.",
+        "operationId": "getRoute",
+        "tags": ["Routes"],
+        "responses": {
+          "200": {
+            "description": "Route details",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/RouteOut" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "summary": "Update a route",
+        "description": "Partial update — only the fields present in the request body are changed.\nIf `handler` is provided, it replaces the entire handler object.\nRequires app-creator authorization.\n",
+        "operationId": "updateRoute",
+        "tags": ["Routes"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RouteUpdate" },
+              "example": {
+                "handler": {
+                  "mode": "mock",
+                  "mock_response": {
+                    "status_code": 200,
+                    "content_type": "application/json",
+                    "body": { "id": "ord_123", "status": "confirmed" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route updated",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/RouteOut" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a route",
+        "description": "Requires app-creator authorization.",
+        "operationId": "deleteRoute",
+        "tags": ["Routes"],
+        "responses": {
+          "204": { "description": "Route deleted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT authentication via Authorization header.\n\n**Usage:** `Authorization: Bearer <token>`\n"
+      },
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key authentication via custom header.\n\n**Usage:** `X-API-Key: <your-api-key>`\n"
+      }
+    },
+    "parameters": {
+      "appId": {
+        "name": "app_id",
+        "in": "path",
+        "required": true,
+        "description": "App namespace UUID",
+        "schema": { "type": "string", "format": "uuid" },
+        "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      },
+      "routeId": {
+        "name": "route_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the route",
+        "schema": { "type": "string", "format": "uuid" },
+        "example": "550e8400-e29b-41d4-a716-446655440000"
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or invalid authentication credentials",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": {
+              "detail": "Not authenticated — provide a Bearer token or X-API-Key header"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "detail": "Route not found" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Caller is not the app creator",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "detail": "Only the app creator can manage routes" }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Duplicate route (same namespace + method + path)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": {
+              "detail": "Route POST /api/orders/{id}/confirm already exists in app a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Request validation failed (invalid fields, schema mismatch, or mock body doesn't match response contract)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": {
+              "detail": "Request body validation failed: 'quantity' is a required property"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["detail"],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Route not found"
+          }
+        }
+      },
+      "AppNamespace": {
+        "type": "object",
+        "description": "An app namespace with its metadata",
+        "required": ["app_id", "created_by", "created_at"],
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identifier of the app namespace",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the app",
+            "example": "Order management service"
+          },
+          "created_by": {
+            "type": "string",
+            "description": "User who created the namespace",
+            "example": "user-123"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T10:30:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T10:30:00Z"
+          }
+        }
+      },
+      "HandlerMock": {
+        "type": "object",
+        "description": "Return a static response",
+        "required": ["mode", "mock_response"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["mock"], "example": "mock" },
+          "mock_response": { "$ref": "#/components/schemas/MockResponse" }
+        }
+      },
+      "HandlerProxy": {
+        "type": "object",
+        "description": "Forward the request to a backend URL, optionally remapping the request via a template",
+        "required": ["mode", "target_url"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["proxy"], "example": "proxy" },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+            "description": "HTTP method to use when calling the upstream. Defaults to the incoming request method if omitted.",
+            "example": "POST"
+          },
+          "target_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Backend URL to forward the request to. May contain `{param}` placeholders that are substituted from path parameters.",
+            "example": "https://orders-backend.internal/orders/{id}/confirm"
+          },
+          "request_template": {
+            "oneOf": [{ "type": "null" }, { "type": "object" }],
+            "description": "Optional request remapping template. When set, the gateway\ntransforms the incoming request before forwarding to the\nupstream. Uses `{{namespace.field}}` placeholder syntax.\n\nTemplate keys (all optional — omitted keys pass through as-is):\n- `path` — remapped path params for `{param}` substitution in `target_url`\n- `query` — replaces the upstream query string\n- `headers` — merged into upstream headers (overrides passthrough)\n- `body` — replaces the upstream request body\n\nPlaceholder namespaces:\n- `{{body.field}}` — request body (dot-path traversal)\n- `{{path.param}}` — captured path parameters\n- `{{query.param}}` — query string parameters\n- `{{header.name}}` — request headers (case-insensitive)\n- `{{now}}` — current UTC timestamp in ISO 8601 format\n\nType coercion: path and query parameters are automatically\ncoerced to the type declared in the route's `parameters`\nschema (e.g. `integer` → int, `number` → float,\n`boolean` → bool). No special syntax needed — just use\n`{{path.projectId}}` and it resolves to `1` (int) if the\nparameter schema says `{\"type\": \"integer\"}`.\n\nDefault values: if a parameter schema includes `\"default\"`,\nthat value is used when the parameter is absent from the\nrequest. For example, `{\"type\": \"integer\", \"default\": 1000}`\nmakes `{{query.limit}}` resolve to `1000` when the client\ndoesn't send `limit`.\n\nType preservation: a placeholder that is the entire string\nvalue (e.g. `\"{{body.a}}\"`) resolves to the original type.\nMixed text and placeholders resolve to a string.\n",
+            "example": {
+              "body": { "input": { "a": "{{body.a}}", "b": "{{body.b}}" } },
+              "query": {
+                "filter": "{\"field\":\"project_id\",\"op\":\"eq\",\"value\":{{path.projectId}}}"
+              }
+            }
+          }
+        }
+      },
+      "Handler": {
+        "description": "How the route fulfills requests. Discriminated by `mode`:\n- `mock` — return static `mock_response`\n- `proxy` — forward to `target_url`\n",
+        "oneOf": [
+          { "$ref": "#/components/schemas/HandlerMock" },
+          { "$ref": "#/components/schemas/HandlerProxy" }
+        ],
+        "discriminator": {
+          "propertyName": "mode",
+          "mapping": {
+            "mock": "#/components/schemas/HandlerMock",
+            "proxy": "#/components/schemas/HandlerProxy"
+          }
+        }
+      },
+      "MockResponse": {
+        "type": "object",
+        "description": "Static response returned by mock-mode handlers.\n\nBody encoding depends on `content_type`:\n- `application/json` (default) — body is a JSON value\n- `text/*` — body is a string\n- anything else — body is a base64-encoded string\n",
+        "required": ["body"],
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "description": "HTTP status code to return",
+            "default": 200,
+            "example": 200
+          },
+          "content_type": {
+            "type": "string",
+            "description": "Content-Type header for the response",
+            "default": "application/json",
+            "example": "application/json"
+          },
+          "body": {
+            "description": "Response body. Encoding depends on `content_type`.",
+            "example": { "id": "ord_123", "status": "pending", "total": 49.99 }
+          }
+        }
+      },
+      "Parameter": {
+        "type": "object",
+        "description": "OpenAPI-style parameter definition for path, query, or header params",
+        "required": ["name", "in", "required", "schema"],
+        "properties": {
+          "name": { "type": "string", "description": "Parameter name", "example": "id" },
+          "in": {
+            "type": "string",
+            "enum": ["path", "query", "header"],
+            "description": "Where the parameter appears",
+            "example": "path"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether the parameter is required",
+            "example": true
+          },
+          "schema": {
+            "type": "object",
+            "description": "JSON Schema for the parameter value",
+            "example": { "type": "string", "format": "uuid" }
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the parameter",
+            "example": "The unique order identifier (UUID)"
+          },
+          "example": { "description": "Example value for this parameter" },
+          "examples": {
+            "type": "object",
+            "description": "Named examples (OpenAPI-style, keyed by name with `value` and optional `summary`)"
+          }
+        }
+      },
+      "RequestBodyDef": {
+        "type": "object",
+        "description": "Expected request body definition",
+        "required": ["schema"],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "description": "Expected Content-Type",
+            "default": "application/json",
+            "example": "application/json"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether the request body is required",
+            "default": true,
+            "example": true
+          },
+          "schema": {
+            "type": "object",
+            "description": "JSON Schema for the request body",
+            "example": {
+              "type": "object",
+              "properties": { "quantity": { "type": "integer", "minimum": 1 } },
+              "required": ["quantity"]
+            }
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the request body",
+            "example": "Order confirmation payload with quantity"
+          },
+          "example": { "description": "Example request body value" },
+          "examples": {
+            "type": "object",
+            "description": "Named examples (OpenAPI-style, keyed by name with `value` and optional `summary`)"
+          }
+        }
+      },
+      "ResponseDef": {
+        "type": "object",
+        "description": "Expected response definition for a specific status code",
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "description": "Expected Content-Type of the response",
+            "default": "application/json",
+            "example": "application/json"
+          },
+          "schema": {
+            "type": "object",
+            "description": "JSON Schema for the response body",
+            "example": {
+              "type": "object",
+              "properties": { "order_id": { "type": "string" }, "status": { "type": "string" } },
+              "required": ["order_id", "status"]
+            }
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the response",
+            "example": "Confirmed order with updated status"
+          },
+          "example": { "description": "Example response body value" },
+          "examples": {
+            "type": "object",
+            "description": "Named examples (OpenAPI-style, keyed by name with `value` and optional `summary`)"
+          }
+        }
+      },
+      "RouteCreate": {
+        "type": "object",
+        "description": "Register a new route. The `handler` field is required and determines how\nrequests to this path are fulfilled.\n\nOptional contract fields (`parameters`, `request_body`, `responses`)\nenable schema validation on live traffic.\n",
+        "required": ["method", "path", "handler"],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+            "description": "HTTP method this route handles",
+            "example": "POST"
+          },
+          "path": {
+            "type": "string",
+            "description": "URL path pattern. Must start with `/api/`. May contain `{param}` segments.",
+            "example": "/api/orders/{id}/confirm"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the route",
+            "example": "Confirm an order by ID"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tags for grouping routes in the dynamic Swagger docs",
+            "example": ["Orders"]
+          },
+          "parameters": {
+            "type": "array",
+            "description": "Path, query, and header parameter definitions (OpenAPI-style)",
+            "items": { "$ref": "#/components/schemas/Parameter" }
+          },
+          "request_body": { "$ref": "#/components/schemas/RequestBodyDef" },
+          "responses": {
+            "type": "object",
+            "description": "Response definitions keyed by status code (e.g., `\"200\"`, `\"404\"`)",
+            "additionalProperties": { "$ref": "#/components/schemas/ResponseDef" },
+            "example": {
+              "200": {
+                "content_type": "application/json",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": { "type": "string" },
+                    "status": { "type": "string" }
+                  },
+                  "required": ["order_id", "status"]
+                }
+              }
+            }
+          },
+          "handler": { "$ref": "#/components/schemas/Handler" }
+        }
+      },
+      "RouteUpdate": {
+        "type": "object",
+        "description": "Partial route update. Only fields present in the request body are changed.\nIf `handler` is provided, it fully replaces the existing handler.\n",
+        "properties": {
+          "description": { "type": "string", "example": "Confirm an order (updated)" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["Orders"] },
+          "parameters": { "type": "array", "items": { "$ref": "#/components/schemas/Parameter" } },
+          "request_body": { "$ref": "#/components/schemas/RequestBodyDef" },
+          "responses": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/components/schemas/ResponseDef" }
+          },
+          "handler": { "$ref": "#/components/schemas/Handler" }
+        }
+      },
+      "RouteOut": {
+        "type": "object",
+        "description": "Route as returned by the API (includes server-generated fields)",
+        "required": ["id", "method", "path", "handler", "created_by", "created_at", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Server-generated route ID",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+            "example": "POST"
+          },
+          "path": { "type": "string", "example": "/api/orders/{id}/confirm" },
+          "description": { "type": "string", "example": "Confirm an order by ID" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["Orders"] },
+          "parameters": { "type": "array", "items": { "$ref": "#/components/schemas/Parameter" } },
+          "request_body": { "$ref": "#/components/schemas/RequestBodyDef" },
+          "responses": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/components/schemas/ResponseDef" }
+          },
+          "handler": { "$ref": "#/components/schemas/Handler" },
+          "created_by": {
+            "type": "string",
+            "description": "User who created the route",
+            "example": "user-123"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T10:30:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T10:30:00Z"
+          }
+        }
+      }
+    }
+  }
+}

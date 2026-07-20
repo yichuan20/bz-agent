@@ -1,7 +1,7 @@
 import { ArrowUpIcon } from '@phosphor-icons/react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
-import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
+import { MODE_COLORS, ModeIconSvg } from '#/components/ModeIconSvg';
 import type { AgentMode } from '#/lib/agentModes';
 
 export const Route = createFileRoute('/_app/')({
@@ -9,10 +9,10 @@ export const Route = createFileRoute('/_app/')({
 });
 
 const MODE_PILLS: { mode: AgentMode; label: string; icon: string }[] = [
-  { mode: 'general', label: 'General', icon: 'chat'     },
-  { mode: 'widget',  label: 'Widget',  icon: 'canvas'   },
-  { mode: 'worker',  label: 'Worker',  icon: 'document' },
-  { mode: 'coder',   label: 'Coder',   icon: 'code'     },
+  { mode: 'general', label: 'General', icon: 'chat' },
+  { mode: 'widget', label: 'Widget', icon: 'canvas' },
+  { mode: 'worker', label: 'Worker', icon: 'document' },
+  { mode: 'coder', label: 'Coder', icon: 'code' },
 ];
 
 function getGreeting() {
@@ -25,6 +25,7 @@ function getGreeting() {
 function Home() {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
+  const [selectedMode, setSelectedMode] = useState<AgentMode>('general');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -33,12 +34,9 @@ function Home() {
     e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
   }
 
-  function startMode(mode: AgentMode) {
+  function startSession() {
     if (input.trim()) sessionStorage.setItem('agent:pendingMessage', input.trim());
-    void navigate({ to: '/agent', search: {} as never });
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('bz:start-new-session', { detail: { mode } }));
-    }, 80);
+    void navigate({ to: '/agent', search: { mode: selectedMode, isNew: true } as never });
   }
 
   return (
@@ -55,7 +53,10 @@ function Home() {
             rows={1}
             onChange={handleInput}
             onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startMode('general'); }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                startSession();
+              }
             }}
           />
           <div className="agent-home-input-bar">
@@ -64,9 +65,9 @@ function Home() {
                 <button
                   key={mode}
                   type="button"
-                  className="agent-home-mode-pill"
+                  className={`agent-home-mode-pill${selectedMode === mode ? ' agent-home-mode-pill--active' : ''}`}
                   style={{ color: MODE_COLORS[icon] }}
-                  onClick={() => startMode(mode)}
+                  onClick={() => setSelectedMode(mode)}
                 >
                   <ModeIconSvg iconKey={icon} size={13} />
                   {label}
@@ -77,7 +78,7 @@ function Home() {
               type="button"
               className={`agent-home-send${input.trim() ? ' agent-home-send--active' : ''}`}
               disabled={!input.trim()}
-              onClick={() => startMode('general')}
+              onClick={startSession}
             >
               <ArrowUpIcon size={14} weight="bold" />
             </button>

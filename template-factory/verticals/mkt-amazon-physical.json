@@ -1,0 +1,13 @@
+{
+  "id": "mkt-amazon-physical",
+  "name": "Physical Goods Store",
+  "description": "E-commerce store for physical products — product catalog, category browse, and product detail pages.",
+  "tags": ["ecommerce", "retail", "marketing", "shop"],
+  "text_replacements": [
+    { "from": "Amazon", "to": "Shop" },
+    { "from": "Prime", "to": "Members" },
+    { "from": "Kindle", "to": "Rewards" },
+    { "from": "Add to Cart", "to": "Add to Cart" },
+    { "from": "Buy Now", "to": "Buy Now" }
+  ]
+}

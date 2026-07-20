@@ -1,105 +1,105 @@
 {
-	"type": "session",
-	"sessionId": "this-is-just-a-random-id-you-whater",
-	"commands": [
-		{ "name": "help", "description": "Show available commands" },
-		{
-			"name": "clear",
-			"description": "Clear conversation history",
-			"aliases": ["reset"]
-		},
-		{ "name": "skills", "description": "List or reload available skills" },
-		{
-			"name": "validate-app",
-			"description": "(skill) Validates a BoltzHub app build against a standard checklist. Inspects the workspace and returns a pass/fail report. Use when the user runs /validate-app or asks to validate their app before pushing."
-		},
-		{
-			"name": "boltzhub",
-			"description": "(skill) Use when building a new app, or interacting with BoltzHub apps, databases, files, backend code or workflow. Also invoke for: Dynas, Dpyes, appstore, call_bzapi, get_bzapi_spec, dynas tables, records, Python execution, BoltzHub API, .bzhub, app_config.json, AI tools, pebble tools, agent tools."
-		},
-		{
-			"name": "backend-architect",
-			"description": "(skill) Analyze a frontend app's codebase — routes, components, mock data, types, and UI patterns — to design a complete database architecture and app-level API contract for its backend. Use when the user wants to initialize, design, or plan a backend for an app that currently runs on mock/static data, or when they ask to design a database schema, API structure, or backend architecture for their app. Also use when the user says things like \"design my backend\", \"what tables do I need\", \"plan the API\", or \"I need a backend for this app\"."
-		},
-		{
-			"name": "skill-creator",
-			"description": "(skill) Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations."
-		},
-		{
-			"name": "frontend-design",
-			"description": "(skill) Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics."
-		},
-		{
-			"name": "app-from-pro-template",
-			"description": "(skill) Migrates an existing React app into the BZ app template (TanStack Router, TanStack Query, Tailwind v4, Dynas, OAuth). Use when the user wants to convert, migrate, or port a source React app into the BZ/BoltzHub pro template structure. Covers all 8 phases: source app audit, project setup, file copying, import fixes, route tree mapping, component wiring + React Router → TanStack Router conversion, design tokens, Dynas data layer (seed files), and connecting UI to Dynas."
-		},
-		{ "name": "model", "description": "Show or switch the current model" },
-		{ "name": "model-thinking", "description": "Toggle or set thinking mode" },
-		{
-			"name": "live-learn",
-			"description": "Toggle the live-learning memory system (auto-extraction and retrieval)"
-		},
-		{
-			"name": "compact",
-			"description": "Summarize conversation context to free up token space"
-		},
-		{ "name": "resume", "description": "Resume a previous conversation" }
-	],
-	"modes": ["default", "plan", "yolo"],
-	"isLoggedIn": true,
-	"isCreator": true,
-	"username": "jinli",
-	"environment": "prod",
-	"version": "0.2.9",
-	"model": {
-		"name": "bz-model-qwen3.6-35b-a3b",
-		"displayName": "Qwen3.6 35B A3B",
-		"maxTokens": 16384,
-		"budgetTokens": 8192,
-		"contextWindow": 262144,
-		"tokenScalingFactor": 0.1,
-		"vendor": "boltzbit"
-	},
-	"workingDir": "/Users/jinli",
-	"messages": [
-		{ "role": "user", "content": "hi" },
-		{
-			"role": "user",
-			"content": "<system-reminder>\nThe following skills are available for use with the Skill tool:\n\n- validate-app: Validates a BoltzHub app build against a standard checklist. Inspects the workspace and returns a pass/fail report. Use when the user runs /validate-app or asks to validate their app before pushing.\n- boltzhub: Use when building a new app, or interacting with BoltzHub apps, databases, files, backend code or workflow. Also invoke for: Dynas, Dpyes, appstore, call_bzapi, get_bzapi_spec, dynas tables, records, Python execution, BoltzHub API, .bzhub, app_config.json, AI tools, pebble tools, agent tools.\n- backend-architect: Analyze a frontend app's codebase — routes, components, mock data, types, and UI patterns — to design a complete database architecture and app-level API contract for its backend. Use when the user wants to initialize, design, or plan a backend for an app that currently runs on mock/static data, or when they ask to design a database schema, API structure, or backend architecture for their app. Also use when the user says things like \"design my backend\", \"what tables do I need\", \"plan the API\", or \"I need a backend for this app\".\n- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.\n- frontend-design: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.\n- app-from-pro-template: Migrates an existing React app into the BZ app template (TanStack Router, TanStack Query, Tailwind v4, Dynas, OAuth). Use when the user wants to convert, migrate, or port a source React app into the BZ/BoltzHub pro template structure. Covers all 8 phases: source app audit, project setup, file copying, import fixes, route tree mapping, component wiring + React Router → TanStack Router conversion, design tokens, Dynas data layer (seed files), and connecting UI to Dynas.\n</system-reminder>",
-			"isMeta": true
-		},
-		{
-			"role": "user",
-			"content": "<system-reminder>\nAvailable agent types for the Agent tool:\n\n- general-purpose: General-purpose agent for researching questions, searching code, and executing multi-step tasks.\n</system-reminder>",
-			"isMeta": true
-		},
-		{
-			"role": "assistant",
-			"content": [
-				{
-					"signature": "2bcbaa6c-1498-4bed-ba68-d9337c224b0a",
-					"thinking": "The user said \"hi\". This is a simple greeting. I should respond politely and ask how I can help them with their software engineering tasks.",
-					"type": "thinking"
-				},
-				{
-					"text": "Hello! How can I help you with your project today?",
-					"type": "text"
-				}
-			],
-			"usage": {
-				"bzTokens": 920,
-				"cacheCreationInputTokens": null,
-				"cacheReadInputTokens": 0,
-				"inputTokens": 8924,
-				"interactionCount": 1,
-				"outputTokens": 46
-			},
-			"stopReason": "endTurn"
-		},
-		{
-			"role": "user",
-			"content": "<system-reminder>\nYOLO mode is active. All tool calls are auto-allowed without permission prompts. You MUST still exercise good judgment: never run destructive, harmful, or irreversible operations (e.g. rm -rf, DROP TABLE, force-push, deleting branches) unless the user explicitly asked for them. Auto-allowed does not mean reckless.\n</system-reminder>",
-			"isMeta": true
-		}
-	]
+  "type": "session",
+  "sessionId": "this-is-just-a-random-id-you-whater",
+  "commands": [
+    { "name": "help", "description": "Show available commands" },
+    {
+      "name": "clear",
+      "description": "Clear conversation history",
+      "aliases": ["reset"]
+    },
+    { "name": "skills", "description": "List or reload available skills" },
+    {
+      "name": "validate-app",
+      "description": "(skill) Validates a BoltzHub app build against a standard checklist. Inspects the workspace and returns a pass/fail report. Use when the user runs /validate-app or asks to validate their app before pushing."
+    },
+    {
+      "name": "boltzhub",
+      "description": "(skill) Use when building a new app, or interacting with BoltzHub apps, databases, files, backend code or workflow. Also invoke for: Dynas, Dpyes, appstore, call_bzapi, get_bzapi_spec, dynas tables, records, Python execution, BoltzHub API, .bzhub, app_config.json, AI tools, pebble tools, agent tools."
+    },
+    {
+      "name": "backend-architect",
+      "description": "(skill) Analyze a frontend app's codebase — routes, components, mock data, types, and UI patterns — to design a complete database architecture and app-level API contract for its backend. Use when the user wants to initialize, design, or plan a backend for an app that currently runs on mock/static data, or when they ask to design a database schema, API structure, or backend architecture for their app. Also use when the user says things like \"design my backend\", \"what tables do I need\", \"plan the API\", or \"I need a backend for this app\"."
+    },
+    {
+      "name": "skill-creator",
+      "description": "(skill) Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations."
+    },
+    {
+      "name": "frontend-design",
+      "description": "(skill) Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics."
+    },
+    {
+      "name": "app-from-pro-template",
+      "description": "(skill) Migrates an existing React app into the BZ app template (TanStack Router, TanStack Query, Tailwind v4, Dynas, OAuth). Use when the user wants to convert, migrate, or port a source React app into the BZ/BoltzHub pro template structure. Covers all 8 phases: source app audit, project setup, file copying, import fixes, route tree mapping, component wiring + React Router → TanStack Router conversion, design tokens, Dynas data layer (seed files), and connecting UI to Dynas."
+    },
+    { "name": "model", "description": "Show or switch the current model" },
+    { "name": "model-thinking", "description": "Toggle or set thinking mode" },
+    {
+      "name": "live-learn",
+      "description": "Toggle the live-learning memory system (auto-extraction and retrieval)"
+    },
+    {
+      "name": "compact",
+      "description": "Summarize conversation context to free up token space"
+    },
+    { "name": "resume", "description": "Resume a previous conversation" }
+  ],
+  "modes": ["default", "plan", "yolo"],
+  "isLoggedIn": true,
+  "isCreator": true,
+  "username": "jinli",
+  "environment": "prod",
+  "version": "0.2.9",
+  "model": {
+    "name": "bz-model-qwen3.6-35b-a3b",
+    "displayName": "Qwen3.6 35B A3B",
+    "maxTokens": 16384,
+    "budgetTokens": 8192,
+    "contextWindow": 262144,
+    "tokenScalingFactor": 0.1,
+    "vendor": "boltzbit"
+  },
+  "workingDir": "/Users/jinli",
+  "messages": [
+    { "role": "user", "content": "hi" },
+    {
+      "role": "user",
+      "content": "<system-reminder>\nThe following skills are available for use with the Skill tool:\n\n- validate-app: Validates a BoltzHub app build against a standard checklist. Inspects the workspace and returns a pass/fail report. Use when the user runs /validate-app or asks to validate their app before pushing.\n- boltzhub: Use when building a new app, or interacting with BoltzHub apps, databases, files, backend code or workflow. Also invoke for: Dynas, Dpyes, appstore, call_bzapi, get_bzapi_spec, dynas tables, records, Python execution, BoltzHub API, .bzhub, app_config.json, AI tools, pebble tools, agent tools.\n- backend-architect: Analyze a frontend app's codebase — routes, components, mock data, types, and UI patterns — to design a complete database architecture and app-level API contract for its backend. Use when the user wants to initialize, design, or plan a backend for an app that currently runs on mock/static data, or when they ask to design a database schema, API structure, or backend architecture for their app. Also use when the user says things like \"design my backend\", \"what tables do I need\", \"plan the API\", or \"I need a backend for this app\".\n- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.\n- frontend-design: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.\n- app-from-pro-template: Migrates an existing React app into the BZ app template (TanStack Router, TanStack Query, Tailwind v4, Dynas, OAuth). Use when the user wants to convert, migrate, or port a source React app into the BZ/BoltzHub pro template structure. Covers all 8 phases: source app audit, project setup, file copying, import fixes, route tree mapping, component wiring + React Router → TanStack Router conversion, design tokens, Dynas data layer (seed files), and connecting UI to Dynas.\n</system-reminder>",
+      "isMeta": true
+    },
+    {
+      "role": "user",
+      "content": "<system-reminder>\nAvailable agent types for the Agent tool:\n\n- general-purpose: General-purpose agent for researching questions, searching code, and executing multi-step tasks.\n</system-reminder>",
+      "isMeta": true
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "signature": "2bcbaa6c-1498-4bed-ba68-d9337c224b0a",
+          "thinking": "The user said \"hi\". This is a simple greeting. I should respond politely and ask how I can help them with their software engineering tasks.",
+          "type": "thinking"
+        },
+        {
+          "text": "Hello! How can I help you with your project today?",
+          "type": "text"
+        }
+      ],
+      "usage": {
+        "bzTokens": 920,
+        "cacheCreationInputTokens": null,
+        "cacheReadInputTokens": 0,
+        "inputTokens": 8924,
+        "interactionCount": 1,
+        "outputTokens": 46
+      },
+      "stopReason": "endTurn"
+    },
+    {
+      "role": "user",
+      "content": "<system-reminder>\nYOLO mode is active. All tool calls are auto-allowed without permission prompts. You MUST still exercise good judgment: never run destructive, harmful, or irreversible operations (e.g. rm -rf, DROP TABLE, force-push, deleting branches) unless the user explicitly asked for them. Auto-allowed does not mean reckless.\n</system-reminder>",
+      "isMeta": true
+    }
+  ]
 }

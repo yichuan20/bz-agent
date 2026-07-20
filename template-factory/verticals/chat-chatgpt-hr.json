@@ -1,0 +1,14 @@
+{
+  "id": "chat-chatgpt-hr",
+  "name": "HR Onboarding AI",
+  "description": "AI assistant for HR and onboarding — answer employee questions, generate policies, and guide new hires.",
+  "tags": ["hr", "onboarding", "ai", "chatbot"],
+  "text_replacements": [
+    { "from": "ChatGPT", "to": "HR Assistant" },
+    { "from": "GPT", "to": "HR AI" },
+    { "from": "Explore GPTs", "to": "HR Tools" },
+    { "from": "Apps", "to": "HR Modules" },
+    { "from": "Images", "to": "Org Charts" },
+    { "from": "Deep search", "to": "Policy Search" }
+  ]
+}

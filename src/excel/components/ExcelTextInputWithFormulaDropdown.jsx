@@ -1,5 +1,5 @@
-import { FUNCTION_TO_DESCRIPTION, SUPPORTED_FUNCTIONS } from '../utils/excelModelsStub';
 import { useRef, useState } from 'react';
+import { FUNCTION_TO_DESCRIPTION, SUPPORTED_FUNCTIONS } from '../utils/excelModelsStub';
 
 const splitByCommaAndBrackets = str => {
   if (typeof str !== 'string') return [`${str}`];
@@ -13,14 +13,21 @@ const COLORS = ['cyan', 'magenta', 'brown', 'red', 'purple', 'green', 'blue', 'o
 const colToIndex = col => col.split('').reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0);
 const indexToCol = n => {
   let col = '';
-  while (n > 0) { n--; col = String.fromCharCode(65 + (n % 26)) + col; n = Math.floor(n / 26); }
+  while (n > 0) {
+    n--;
+    col = String.fromCharCode(65 + (n % 26)) + col;
+    n = Math.floor(n / 26);
+  }
   return col;
 };
 const expandCellRange = range => {
   const [start, end] = range.split(':');
-  const startCol = start.match(/^[A-Z]+/)[0], endCol = end.match(/^[A-Z]+/)[0];
-  const startRow = parseInt(start.match(/[1-9]\d*$/)[0]), endRow = parseInt(end.match(/[1-9]\d*$/)[0]);
-  const c0 = colToIndex(startCol), c1 = colToIndex(endCol);
+  const startCol = start.match(/^[A-Z]+/)[0],
+    endCol = end.match(/^[A-Z]+/)[0];
+  const startRow = parseInt(start.match(/[1-9]\d*$/)[0]),
+    endRow = parseInt(end.match(/[1-9]\d*$/)[0]);
+  const c0 = colToIndex(startCol),
+    c1 = colToIndex(endCol);
   const cells = [];
   for (let r = startRow; r <= endRow; r++)
     for (let c = c0; c <= c1; c++) cells.push(`${indexToCol(c)}${r}`);
@@ -37,8 +44,10 @@ export const getCellLocationToColorMap = str => {
     const t = chunk.trim();
     if (cellRange.test(t)) {
       const color = usedColors.pop() || 'black';
-      result[t] = color;                           // color the 'B2:B21' text chunk
-      expandCellRange(t).forEach(cell => { result[cell] = color; }); // color every cell on canvas
+      result[t] = color; // color the 'B2:B21' text chunk
+      expandCellRange(t).forEach(cell => {
+        result[cell] = color;
+      }); // color every cell on canvas
     } else if (cellAddr.test(t)) {
       result[t] = usedColors.pop() || 'black';
     }
@@ -83,19 +92,23 @@ const ExcelTextInputWithFormulaDropdown = ({
   /* ── dropdown logic ── */
   let filteredFunctionNames = [];
   if (value?.[0] === '=') {
-    filteredFunctionNames = SUPPORTED_FUNCTIONS
-      ?.map(f => `=${f}(`)
-      ?.filter(opt => opt.toLowerCase().startsWith(value.toLowerCase()));
+    filteredFunctionNames = SUPPORTED_FUNCTIONS?.map(f => `=${f}(`)?.filter(opt =>
+      opt.toLowerCase().startsWith(value.toLowerCase()),
+    );
   }
 
   const isUserAboutToTypeArguments = typeof value === 'string' && /^=.*\(/.test(value);
-  const hasUserClosedBracket      = typeof value === 'string' && /^=.*\)/.test(value);
+  const hasUserClosedBracket = typeof value === 'string' && /^=.*\)/.test(value);
 
   const handleArrowKeysAndEnter = e => {
     if (isUserAboutToTypeArguments || !filteredFunctionNames.length || hasUserClosedBracket) return;
-    if (CONTROL_KEYS.includes(e.key)) { e.preventDefault(); e.stopPropagation(); }
-    if (e.key === 'ArrowDown') setSelectedOptionIndex(i => Math.min(i + 1, filteredFunctionNames.length - 1));
-    if (e.key === 'ArrowUp')   setSelectedOptionIndex(i => Math.max(i - 1, -1));
+    if (CONTROL_KEYS.includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (e.key === 'ArrowDown')
+      setSelectedOptionIndex(i => Math.min(i + 1, filteredFunctionNames.length - 1));
+    if (e.key === 'ArrowUp') setSelectedOptionIndex(i => Math.max(i - 1, -1));
     if (e.key === 'Enter' && selectedOptionIndex !== -1) {
       onChangeValue(filteredFunctionNames[selectedOptionIndex]);
       setSelectedOptionIndex(-1);
@@ -107,7 +120,14 @@ const ExcelTextInputWithFormulaDropdown = ({
     if (isUserAboutToTypeArguments) {
       const funcName = value.match(/^=(.*)\(/)?.[1];
       dropdownContent = (
-        <div style={{ padding: '4px 8px', fontSize: 12, fontFamily: 'Arial', color: 'var(--text-secondary)' }}>
+        <div
+          style={{
+            padding: '4px 8px',
+            fontSize: 12,
+            fontFamily: 'Arial',
+            color: 'var(--text-secondary)',
+          }}
+        >
           ={FUNCTION_TO_DESCRIPTION?.[funcName] || funcName}
         </div>
       );
@@ -116,11 +136,18 @@ const ExcelTextInputWithFormulaDropdown = ({
         <div
           key={i}
           style={{
-            padding: '4px 8px', fontSize: 12, fontFamily: 'Arial',
-            cursor: 'pointer', color: 'var(--text-primary)',
+            padding: '4px 8px',
+            fontSize: 12,
+            fontFamily: 'Arial',
+            cursor: 'pointer',
+            color: 'var(--text-primary)',
             background: selectedOptionIndex === i ? 'var(--bg-hover)' : 'transparent',
           }}
-          onMouseDown={e => { e.preventDefault(); onChangeValue(opt); inputRef.current?.focus(); }}
+          onMouseDown={e => {
+            e.preventDefault();
+            onChangeValue(opt);
+            inputRef.current?.focus();
+          }}
         >
           {opt}
         </div>
@@ -147,7 +174,16 @@ const ExcelTextInputWithFormulaDropdown = ({
        * All other children are position:absolute so without this the
        * container collapses to minWidth regardless of formula length.
        */}
-      <span aria-hidden style={{ ...SHARED, visibility: 'hidden', display: 'block', whiteSpace: 'pre', minHeight: 22 }}>
+      <span
+        aria-hidden
+        style={{
+          ...SHARED,
+          visibility: 'hidden',
+          display: 'block',
+          whiteSpace: 'pre',
+          minHeight: 22,
+        }}
+      >
         {value || ' '}
       </span>
       {/*
@@ -159,6 +195,7 @@ const ExcelTextInputWithFormulaDropdown = ({
         disabled={isDisabled}
         value={value}
         placeholder={placeholder}
+        // biome-ignore lint/a11y/noAutofocus: intentional UX for formula bar
         autoFocus={autoFocus}
         spellCheck={false}
         autoComplete="off"
@@ -172,7 +209,10 @@ const ExcelTextInputWithFormulaDropdown = ({
         style={{
           ...SHARED,
           position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           width: '100%',
           height: '100%',
           paddingTop: 0,
@@ -197,7 +237,10 @@ const ExcelTextInputWithFormulaDropdown = ({
         style={{
           ...SHARED,
           position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           width: '100%',
           height: '100%',
           paddingTop: 0,
@@ -211,7 +254,10 @@ const ExcelTextInputWithFormulaDropdown = ({
         }}
       >
         {splitByCommaAndBrackets(value).map((chunk, i) => (
-          <span key={i} style={{ color: cellLocationToColor[chunk?.trim()] || 'var(--text-primary)' }}>
+          <span
+            key={i}
+            style={{ color: cellLocationToColor[chunk?.trim()] || 'var(--text-primary)' }}
+          >
             {chunk}
           </span>
         ))}
@@ -219,19 +265,21 @@ const ExcelTextInputWithFormulaDropdown = ({
 
       {/* Dropdown */}
       {showDropdown && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          minWidth: minW,
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: 4,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          zIndex: 10000,
-          maxHeight: 200,
-          overflowY: 'auto',
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            minWidth: minW,
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 4,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 10000,
+            maxHeight: 200,
+            overflowY: 'auto',
+          }}
+        >
           {dropdownContent}
         </div>
       )}

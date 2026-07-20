@@ -1,0 +1,15 @@
+{
+  "id": "chat-chatgpt-sales",
+  "name": "Sales Assistant AI",
+  "description": "AI-powered sales assistant — pitch generation, objection handling, and follow-up drafting.",
+  "tags": ["sales", "ai", "chatbot", "crm"],
+  "text_replacements": [
+    { "from": "ChatGPT", "to": "SalesAI" },
+    { "from": "GPT", "to": "Sales AI" },
+    { "from": "Explore GPTs", "to": "Sales Playbooks" },
+    { "from": "Apps", "to": "Sales Tools" },
+    { "from": "Images", "to": "Pitch Decks" },
+    { "from": "Deep search", "to": "Prospect Research" },
+    { "from": "Codex", "to": "Proposals" }
+  ]
+}

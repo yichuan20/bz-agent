@@ -16,28 +16,30 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import DocAreaRaw from './components/DocArea';
-import { getDocFromBlocks as _gdfb, getBlocksFromDoc as _gbfd } from './utils/word-coversion';
 import WordDocToolbar from './components/WordDocToolbar';
 import {
-  getSelectionStyle,
-  toggleStyle,
-  addStyleField,
-  setAlignment,
-  setLineSpacing,
-  setHeading,
   addBullet,
-  removeBullet,
   addNumberedList,
-  removeNumberedList,
-  increaseIndent,
+  addStyleField,
   decreaseIndent,
-  isCursorInTable,
-  insertTable,
+  getSelectionStyle,
+  increaseIndent,
   insertImage,
+  insertTable,
+  isCursorInTable,
+  removeBullet,
+  removeNumberedList,
+  setAlignment,
+  setHeading,
+  setLineSpacing,
+  toggleStyle,
 } from './utils/docUtils';
 import { VIEW_W } from './utils/word-constants';
+import { getBlocksFromDoc as _gbfd, getDocFromBlocks as _gdfb } from './utils/word-coversion';
+
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export type { Block, StyleRange } from '../components/BzDocEditor';
@@ -52,7 +54,7 @@ function loadImageDimensions(url: string): Promise<{ width: number; height: numb
       let w = img.naturalWidth;
       let h = img.naturalHeight;
       if (w > TEXT_COL_WIDTH_PX) {
-        h = Math.round(h * TEXT_COL_WIDTH_PX / w);
+        h = Math.round((h * TEXT_COL_WIDTH_PX) / w);
         w = TEXT_COL_WIDTH_PX;
       }
       resolve({ width: w, height: h });
@@ -72,22 +74,31 @@ const getBlocksFromDoc = _gbfd as (doc: any) => { blocks: any[] };
 export { getDocFromBlocks, getBlocksFromDoc };
 
 interface WordDocEditorProps {
-  blocks:          import('../components/BzDocEditor').Block[];
-  onChange?:       (blocks: import('../components/BzDocEditor').Block[]) => void;
+  blocks: import('../components/BzDocEditor').Block[];
+  onChange?: (blocks: import('../components/BzDocEditor').Block[]) => void;
   onCursorChange?: (cursor: { selStart: number; selEnd: number }) => void;
-  initialCursor?:  { selStart: number; selEnd: number };
-  defaultFont?:    string;
-  readOnly?:       boolean;
-  className?:      string;
-  style?:          React.CSSProperties;
+  initialCursor?: { selStart: number; selEnd: number };
+  defaultFont?: string;
+  readOnly?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
-export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor, defaultFont, readOnly = false, className, style }: WordDocEditorProps) {
+export function WordDocEditor({
+  blocks,
+  onChange,
+  onCursorChange,
+  initialCursor,
+  defaultFont,
+  readOnly = false,
+  className,
+  style,
+}: WordDocEditorProps) {
   const [doc, setDoc] = useState<OfficeDoc>(() => {
     const d = getDocFromBlocks(blocks ?? []) as OfficeDoc;
     // Always ensure selStart/selEnd are numeric — drawCaret check uses === so undefined breaks it
     d.selStart = initialCursor?.selStart ?? d.selStart ?? 0;
-    d.selEnd   = initialCursor?.selEnd   ?? d.selEnd   ?? 0;
+    d.selEnd = initialCursor?.selEnd ?? d.selEnd ?? 0;
     return d;
   });
   const prevCursorRef = useRef<{ selStart: number; selEnd: number } | null>(null);
@@ -106,30 +117,34 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
   // (it would cause blocks→doc round-trip that resets the cursor position).
   const lastContentRef = useRef<string>('');
 
-  const applyDoc = useCallback((newDoc: OfficeDoc) => {
-    setDoc(newDoc);
-    // Fire onCursorChange whenever selStart/selEnd changes (cursor move or selection).
-    if (onCursorChange) {
-      const s = newDoc.selStart ?? 0;
-      const e = newDoc.selEnd   ?? 0;
-      const prev = prevCursorRef.current;
-      if (!prev || prev.selStart !== s || prev.selEnd !== e) {
-        prevCursorRef.current = { selStart: s, selEnd: e };
-        onCursorChange({ selStart: s, selEnd: e });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: applyDoc excluded from deps intentionally
+  const applyDoc = useCallback(
+    (newDoc: OfficeDoc) => {
+      setDoc(newDoc);
+      // Fire onCursorChange whenever selStart/selEnd changes (cursor move or selection).
+      if (onCursorChange) {
+        const s = newDoc.selStart ?? 0;
+        const e = newDoc.selEnd ?? 0;
+        const prev = prevCursorRef.current;
+        if (!prev || prev.selStart !== s || prev.selEnd !== e) {
+          prevCursorRef.current = { selStart: s, selEnd: e };
+          onCursorChange({ selStart: s, selEnd: e });
+        }
       }
-    }
-    if (readOnly || !onChange) return;
-    // Build a lightweight fingerprint of the document content (text + styles).
-    // JSON.stringify on the full styles array is the safest comparison.
-    const fingerprint = (newDoc?.text ?? '') + JSON.stringify(newDoc?.styles ?? []);
-    if (fingerprint !== lastContentRef.current) {
-      lastContentRef.current = fingerprint;
-      const result = getBlocksFromDoc(newDoc);
-      const newBlocks = result.blocks ?? [];
-      prevBlocksRef.current = newBlocks;
-      onChange(newBlocks);
-    }
-  }, [onChange, readOnly]);
+      if (readOnly || !onChange) return;
+      // Build a lightweight fingerprint of the document content (text + styles).
+      // JSON.stringify on the full styles array is the safest comparison.
+      const fingerprint = (newDoc?.text ?? '') + JSON.stringify(newDoc?.styles ?? []);
+      if (fingerprint !== lastContentRef.current) {
+        lastContentRef.current = fingerprint;
+        const result = getBlocksFromDoc(newDoc);
+        const newBlocks = result.blocks ?? [];
+        prevBlocksRef.current = newBlocks;
+        onChange(newBlocks);
+      }
+    },
+    [onChange, readOnly],
+  );
 
   // Derive current formatting state from selection for toolbar
   const sel = getSelectionStyle(doc as any);
@@ -142,13 +157,18 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
   })();
 
   // Toolbar command helpers — each applies a docUtils transform then propagates
-  const cmd = useCallback((fn: (d: any) => any) => {
-    if (readOnly) return;
-    applyDoc(fn(doc));
-  }, [doc, applyDoc, readOnly]);
+  const cmd = useCallback(
+    (fn: (d: any) => any) => {
+      if (readOnly) return;
+      applyDoc(fn(doc));
+    },
+    [doc, applyDoc, readOnly],
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, ...style }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, ...style }}
+    >
       {!readOnly && (
         <WordDocToolbar
           isBold={sel.isBold}
@@ -176,11 +196,15 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
           onSetAlignment={(align: string) => cmd(d => setAlignment(d, align))}
           onSetLineSpacing={(spacing: number) => cmd(d => setLineSpacing(d, spacing))}
           onSetHeading={(level: string) => cmd(d => setHeading(d, level))}
-          onToggleBullet={() => cmd(d => sel.isBullet ? removeBullet(d) : addBullet(d))}
-          onToggleNumbered={() => cmd(d => sel.isNumbered ? removeNumberedList(d) : addNumberedList(d))}
+          onToggleBullet={() => cmd(d => (sel.isBullet ? removeBullet(d) : addBullet(d)))}
+          onToggleNumbered={() =>
+            cmd(d => (sel.isNumbered ? removeNumberedList(d) : addNumberedList(d)))
+          }
           onIncreaseIndent={() => cmd(d => increaseIndent(d))}
           onDecreaseIndent={() => cmd(d => decreaseIndent(d))}
-          onInsertTable={(rows: number, cols: number) => cmd(d => insertTable({ doc: d, rows, cols }))}
+          onInsertTable={(rows: number, cols: number) =>
+            cmd(d => insertTable({ doc: d, rows, cols }))
+          }
           onUploadImage={async (base64: string) => {
             const { width, height } = await loadImageDimensions(base64);
             cmd(d => insertImage({ doc: d, imageUrl: base64, width, height }));
@@ -194,11 +218,7 @@ export function WordDocEditor({ blocks, onChange, onCursorChange, initialCursor,
       {/* z-index: 0 keeps DocArea below the toolbar stacking context (z-index: 50)
           so toolbar dropdown menus appear above the canvas */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative', zIndex: 0 }}>
-        <DocArea
-          className={className}
-          doc={doc}
-          onDocChange={applyDoc}
-        />
+        <DocArea className={className} doc={doc} onDocChange={applyDoc} />
       </div>
     </div>
   );

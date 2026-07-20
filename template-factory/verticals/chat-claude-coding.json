@@ -1,0 +1,15 @@
+{
+  "id": "chat-claude-coding",
+  "name": "Coding Assistant AI",
+  "description": "AI coding assistant — code generation, debugging, code review, and technical documentation.",
+  "tags": ["coding", "ai", "chatbot", "developer"],
+  "text_replacements": [
+    { "from": "Projects", "to": "Repositories" },
+    { "from": "Project", "to": "Repository" },
+    { "from": "Artifacts", "to": "Code Snippets" },
+    { "from": "Artifact", "to": "Snippet" },
+    { "from": "Chats", "to": "Sessions" },
+    { "from": "New chat", "to": "New Session" },
+    { "from": "Claude", "to": "DevAI" }
+  ]
+}

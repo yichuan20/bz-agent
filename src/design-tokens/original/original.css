@@ -40,8 +40,8 @@
   --motion-transition: all 0.2s ease;
 
   /* Typography */
-  --font-display: 'DM Sans', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
   --font-size-xs: 12px;
   --font-size-sm: 14px;
   --font-size-md: 16px;
@@ -90,8 +90,8 @@
   --motion-transition: all 0.2s ease;
 
   /* Typography */
-  --font-display: 'DM Sans', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
   --font-size-xs: 12px;
   --font-size-sm: 14px;
   --font-size-md: 16px;
@@ -107,10 +107,10 @@
 
 [data-theme="original-hc"] {
   /* High contrast version of original theme */
-  --color-bg-primary: #FFFFFF;
-  --color-bg-secondary: #FFFFFF;
-  --color-bg-tertiary: #F5F5F5;
-  --color-bg-elevated: #FFFFFF;
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f5f5f5;
+  --color-bg-elevated: #ffffff;
 
   --color-text-primary: #000000;
   --color-text-secondary: #000000;
@@ -119,13 +119,13 @@
   --color-border-primary: #000000;
   --color-border-secondary: #000000;
 
-  --color-accent-1: #0066CC;
+  --color-accent-1: #0066cc;
   --color-accent-2: #008855;
-  --color-accent-3: #CC0000;
-  --color-accent-4: #CC8800;
+  --color-accent-3: #cc0000;
+  --color-accent-4: #cc8800;
 
   --shadow-card: 0 0 0 2px #000000;
-  --shadow-hover: 0 0 0 3px #0066CC;
+  --shadow-hover: 0 0 0 3px #0066cc;
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -133,8 +133,8 @@
 
   --motion-transition: all 0.15s ease;
 
-  --font-display: 'DM Sans', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
   --font-size-xs: 12px;
   --font-size-sm: 14px;
   --font-size-md: 16px;

@@ -1,0 +1,25 @@
+/* bzapp-token-override: warm */
+/* Amber/sand palette — Geist font — rounded radius — spacious density */
+
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap");
+
+@theme {
+  --font-sans: "Geist", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", "Fira Code", Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Warm amber accent — overrides apps that use Tailwind semantic color names */
+  --color-primary: oklch(0.72 0.18 60);
+  --color-primary-foreground: oklch(0.1 0.02 60);
+  --color-accent: oklch(0.82 0.12 70);
+  --color-accent-foreground: oklch(0.2 0.04 60);
+  --color-background: oklch(0.985 0.01 80);
+  --color-muted: oklch(0.94 0.03 75);
+  --color-muted-foreground: oklch(0.5 0.04 60);
+  --color-border: oklch(0.88 0.04 70);
+}

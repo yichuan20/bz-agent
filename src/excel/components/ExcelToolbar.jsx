@@ -1,33 +1,161 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   CURRENCIES,
   DATA_FORMAT_STR_TO_DATA_TYPE,
   SUPPORTED_FUNCTIONS,
 } from '../utils/excelModelsStub';
+import ColorPickerTooltip from './ColorPickerTooltip';
 import {
   ColoredIconButtonBucket,
   IconButton,
   ToolbarContainer,
   VerticalLine,
 } from './ExcelViewSheetArea.styles';
-import { useEffect, useRef, useState } from 'react';
-import ColorPickerTooltip from './ColorPickerTooltip';
 import { CalculateIcon } from './Icons';
 
-export const DraggableToolbarContainer = ({children, $docked, $top, $left, $dragging, style={}, ...p}) => <ToolbarContainer style={{position:$docked?'static':'fixed',top:$docked?undefined:$top,left:$docked?undefined:$left,cursor:$dragging?'grabbing':'grab',zIndex:$docked?98:1000,boxShadow:$docked?'none':'0 8px 32px rgba(0,0,0,0.5)',border:$docked?'none':'1px solid var(--border-default)',borderRadius:$docked?8:10,background:$docked?'var(--bg-secondary)':'var(--bg-elevated,var(--bg-primary))',padding:$docked?'4px 8px':'5px 8px',userSelect:'none',display:'flex',alignItems:'center',gap:2,flexWrap:'nowrap',...style}} {...p}>{children}</ToolbarContainer>;
+export const DraggableToolbarContainer = ({
+  children,
+  $docked,
+  $top,
+  $left,
+  $dragging,
+  style = {},
+  ...p
+}) => (
+  <ToolbarContainer
+    style={{
+      position: $docked ? 'static' : 'fixed',
+      top: $docked ? undefined : $top,
+      left: $docked ? undefined : $left,
+      cursor: $dragging ? 'grabbing' : 'grab',
+      zIndex: $docked ? 98 : 1000,
+      boxShadow: $docked ? 'none' : '0 8px 32px rgba(0,0,0,0.5)',
+      border: $docked ? 'none' : '1px solid var(--border-default)',
+      borderRadius: $docked ? 8 : 10,
+      background: $docked ? 'var(--bg-secondary)' : 'var(--bg-elevated,var(--bg-primary))',
+      padding: $docked ? '4px 8px' : '5px 8px',
+      userSelect: 'none',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      flexWrap: 'nowrap',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </ToolbarContainer>
+);
 
-const DragHandle = ({children, style={}, ...p}) => <div style={{width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--text-tertiary)',cursor:'grab',marginRight:4,flexShrink:0,...style}} {...p}>{children}</div>;
+const DragHandle = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      width: 20,
+      height: 20,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'var(--text-tertiary)',
+      cursor: 'grab',
+      marginRight: 4,
+      flexShrink: 0,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-export const ToolbarButton = ({children, isActive, style={}, ...p}) => <IconButton isActive={isActive} style={{position:'relative',width:26,height:26,color:'var(--text-secondary)',flexShrink:0,...style}} {...p}>{children}</IconButton>;
+export const ToolbarButton = ({ children, isActive, style = {}, ...p }) => (
+  <IconButton
+    isActive={isActive}
+    style={{
+      position: 'relative',
+      width: 26,
+      height: 26,
+      color: 'var(--text-secondary)',
+      flexShrink: 0,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </IconButton>
+);
 
-const TooltipWrapper = ({children, style={}, ...p}) => <div style={{position:'relative',display:'flex',alignItems:'center',...style}} {...p}>{children}</div>;
+const TooltipWrapper = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const CellFormatContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const CellFormatContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const CellFormatTrigger = ({children, $active, style={}, ...p}) => <div style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:4,cursor:'pointer',fontSize:11,color:'var(--text-secondary)',height:26,border:'1px solid var(--border-default,var(--border-primary))',background:'transparent',flexShrink:0,...style}} {...p}>{children}</div>;
+const CellFormatTrigger = ({ children, $active, style = {}, ...p }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '3px 8px',
+      borderRadius: 4,
+      cursor: 'pointer',
+      fontSize: 11,
+      color: 'var(--text-secondary)',
+      height: 26,
+      border: '1px solid var(--border-default,var(--border-primary))',
+      background: 'transparent',
+      flexShrink: 0,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const CellFormatDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:'100%',left:0,minWidth:140,background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:4,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const CellFormatDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      minWidth: 140,
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 4,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const CellFormatItem = ({children, style={}, ...p}) => <div style={{padding:'7px 10px',borderRadius:5,cursor:'pointer',fontSize:12,color:'var(--text-secondary)',...style}} {...p}>{children}</div>;
+const CellFormatItem = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      padding: '7px 10px',
+      borderRadius: 5,
+      cursor: 'pointer',
+      fontSize: 12,
+      color: 'var(--text-secondary)',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
 const ChevronDownIcon = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
@@ -47,15 +175,95 @@ const FONT_FAMILIES = [
   { value: 'Trebuchet MS', label: 'Trebuchet MS' },
 ];
 
-const FontFamilyContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const FontFamilyContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const FontFamilyTrigger = ({children, $active, style={}, ...p}) => <div style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:4,cursor:'pointer',fontSize:11,color:'var(--text-secondary)',minWidth:80,maxWidth:110,height:26,border:'1px solid var(--border-default,var(--border-primary))',background:'transparent',flexShrink:0,...style}} {...p}>{children}</div>;
+const FontFamilyTrigger = ({ children, $active, style = {}, ...p }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '3px 8px',
+      borderRadius: 4,
+      cursor: 'pointer',
+      fontSize: 11,
+      color: 'var(--text-secondary)',
+      minWidth: 80,
+      maxWidth: 110,
+      height: 26,
+      border: '1px solid var(--border-default,var(--border-primary))',
+      background: 'transparent',
+      flexShrink: 0,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FontFamilyLabel = ({children, style={}, ...p}) => <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,...style}} {...p}>{children}</span>;
+const FontFamilyLabel = ({ children, style = {}, ...p }) => (
+  <span
+    style={{
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      flex: 1,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </span>
+);
 
-const FontFamilyDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:'100%',left:0,minWidth:160,maxHeight:220,overflowY:'auto',background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:4,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const FontFamilyDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      minWidth: 160,
+      maxHeight: 220,
+      overflowY: 'auto',
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 4,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FontFamilyItem = ({children, $fontFamily, $selected, style={}, ...p}) => <div style={{padding:'6px 10px',borderRadius:5,cursor:'pointer',fontSize:12,color:$selected?'var(--accent-blue)':'var(--text-secondary)',background:$selected?'color-mix(in srgb,var(--accent-blue) 12%,transparent)':'transparent',fontFamily:$fontFamily,...style}} {...p}>{children}</div>;
+const FontFamilyItem = ({ children, $fontFamily, $selected, style = {}, ...p }) => (
+  <div
+    style={{
+      padding: '6px 10px',
+      borderRadius: 5,
+      cursor: 'pointer',
+      fontSize: 12,
+      color: $selected ? 'var(--accent-blue)' : 'var(--text-secondary)',
+      background: $selected
+        ? 'color-mix(in srgb,var(--accent-blue) 12%,transparent)'
+        : 'transparent',
+      fontFamily: $fontFamily,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
 // Font size options
 const FONT_SIZES = [
@@ -72,13 +280,80 @@ const FONT_SIZES = [
   { value: 400, label: '20' },
 ];
 
-const FontSizeContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const FontSizeContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const FontSizeTrigger = ({children, $active, style={}, ...p}) => <div style={{display:'flex',alignItems:'center',gap:2,padding:'3px 6px',borderRadius:4,cursor:'pointer',fontSize:11,color:'var(--text-secondary)',minWidth:40,height:26,border:'1px solid var(--border-default,var(--border-primary))',background:'transparent',justifyContent:'center',flexShrink:0,...style}} {...p}>{children}</div>;
+const FontSizeTrigger = ({ children, $active, style = {}, ...p }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      padding: '3px 6px',
+      borderRadius: 4,
+      cursor: 'pointer',
+      fontSize: 11,
+      color: 'var(--text-secondary)',
+      minWidth: 40,
+      height: 26,
+      border: '1px solid var(--border-default,var(--border-primary))',
+      background: 'transparent',
+      justifyContent: 'center',
+      flexShrink: 0,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FontSizeDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:'100%',left:0,minWidth:60,maxHeight:200,overflowY:'auto',background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:4,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const FontSizeDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      minWidth: 60,
+      maxHeight: 200,
+      overflowY: 'auto',
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 4,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FontSizeItem = ({children, $selected, style={}, ...p}) => <div style={{padding:'5px 10px',borderRadius:5,cursor:'pointer',fontSize:12,color:$selected?'var(--accent-blue)':'var(--text-secondary)',background:$selected?'color-mix(in srgb,var(--accent-blue) 12%,transparent)':'transparent',textAlign:'center',...style}} {...p}>{children}</div>;
+const FontSizeItem = ({ children, $selected, style = {}, ...p }) => (
+  <div
+    style={{
+      padding: '5px 10px',
+      borderRadius: 5,
+      cursor: 'pointer',
+      fontSize: 12,
+      color: $selected ? 'var(--accent-blue)' : 'var(--text-secondary)',
+      background: $selected
+        ? 'color-mix(in srgb,var(--accent-blue) 12%,transparent)'
+        : 'transparent',
+      textAlign: 'center',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
 // Functions dropdown
 const FUNCTION_GROUPS = [
@@ -86,43 +361,268 @@ const FUNCTION_GROUPS = [
   { label: 'Lookup', functions: ['LOOKUP', 'VLOOKUP', 'HLOOKUP', 'ADDRESS'] },
 ];
 
-const FunctionsContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const FunctionsContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const FunctionsDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:'100%',left:0,minWidth:140,maxHeight:260,overflowY:'auto',background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:4,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const FunctionsDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      minWidth: 140,
+      maxHeight: 260,
+      overflowY: 'auto',
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 4,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FunctionGroupLabel = ({children, style={}, ...p}) => <div style={{fontSize:10,fontWeight:600,color:'var(--text-tertiary)',textTransform:'uppercase',letterSpacing:'0.06em',padding:'4px 10px 2px',...style}} {...p}>{children}</div>;
+const FunctionGroupLabel = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      fontSize: 10,
+      fontWeight: 600,
+      color: 'var(--text-tertiary)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.06em',
+      padding: '4px 10px 2px',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const FunctionItem = ({children, style={}, ...p}) => <div style={{display:'flex',alignItems:'center',padding:'6px 10px',borderRadius:5,cursor:'pointer',fontSize:12,color:'var(--text-secondary)',...style}} {...p}>{children}</div>;
+const FunctionItem = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '6px 10px',
+      borderRadius: 5,
+      cursor: 'pointer',
+      fontSize: 12,
+      color: 'var(--text-secondary)',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TagPickerContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const TagPickerContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const TagPickerDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:32,left:0,background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:8,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const TagPickerDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: 32,
+      left: 0,
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 8,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TagColorGrid = ({children, style={}, ...p}) => <div style={{display:'grid',gridTemplateColumns:'repeat(4, 20px)',gap:6,...style}} {...p}>{children}</div>;
+const TagColorGrid = ({ children, style = {}, ...p }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 20px)', gap: 6, ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const TagColor = ({children, $color, style={}, ...p}) => <div style={{width:20,height:20,borderRadius:3,background:$color,cursor:'pointer',...style}} {...p}>{children}</div>;
+const TagColor = ({ children, $color, style = {}, ...p }) => (
+  <div
+    style={{
+      width: 20,
+      height: 20,
+      borderRadius: 3,
+      background: $color,
+      cursor: 'pointer',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const MoreMenuContainer = ({children, style={}, ...p}) => <div style={{position:'relative',...style}} {...p}>{children}</div>;
+const MoreMenuContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const MoreDropdown = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:32,right:0,minWidth:180,background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:4,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const MoreDropdown = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: 32,
+      right: 0,
+      minWidth: 180,
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 4,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const MoreDropdownItem = ({children, style={}, ...p}) => <div style={{padding:'7px 12px',fontSize:12,color:'var(--text-secondary)',cursor:'pointer',borderRadius:5,display:'flex',alignItems:'center',gap:8,...style}} {...p}>{children}</div>;
+const MoreDropdownItem = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      padding: '7px 12px',
+      fontSize: 12,
+      color: 'var(--text-secondary)',
+      cursor: 'pointer',
+      borderRadius: 5,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const MoreDropdownDivider = ({children, style={}, ...p}) => <div style={{height:1,background:'var(--border-default,var(--border-primary))',margin:'4px 0',...style}} {...p}>{children}</div>;
+const MoreDropdownDivider = ({ children, style = {}, ...p }) => (
+  <div
+    style={{
+      height: 1,
+      background: 'var(--border-default,var(--border-primary))',
+      margin: '4px 0',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const CustomizePanel = ({children, $open, style={}, ...p}) => <div style={{position:'absolute',top:'100%',right:0,width:280,background:'var(--bg-elevated,var(--bg-primary))',border:'1px solid var(--border-default,var(--border-primary))',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',padding:16,zIndex:9999,display:$open?'block':'none',...style}} {...p}>{children}</div>;
+const CustomizePanel = ({ children, $open, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '100%',
+      right: 0,
+      width: 280,
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 16,
+      zIndex: 9999,
+      display: $open ? 'block' : 'none',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const CustomizeTitle = ({children, style={}, ...p}) => <div style={{fontWeight:600,fontSize:13,marginBottom:8,...style}} {...p}>{children}</div>;
+const CustomizeTitle = ({ children, style = {}, ...p }) => (
+  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const CustomizeClose = ({children, style={}, ...p}) => <span style={{cursor:'pointer',padding:4,borderRadius:4,display:'flex',alignItems:'center',...style}} {...p}>{children}</span>;
+const CustomizeClose = ({ children, style = {}, ...p }) => (
+  <span
+    style={{
+      cursor: 'pointer',
+      padding: 4,
+      borderRadius: 4,
+      display: 'flex',
+      alignItems: 'center',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </span>
+);
 
-const CustomizeContent = ({children, style={}, ...p}) => <div style={{fontSize:12,color:'var(--text-secondary)',lineHeight:1.6,...style}} {...p}>{children}</div>;
+const CustomizeContent = ({ children, style = {}, ...p }) => (
+  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const DockedToolbarContainer = ({children, $active, style={}, ...p}) => <div style={{display:'block',background:$active?'var(--bg-secondary)':'transparent',...style}} {...p}>{children}</div>;
+const DockedToolbarContainer = ({ children, $active, style = {}, ...p }) => (
+  <div
+    style={{
+      display: 'block',
+      background: $active ? 'var(--bg-secondary)' : 'transparent',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const DockIndicatorWrapper = ({children, style={}, ...p}) => <div style={{position:'relative',height:0,...style}} {...p}>{children}</div>;
+const DockIndicatorWrapper = ({ children, style = {}, ...p }) => (
+  <div style={{ position: 'relative', height: 0, ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const DockIndicator = ({children, $show, style={}, ...p}) => <div style={{position:'absolute',left:0,right:0,top:0,height:3,background:'var(--accent-blue)',opacity:$show?1:0,transition:'opacity 0.3s',...style}} {...p}>{children}</div>;
+const DockIndicator = ({ children, $show, style = {}, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      height: 3,
+      background: 'var(--accent-blue)',
+      opacity: $show ? 1 : 0,
+      transition: 'opacity 0.3s',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
 // SVG Icons matching HTML design
 const BoldIcon = () => (
@@ -152,7 +652,10 @@ const FillColorIcon = ({ color = '#ffffff' }) => (
   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
     <path d="M19 11H5L12 4L19 11Z" />
     <path d="M5 11V18H19V11" />
-    <path d="M4 21h16" style={{ stroke: color === 'transparent' ? 'none' : color, strokeWidth: 3 }} />
+    <path
+      d="M4 21h16"
+      style={{ stroke: color === 'transparent' ? 'none' : color, strokeWidth: 3 }}
+    />
     {color === 'transparent' && (
       <path d="M4 20h16" style={{ stroke: '#ccc', strokeWidth: 3, strokeDasharray: '3 2' }} />
     )}
@@ -218,16 +721,30 @@ const ImageIconSVG = () => (
 );
 
 const MoreIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="currentColor">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="currentColor"
+  >
     <circle cx="12" cy="12" r="1" />
     <circle cx="19" cy="12" r="1" />
     <circle cx="5" cy="12" r="1" />
   </svg>
 );
 
-
 const ChevronDownTiny = () => (
-  <svg viewBox="0 0 10 10" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+  <svg
+    viewBox="0 0 10 10"
+    width="8"
+    height="8"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+  >
     <path d="M2 3.5L5 6.5L8 3.5" />
   </svg>
 );
@@ -242,38 +759,36 @@ const adjustDecimalPlaces = (fmt, delta) => {
     if (delta <= 0) return fmt;
     // No decimal section — insert .0 before %, E, or at end
     const insertAt = fmt.search(/[%E]/);
-    return insertAt !== -1
-      ? fmt.slice(0, insertAt) + '.0' + fmt.slice(insertAt)
-      : fmt + '.0';
+    return insertAt !== -1 ? `${fmt.slice(0, insertAt)}.0${fmt.slice(insertAt)}` : `${fmt}.0`;
   }
   const currentDecimals = m[1].length;
   const newDecimals = Math.max(0, currentDecimals + delta);
   const start = m.index;
   const end = start + 1 + currentDecimals;
-  const replacement = newDecimals > 0 ? '.' + '0'.repeat(newDecimals) : '';
+  const replacement = newDecimals > 0 ? `.${'0'.repeat(newDecimals)}` : '';
   return fmt.slice(0, start) + replacement + fmt.slice(end);
 };
 
 // Grouped format definitions for the 123 picker
 const FORMAT_PICKER_GROUPS = [
   [
-    { label: 'Automatic',      format: 'General',           example: '1234' },
-    { label: 'Plain text',     format: '@',                 example: 'ABC' },
+    { label: 'Automatic', format: 'General', example: '1234' },
+    { label: 'Plain text', format: '@', example: 'ABC' },
   ],
   [
-    { label: 'Number',         format: '#,##0.00',          example: '1,000.12' },
-    { label: 'Percent',        format: '0.00%',             example: '10.12%' },
-    { label: 'Scientific',     format: '0.00E+00',          example: '1.00E+03' },
+    { label: 'Number', format: '#,##0.00', example: '1,000.12' },
+    { label: 'Percent', format: '0.00%', example: '10.12%' },
+    { label: 'Scientific', format: '0.00E+00', example: '1.00E+03' },
   ],
   [
-    { label: 'Accounting',     format: '"$"#,##0',          example: '$ 1,000' },
-    { label: 'Currency',       format: '"$"#,##0.00',       example: '$1,000.12' },
-    { label: 'Currency rounded', format: '"$"#,##0',        example: '$1,000' },
+    { label: 'Accounting', format: '"$"#,##0', example: '$ 1,000' },
+    { label: 'Currency', format: '"$"#,##0.00', example: '$1,000.12' },
+    { label: 'Currency rounded', format: '"$"#,##0', example: '$1,000' },
   ],
   [
-    { label: 'Date',           format: 'yyyy-mm-dd',        example: '2024-01-01' },
-    { label: 'Time',           format: 'h:mm',              example: '15:59' },
-    { label: 'Date time',      format: 'yyyy-mm-dd h:mm',   example: '2024-01-01 15:59' },
+    { label: 'Date', format: 'yyyy-mm-dd', example: '2024-01-01' },
+    { label: 'Time', format: 'h:mm', example: '15:59' },
+    { label: 'Date time', format: 'yyyy-mm-dd h:mm', example: '2024-01-01 15:59' },
   ],
 ];
 
@@ -287,7 +802,9 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
 
   useEffect(() => {
     if (!open) return;
-    const onClickOutside = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onClickOutside = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [open]);
@@ -300,34 +817,75 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
         style={{ gap: 1, width: 'auto', paddingInline: 4, minWidth: 26 }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1, minWidth: 10, textAlign: 'center' }}>{label}</span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1,
+            minWidth: 10,
+            textAlign: 'center',
+          }}
+        >
+          {label}
+        </span>
         <ChevronDownTiny />
       </ToolbarButton>
 
       {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-          background: 'var(--bg-elevated, var(--bg-primary))',
-          border: '1px solid var(--border-default, var(--border-primary))',
-          borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-          padding: 4, zIndex: 9999, minWidth: 200,
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            background: 'var(--bg-elevated, var(--bg-primary))',
+            border: '1px solid var(--border-default, var(--border-primary))',
+            borderRadius: 8,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            padding: 4,
+            zIndex: 9999,
+            minWidth: 200,
+          }}
+        >
           {CURRENCIES.map(c => (
             <div
               key={c.code}
-              onClick={() => { onUpdateAndPatchSelectedCell({ dataFormatString: c.format }); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
-                background: c.format === selectedCell?.dataFormatString ? 'var(--bg-secondary)' : 'transparent',
-                fontSize: 12, color: 'var(--text-primary)',
+              onClick={() => {
+                onUpdateAndPatchSelectedCell({ dataFormatString: c.format });
+                setOpen(false);
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
-              onMouseLeave={e => e.currentTarget.style.background = c.format === selectedCell?.dataFormatString ? 'var(--bg-secondary)' : 'transparent'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '5px 10px',
+                borderRadius: 5,
+                cursor: 'pointer',
+                background:
+                  c.format === selectedCell?.dataFormatString
+                    ? 'var(--bg-secondary)'
+                    : 'transparent',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+              onMouseLeave={e =>
+                (e.currentTarget.style.background =
+                  c.format === selectedCell?.dataFormatString
+                    ? 'var(--bg-secondary)'
+                    : 'transparent')
+              }
             >
-              <span style={{ width: 28, fontWeight: 600, fontSize: 13, color: 'var(--accent-blue)' }}>{c.symbol}</span>
+              <span
+                style={{ width: 28, fontWeight: 600, fontSize: 13, color: 'var(--accent-blue)' }}
+              >
+                {c.symbol}
+              </span>
               <span style={{ flex: 1 }}>{c.name}</span>
-              <span style={{ color: 'var(--text-tertiary)', fontFamily: 'monospace', fontSize: 11 }}>{c.code}</span>
+              <span
+                style={{ color: 'var(--text-tertiary)', fontFamily: 'monospace', fontSize: 11 }}
+              >
+                {c.code}
+              </span>
             </div>
           ))}
         </div>
@@ -497,7 +1055,8 @@ const ExcelToolbar = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, dragOffset, nearDockZone]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: handlers stable
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Derived state for UI
   const dataTypeValue = DATA_FORMAT_STR_TO_DATA_TYPE[selectedCell?.dataFormatString] || 'Custom';
@@ -524,7 +1083,7 @@ const ExcelToolbar = ({
         data-drag-handle="true"
         title="Double-click to dock"
       >
-        <svg viewBox="0 0 24 24" style={{width:14,height:14,fill:'currentColor'}}>
+        <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}>
           <circle cx="9" cy="5" r="1.5" />
           <circle cx="15" cy="5" r="1.5" />
           <circle cx="9" cy="12" r="1.5" />
@@ -538,10 +1097,18 @@ const ExcelToolbar = ({
           onClick={() => setIsDocked(true)}
           title="Dock toolbar"
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 20, height: 20, cursor: 'pointer', flexShrink: 0,
-            color: 'var(--text-tertiary)', borderRadius: 4, marginRight: 2,
-            fontSize: 14, lineHeight: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 20,
+            height: 20,
+            cursor: 'pointer',
+            flexShrink: 0,
+            color: 'var(--text-tertiary)',
+            borderRadius: 4,
+            marginRight: 2,
+            fontSize: 14,
+            lineHeight: 1,
           }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-blue)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
@@ -630,7 +1197,10 @@ const ExcelToolbar = ({
       </TooltipWrapper>
 
       <VerticalLine style={{ marginLeft: '10px' }} />
-      <CurrencyPickerDropdown selectedCell={selectedCell} onUpdateAndPatchSelectedCell={onUpdateAndPatchSelectedCell} />
+      <CurrencyPickerDropdown
+        selectedCell={selectedCell}
+        onUpdateAndPatchSelectedCell={onUpdateAndPatchSelectedCell}
+      />
       <ToolbarButton
         onClick={() => onUpdateAndPatchSelectedCell({ dataFormatString: '0.00%' })}
         data-tooltip="Percent"
@@ -640,18 +1210,22 @@ const ExcelToolbar = ({
       <ToolbarButton
         data-tooltip="Decrease decimal places"
         style={{ width: 30, fontSize: 11, fontFamily: 'monospace', gap: 0 }}
-        onClick={() => onUpdateAndPatchSelectedCell(cell => ({
-          dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', -1),
-        }))}
+        onClick={() =>
+          onUpdateAndPatchSelectedCell(cell => ({
+            dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', -1),
+          }))
+        }
       >
         .0<span style={{ fontSize: 9, marginTop: 1 }}>←</span>
       </ToolbarButton>
       <ToolbarButton
         data-tooltip="Increase decimal places"
         style={{ width: 30, fontSize: 11, fontFamily: 'monospace' }}
-        onClick={() => onUpdateAndPatchSelectedCell(cell => ({
-          dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', +1),
-        }))}
+        onClick={() =>
+          onUpdateAndPatchSelectedCell(cell => ({
+            dataFormatString: adjustDecimalPlaces(cell?.dataFormatString || 'General', +1),
+          }))
+        }
       >
         .00
       </ToolbarButton>
@@ -661,19 +1235,24 @@ const ExcelToolbar = ({
           onClick={() => setCellFormatOpen(!cellFormatOpen)}
           style={{ minWidth: 80, maxWidth: 110 }}
         >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <span
+            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+          >
             {dataTypeValue === 'Custom' ? '123' : dataTypeValue}
           </span>
           <ChevronDownIcon />
         </CellFormatTrigger>
-        <CellFormatDropdown
-          $open={cellFormatOpen}
-          style={{ minWidth: 220, padding: '6px 0' }}
-        >
+        <CellFormatDropdown $open={cellFormatOpen} style={{ minWidth: 220, padding: '6px 0' }}>
           {FORMAT_PICKER_GROUPS.map((group, gi) => (
             <div key={gi}>
               {gi > 0 && (
-                <div style={{ height: 1, background: 'var(--border-default, var(--border-primary))', margin: '4px 10px' }} />
+                <div
+                  style={{
+                    height: 1,
+                    background: 'var(--border-default, var(--border-primary))',
+                    margin: '4px 10px',
+                  }}
+                />
               )}
               {group.map(item => {
                 const isActive = selectedCell?.dataFormatString === item.format;
@@ -681,19 +1260,36 @@ const ExcelToolbar = ({
                   <CellFormatItem
                     key={item.label}
                     style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
                       background: isActive ? 'var(--bg-secondary)' : 'transparent',
                       color: 'var(--text-primary)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = isActive ? 'var(--bg-secondary)' : 'transparent'; }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'var(--bg-secondary)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = isActive
+                        ? 'var(--bg-secondary)'
+                        : 'transparent';
+                    }}
                     onClick={() => {
                       onUpdateAndPatchSelectedCell({ dataFormatString: item.format });
                       setCellFormatOpen(false);
                     }}
                   >
                     <span>{item.label}</span>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11, marginLeft: 12, flexShrink: 0 }}>{item.example}</span>
+                    <span
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        fontSize: 11,
+                        marginLeft: 12,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.example}
+                    </span>
                   </CellFormatItem>
                 );
               })}
@@ -719,11 +1315,13 @@ const ExcelToolbar = ({
         triggerIcon={
           <TooltipWrapper data-tooltip="Fill color">
             <ColoredIconButtonBucket>
-              <FillColorIcon color={
-                selectedCell?.bgPattern === 'NO_FILL'
-                  ? 'transparent'
-                  : `#${selectedCell?.bgColor?.slice(2) || 'FFFFFF'}`
-              } />
+              <FillColorIcon
+                color={
+                  selectedCell?.bgPattern === 'NO_FILL'
+                    ? 'transparent'
+                    : `#${selectedCell?.bgColor?.slice(2) || 'FFFFFF'}`
+                }
+              />
             </ColoredIconButtonBucket>
           </TooltipWrapper>
         }
@@ -825,16 +1423,28 @@ const ExcelToolbar = ({
           const isMerged = !!mergedMasterMap?.[selectedCellLocation];
           if (isMerged) {
             onMergeCells({ action: 'unmerge', ref: selectedCellLocation });
-          } else if (dragStartLocation && dragEndLocation && dragStartLocation !== dragEndLocation
-            && !dragEndLocation.includes('ZZZZZZ') && !dragEndLocation.includes('100000')) {
+          } else if (
+            dragStartLocation &&
+            dragEndLocation &&
+            dragStartLocation !== dragEndLocation &&
+            !dragEndLocation.includes('ZZZZZZ') &&
+            !dragEndLocation.includes('100000')
+          ) {
             // Normalize to topLeft:bottomRight
-            const colToIdx = s => { let n = 0; for (let i = 0; i < s.length; i++) n = n * 26 + s.charCodeAt(i) - 64; return n; };
+            const colToIdx = s => {
+              let n = 0;
+              for (let i = 0; i < s.length; i++) n = n * 26 + s.charCodeAt(i) - 64;
+              return n;
+            };
             const startColStr = dragStartLocation.match(/[A-Z]+/)?.[0] || 'A';
-            const endColStr   = dragEndLocation.match(/[A-Z]+/)?.[0]   || 'A';
-            const startRow = parseInt(dragStartLocation.match(/\d+/)?.[0] || '1');
-            const endRow   = parseInt(dragEndLocation.match(/\d+/)?.[0]   || '1');
-            const [leftCol, rightCol] = colToIdx(startColStr) <= colToIdx(endColStr) ? [startColStr, endColStr] : [endColStr, startColStr];
-            const topLeft     = `${leftCol}${Math.min(startRow, endRow)}`;
+            const endColStr = dragEndLocation.match(/[A-Z]+/)?.[0] || 'A';
+            const startRow = parseInt(dragStartLocation.match(/\d+/)?.[0] || '1', 10);
+            const endRow = parseInt(dragEndLocation.match(/\d+/)?.[0] || '1', 10);
+            const [leftCol, rightCol] =
+              colToIdx(startColStr) <= colToIdx(endColStr)
+                ? [startColStr, endColStr]
+                : [endColStr, startColStr];
+            const topLeft = `${leftCol}${Math.min(startRow, endRow)}`;
             const bottomRight = `${rightCol}${Math.max(startRow, endRow)}`;
             onMergeCells({ action: 'merge', range: `${topLeft}:${bottomRight}` });
           }
@@ -892,10 +1502,7 @@ const ExcelToolbar = ({
 
       {/* Tag Picker */}
       <TagPickerContainer className="tag-picker">
-        <ToolbarButton
-          onClick={() => setTagPickerOpen(!tagPickerOpen)}
-          data-tooltip="Cell tag"
-        >
+        <ToolbarButton onClick={() => setTagPickerOpen(!tagPickerOpen)} data-tooltip="Cell tag">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" />
             <rect x="6" y="6" width="5" height="5" rx="1.5" fill="currentColor" />

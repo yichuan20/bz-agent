@@ -1,21 +1,22 @@
 import { CaretRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+const HTTP_BASE =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 type FsEntry = { name: string; path: string; isDir: boolean; size?: number };
 
 interface DirNodeProps {
-  path:         string;
-  depth:        number;
+  path: string;
+  depth: number;
   selectedFile: string | null;
   onFileSelect: (path: string) => void;
 }
 
 function DirNode({ path, depth, selectedFile, onFileSelect }: DirNodeProps) {
   const [expanded, setExpanded] = useState(depth === 0);
-  const [entries,  setEntries]  = useState<FsEntry[]>([]);
-  const [loaded,   setLoaded]   = useState(false);
+  const [entries, setEntries] = useState<FsEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
     fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(path)}`)
@@ -23,17 +24,21 @@ function DirNode({ path, depth, selectedFile, onFileSelect }: DirNodeProps) {
       .then((d: { entries?: FsEntry[] }) => {
         // Hide hidden files/dirs (starting with .) and common noise
         const HIDDEN = new Set(['.git', 'node_modules', '__pycache__', '.venv', '.bzhub']);
-        const filtered = (d.entries ?? []).filter(e => !e.name.startsWith('.') && !HIDDEN.has(e.name));
+        const filtered = (d.entries ?? []).filter(
+          e => !e.name.startsWith('.') && !HIDDEN.has(e.name),
+        );
         setEntries(filtered);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
   }, [path]);
 
-  useEffect(() => { if (expanded && !loaded) load(); }, [expanded, loaded, load]);
+  useEffect(() => {
+    if (expanded && !loaded) load();
+  }, [expanded, loaded, load]);
 
   const toggle = () => setExpanded(v => !v);
-  const name   = path.split('/').filter(Boolean).pop() ?? path;
+  const name = path.split('/').filter(Boolean).pop() ?? path;
 
   return (
     <div>
@@ -48,23 +53,26 @@ function DirNode({ path, depth, selectedFile, onFileSelect }: DirNodeProps) {
             size={10}
             className={`ftree-caret${expanded ? ' ftree-caret--open' : ''}`}
           />
-          {expanded
-            ? <FolderOpenIcon size={13} color="var(--accent-blue)" weight="duotone" />
-            : <FolderIcon     size={13} color="var(--text-tertiary)" weight="duotone" />
-          }
+          {expanded ? (
+            <FolderOpenIcon size={13} color="var(--accent-blue)" weight="duotone" />
+          ) : (
+            <FolderIcon size={13} color="var(--text-tertiary)" weight="duotone" />
+          )}
           <span className="ftree-name">{name}</span>
         </button>
       )}
-      {expanded && entries.map(e =>
-        e.isDir
-          ? <DirNode
+      {expanded &&
+        entries.map(e =>
+          e.isDir ? (
+            <DirNode
               key={e.path}
               path={e.path}
               depth={depth + 1}
               selectedFile={selectedFile}
               onFileSelect={onFileSelect}
             />
-          : <button
+          ) : (
+            <button
               key={e.path}
               type="button"
               className={`ftree-file${e.path === selectedFile ? ' ftree-file--active' : ''}`}
@@ -74,13 +82,14 @@ function DirNode({ path, depth, selectedFile, onFileSelect }: DirNodeProps) {
               <FileIcon size={12} color="var(--text-tertiary)" />
               <span className="ftree-name">{e.name}</span>
             </button>
-      )}
+          ),
+        )}
     </div>
   );
 }
 
 interface Props {
-  rootPath:     string;
+  rootPath: string;
   selectedFile: string | null;
   onFileSelect: (path: string) => void;
 }
@@ -88,12 +97,7 @@ interface Props {
 export function FolderTree({ rootPath, selectedFile, onFileSelect }: Props) {
   return (
     <div className="ftree">
-      <DirNode
-        path={rootPath}
-        depth={0}
-        selectedFile={selectedFile}
-        onFileSelect={onFileSelect}
-      />
+      <DirNode path={rootPath} depth={0} selectedFile={selectedFile} onFileSelect={onFileSelect} />
     </div>
   );
 }

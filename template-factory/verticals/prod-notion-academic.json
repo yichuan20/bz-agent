@@ -1,0 +1,14 @@
+{
+  "id": "prod-notion-academic",
+  "name": "Academic Research Hub",
+  "description": "Research workspace for academics — paper notes, literature reviews, experiment logs, and thesis drafts.",
+  "tags": ["academic", "research", "productivity", "notes"],
+  "text_replacements": [
+    { "from": "Getting Started", "to": "Research Projects" },
+    { "from": "Teamspaces", "to": "Labs" },
+    { "from": "Shared", "to": "Lab Docs" },
+    { "from": "Private", "to": "My Notes" },
+    { "from": "Add a page", "to": "New Note" },
+    { "from": "Notion AI", "to": "ResearchAI" }
+  ]
+}

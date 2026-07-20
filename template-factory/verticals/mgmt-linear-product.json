@@ -1,0 +1,13 @@
+{
+  "id": "mgmt-linear-product",
+  "name": "Product Team Tracker",
+  "description": "Issue tracker and project manager for product teams — sprints, backlog, roadmap, and inbox triage.",
+  "tags": ["product", "project-management", "issues", "management"],
+  "text_replacements": [
+    { "from": "Engineering", "to": "Product" },
+    { "from": "Bug", "to": "Issue" },
+    { "from": "Feature Request", "to": "Enhancement" },
+    { "from": "Sprint", "to": "Iteration" },
+    { "from": "Dev", "to": "PM" }
+  ]
+}

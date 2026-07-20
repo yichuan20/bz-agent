@@ -1,0 +1,14 @@
+{
+  "id": "prod-notion-legal",
+  "name": "Legal Docs Workspace",
+  "description": "Document workspace for legal teams — contracts, briefs, research notes, and client matter wikis.",
+  "tags": ["legal", "documents", "productivity", "workspace"],
+  "text_replacements": [
+    { "from": "Getting Started", "to": "Matters" },
+    { "from": "Teamspaces", "to": "Practice Areas" },
+    { "from": "Shared", "to": "Client Files" },
+    { "from": "Private", "to": "Drafts" },
+    { "from": "Add a page", "to": "New Document" },
+    { "from": "Notion AI", "to": "LexAI" }
+  ]
+}

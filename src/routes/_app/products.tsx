@@ -49,7 +49,7 @@ function ProductsPage() {
               },
               query: { limit: 100, offset: 0 },
             },
-          }
+          },
         );
 
         if (apiError) {
@@ -148,9 +148,7 @@ function ProductsPage() {
                       </div>
                       <div>
                         <p className="cell-name">{product.name}</p>
-                        {product.description && (
-                          <p className="cell-desc">{product.description}</p>
-                        )}
+                        {product.description && <p className="cell-desc">{product.description}</p>}
                       </div>
                     </div>
                   </td>

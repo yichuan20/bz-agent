@@ -1,0 +1,16 @@
+{
+  "id": "prod-calendly-coaching",
+  "name": "Coaching Scheduler",
+  "description": "Scheduling platform for coaches and consultants — session types, availability, client calendar sync.",
+  "tags": ["coaching", "scheduling", "productivity", "appointments"],
+  "text_replacements": [
+    { "from": "Event Types", "to": "Session Types" },
+    { "from": "Event Type", "to": "Session Type" },
+    { "from": "Meetings", "to": "Sessions" },
+    { "from": "Meeting", "to": "Session" },
+    { "from": "Invitee", "to": "Client" },
+    { "from": "Invitees", "to": "Clients" },
+    { "from": "Availability", "to": "Schedule" },
+    { "from": "Workflows", "to": "Automations" }
+  ]
+}

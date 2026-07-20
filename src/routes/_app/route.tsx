@@ -13,17 +13,21 @@
  *   • Mouse leaves sidebar → hoveredOpen=false → sidebar slides out
  */
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useState, useEffect } from 'react';
-import Sidebar from '#/components/Sidebar';
-import TopBar  from '#/components/TopBar';
+import { useEffect, useState } from 'react';
 import { ModeSelector } from '#/components/ModeSelector';
+import Sidebar from '#/components/Sidebar';
+import TopBar from '#/components/TopBar';
 import type { AgentMode } from '#/lib/agentModes';
 
-declare global { interface WindowEventMap { 'bz:start-new-session': CustomEvent<{ mode: AgentMode }> } }
+declare global {
+  interface WindowEventMap {
+    'bz:start-new-session': CustomEvent<{ mode: AgentMode }>;
+  }
+}
 
 const AGENT_HTTP =
-  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 function useBzcodeOutdated(): boolean {
   const [outdated, setOutdated] = useState(false);
@@ -36,8 +40,12 @@ function useBzcodeOutdated(): boolean {
         const cur = parse(d.bzcode);
         const lat = parse(d.bzcode_latest);
         for (let i = 0; i < Math.max(cur.length, lat.length); i++) {
-          const c = cur[i] ?? 0, l = lat[i] ?? 0;
-          if (c < l) { setOutdated(true); return; }
+          const c = cur[i] ?? 0,
+            l = lat[i] ?? 0;
+          if (c < l) {
+            setOutdated(true);
+            return;
+          }
           if (c > l) return;
         }
       })
@@ -55,8 +63,8 @@ function AppLayout() {
   const navigate = useNavigate();
   const { location } = useRouterState();
 
-  const [sidebarOpen,      setSidebarOpen]      = useState(true);
-  const [hoveredOpen,      setHoveredOpen]      = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hoveredOpen, setHoveredOpen] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
 
   const navOpen = sidebarOpen || hoveredOpen;
@@ -74,7 +82,10 @@ function AppLayout() {
     } else {
       // Navigate to /agent then let it pick up the event
       void navigate({ to: '/agent', search: {} as never });
-      setTimeout(() => window.dispatchEvent(new CustomEvent('bz:start-new-session', { detail: { mode } })), 80);
+      setTimeout(
+        () => window.dispatchEvent(new CustomEvent('bz:start-new-session', { detail: { mode } })),
+        80,
+      );
     }
   }
 
@@ -99,23 +110,30 @@ function AppLayout() {
             onMouseEnter={() => setHoveredOpen(true)}
             onClick={toggleSidebar}
           >
-            <button
-              type="button"
-              className="sidebar-expand-indicator"
-              title="Open navigation"
-            >
+            <button type="button" className="sidebar-expand-indicator" title="Open navigation">
               {bzcodeOutdated && (
-                <span style={{
-                  position: 'absolute', top: -3, right: -3,
-                  width: 8, height: 8,
-                  borderRadius: '50%',
-                  background: '#f97316',
-                  border: '2px solid var(--bg-primary)',
-                  pointerEvents: 'none',
-                }} />
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -3,
+                    right: -3,
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#f97316',
+                    border: '2px solid var(--bg-primary)',
+                    pointerEvents: 'none',
+                  }}
+                />
               )}
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path
+                  d="M4 2L8 6L4 10"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           </div>
@@ -129,7 +147,11 @@ function AppLayout() {
               </div>
               <p className="new-session-hint">Select how this agent should behave.</p>
               <ModeSelector selected="general" onSelect={handleModeSelected} />
-              <button type="button" className="new-session-cancel" onClick={() => setShowNewChatModal(false)}>
+              <button
+                type="button"
+                className="new-session-cancel"
+                onClick={() => setShowNewChatModal(false)}
+              >
                 Cancel
               </button>
             </div>

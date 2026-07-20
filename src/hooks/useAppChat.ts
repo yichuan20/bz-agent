@@ -5,7 +5,7 @@ import { dynasClient } from '#/auth';
 export function useAppChat() {
   const apiTools = useBzApiTools();
   const dynasDbTools = useDynasDbTools({
-    client: dynasClient,
+    client: dynasClient as never,
     appId: import.meta.env.VITE_DYNAS_APP_ID,
   });
 

@@ -1,0 +1,15 @@
+{
+  "id": "chat-claude-support",
+  "name": "Customer Support AI",
+  "description": "AI-powered customer support assistant — conversations, projects per client, and artifact knowledge base.",
+  "tags": ["customer-support", "ai", "chatbot", "support"],
+  "text_replacements": [
+    { "from": "Projects", "to": "Client Accounts" },
+    { "from": "Project", "to": "Client Account" },
+    { "from": "Artifacts", "to": "Knowledge Base" },
+    { "from": "Artifact", "to": "Article" },
+    { "from": "Chats", "to": "Tickets" },
+    { "from": "New chat", "to": "New Ticket" },
+    { "from": "Claude", "to": "Support AI" }
+  ]
+}

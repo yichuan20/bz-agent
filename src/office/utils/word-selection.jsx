@@ -29,7 +29,10 @@ const getNearestCharIndex = ({ x, y, xs = [], ys = [], text = '' }) => {
   for (let j = 0; j < xs.length; j++) {
     if (ys[j] === initialY) {
       const d = Math.abs(xs[j] - x);
-      if (d < xDistance) { xDistance = d; minI = j; }
+      if (d < xDistance) {
+        xDistance = d;
+        minI = j;
+      }
     }
   }
 
@@ -54,7 +57,14 @@ const getNearestCharIndex = ({ x, y, xs = [], ys = [], text = '' }) => {
  * @param {string} text - Document text
  * @param {number} topMargin - Top margin before first page (for coordinate conversion)
  */
-export const getNearestCharIndexFromEvent = (e, scrollY = 0, xs = [], ys = [], text = '', topMargin = 0) => {
+export const getNearestCharIndexFromEvent = (
+  e,
+  scrollY = 0,
+  xs = [],
+  ys = [],
+  text = '',
+  topMargin = 0,
+) => {
   const { offsetX, offsetY } = e?.nativeEvent ?? {};
   const x = offsetX * SF;
   const canvasY = offsetY * SF + scrollY;

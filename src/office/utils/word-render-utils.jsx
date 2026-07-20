@@ -1,20 +1,20 @@
 import { getColorFromString } from './common';
 import {
-  VIEW_W,
-  VIEW_H,
-  SF,
   LINE_HEIGHT,
-  PAGE_HEIGHT,
-  PAGE_GAP,
-  PAGE_MARGIN_TOP,
-  PAGE_MARGIN_BOTTOM,
   PAGE_CONTENT_HEIGHT,
+  PAGE_GAP,
+  PAGE_HEIGHT,
+  PAGE_MARGIN_BOTTOM,
+  PAGE_MARGIN_TOP,
+  SF,
+  VIEW_H,
+  VIEW_W,
 } from './word-constants';
 
 /**
  * Calculate which page a content Y position falls on (0-indexed)
  */
-export const getPageFromContentY = (contentY) => {
+export const getPageFromContentY = contentY => {
   if (contentY < 0) return 0;
   return Math.floor(contentY / PAGE_CONTENT_HEIGHT);
 };
@@ -26,9 +26,9 @@ export const getPageFromContentY = (contentY) => {
  */
 export const contentYToCanvasY = (contentY, topMargin = 0) => {
   const pageNum = getPageFromContentY(contentY);
-  const yWithinPage = contentY - (pageNum * PAGE_CONTENT_HEIGHT);
+  const yWithinPage = contentY - pageNum * PAGE_CONTENT_HEIGHT;
   // Each page adds: PAGE_HEIGHT + PAGE_GAP, but first page starts at topMargin
-  const pageStartY = topMargin + (pageNum * (PAGE_HEIGHT + PAGE_GAP));
+  const pageStartY = topMargin + pageNum * (PAGE_HEIGHT + PAGE_GAP);
   return pageStartY + PAGE_MARGIN_TOP + yWithinPage;
 };
 
@@ -43,7 +43,7 @@ export const canvasYToContentY = (canvasY, topMargin = 0) => {
   // Calculate which page we're on
   const pageWithGap = PAGE_HEIGHT + PAGE_GAP;
   const pageNum = Math.floor(adjustedY / pageWithGap);
-  const yWithinPageArea = adjustedY - (pageNum * pageWithGap);
+  const yWithinPageArea = adjustedY - pageNum * pageWithGap;
 
   // Check if we're in the gap between pages
   if (yWithinPageArea > PAGE_HEIGHT) {
@@ -56,7 +56,7 @@ export const canvasYToContentY = (canvasY, topMargin = 0) => {
   if (yWithinContent < 0) return pageNum * PAGE_CONTENT_HEIGHT;
   if (yWithinContent > PAGE_CONTENT_HEIGHT) return (pageNum + 1) * PAGE_CONTENT_HEIGHT;
 
-  return (pageNum * PAGE_CONTENT_HEIGHT) + yWithinContent;
+  return pageNum * PAGE_CONTENT_HEIGHT + yWithinContent;
 };
 
 /**
@@ -64,7 +64,7 @@ export const canvasYToContentY = (canvasY, topMargin = 0) => {
  */
 export const getTotalCanvasHeight = (numPages, topMargin = 0) => {
   if (numPages <= 0) return topMargin + PAGE_HEIGHT;
-  return topMargin + (numPages * PAGE_HEIGHT) + ((numPages - 1) * PAGE_GAP);
+  return topMargin + numPages * PAGE_HEIGHT + (numPages - 1) * PAGE_GAP;
 };
 
 /**
@@ -85,21 +85,21 @@ export const drawYToContentY = (drawY, topMargin) => {
 
   // Find which page the draw Y is on
   const pageNum = Math.floor(relativeDrawY / pageWithGap);
-  const yWithinPageArea = relativeDrawY - (pageNum * pageWithGap);
+  const yWithinPageArea = relativeDrawY - pageNum * pageWithGap;
 
   // Check if in gap between pages
   if (yWithinPageArea >= PAGE_HEIGHT) {
     // In gap - snap to end of current page content
-    return topMargin + PAGE_MARGIN_TOP + ((pageNum + 1) * PAGE_CONTENT_HEIGHT);
+    return topMargin + PAGE_MARGIN_TOP + (pageNum + 1) * PAGE_CONTENT_HEIGHT;
   }
 
   // Within a page - clamp to [0, PAGE_CONTENT_HEIGHT) so top/bottom margins
   // never map to a different page's content coordinates
   const yWithinPageContent = Math.min(
     PAGE_CONTENT_HEIGHT - 1,
-    Math.max(0, yWithinPageArea - PAGE_MARGIN_TOP)
+    Math.max(0, yWithinPageArea - PAGE_MARGIN_TOP),
   );
-  return topMargin + PAGE_MARGIN_TOP + (pageNum * PAGE_CONTENT_HEIGHT) + yWithinPageContent;
+  return topMargin + PAGE_MARGIN_TOP + pageNum * PAGE_CONTENT_HEIGHT + yWithinPageContent;
 };
 
 /**
@@ -119,7 +119,7 @@ export const contentYToDrawY = (contentY, topMargin) => {
   const yWithinPage = relativeY % PAGE_CONTENT_HEIGHT;
 
   // Page start includes all previous pages plus their gaps
-  const pageStartY = topMargin + (pageNum * (PAGE_HEIGHT + PAGE_GAP));
+  const pageStartY = topMargin + pageNum * (PAGE_HEIGHT + PAGE_GAP);
   return pageStartY + PAGE_MARGIN_TOP + yWithinPage;
 };
 
@@ -187,7 +187,15 @@ export const drawBgBox = ({ x, y, ctx, char, bgColor }) => {
  * @param {string} params.footerText - Optional footer text to display on each page
  * @param {string} params.gapColor - Background/gap color (for dark mode support)
  */
-export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerText = '', footerText = '', gapColor = '#e8e8e8' }) => {
+export const drawPageSetup = ({
+  ctx,
+  topMargin,
+  scrollY,
+  numPages = 3,
+  headerText = '',
+  footerText = '',
+  gapColor = '#e8e8e8',
+}) => {
   const prevFillStyle = ctx.fillStyle;
   const prevStrokeStyle = ctx.strokeStyle;
   const prevShadowColor = ctx.shadowColor;
@@ -204,7 +212,7 @@ export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerTex
 
   // Draw each page
   for (let pageNum = 0; pageNum < numPages; pageNum++) {
-    const pageStartY = topMargin + (pageNum * (PAGE_HEIGHT + PAGE_GAP)) - scrollY;
+    const pageStartY = topMargin + pageNum * (PAGE_HEIGHT + PAGE_GAP) - scrollY;
     const pageEndY = pageStartY + PAGE_HEIGHT;
 
     // Skip pages that are completely off-screen
@@ -246,7 +254,7 @@ export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerTex
     ctx.fillStyle = '#666666';
     const textWidth = ctx.measureText(pageNumberText).width;
     const pageNumberX = (VIEW_W * SF - textWidth) / 2;
-    const pageNumberY = pageStartY + PAGE_HEIGHT - (PAGE_MARGIN_BOTTOM / 2);
+    const pageNumberY = pageStartY + PAGE_HEIGHT - PAGE_MARGIN_BOTTOM / 2;
     ctx.fillText(pageNumberText, pageNumberX, pageNumberY);
 
     // Draw header text (centered at top of page margin)
@@ -255,7 +263,7 @@ export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerTex
       ctx.fillStyle = '#888888';
       const headerWidth = ctx.measureText(headerText).width;
       const headerX = (VIEW_W * SF - headerWidth) / 2;
-      const headerY = pageStartY + (PAGE_MARGIN_TOP / 2) + 4 * SF;
+      const headerY = pageStartY + PAGE_MARGIN_TOP / 2 + 4 * SF;
       ctx.fillText(headerText, headerX, headerY);
     }
 
@@ -265,7 +273,7 @@ export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerTex
       ctx.fillStyle = '#888888';
       const footerWidth = ctx.measureText(footerText).width;
       const footerX = (VIEW_W * SF - footerWidth) / 2;
-      const footerY = pageStartY + PAGE_HEIGHT - (PAGE_MARGIN_BOTTOM / 2) - 20 * SF;
+      const footerY = pageStartY + PAGE_HEIGHT - PAGE_MARGIN_BOTTOM / 2 - 20 * SF;
       ctx.fillText(footerText, footerX, footerY);
     }
   }
@@ -273,7 +281,7 @@ export const drawPageSetup = ({ ctx, topMargin, scrollY, numPages = 3, headerTex
   // Clear gap areas between pages (shadows may have bled into them)
   ctx.fillStyle = gapColor;
   for (let pageNum = 0; pageNum < numPages - 1; pageNum++) {
-    const gapStartY = topMargin + (pageNum * (PAGE_HEIGHT + PAGE_GAP)) + PAGE_HEIGHT - scrollY;
+    const gapStartY = topMargin + pageNum * (PAGE_HEIGHT + PAGE_GAP) + PAGE_HEIGHT - scrollY;
     const gapEndY = gapStartY + PAGE_GAP;
 
     // Only fill if gap is visible on screen

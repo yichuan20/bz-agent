@@ -1,13 +1,13 @@
 import { cloneDeep } from 'lodash';
 import {
   C_START,
+  END_X,
+  LINE_HEIGHT,
+  PAD,
   R_START,
+  START_X,
   T_END,
   T_START,
-  START_X,
-  END_X,
-  PAD,
-  LINE_HEIGHT,
 } from './word-constants';
 import { getNumberOfColumns } from './word-table-utils';
 
@@ -44,7 +44,12 @@ export const getCellAtClick = (clickX, clickY, text, xs, ys) => {
     const tEndY = ys[tEndIndex];
 
     // Skip table if its positions are outside the rendered viewport (undefined) or out of click range
-    if (tStartY == null || tEndY == null || clickY < tStartY - LINE_HEIGHT || clickY > tEndY + PAD + LINE_HEIGHT) {
+    if (
+      tStartY == null ||
+      tEndY == null ||
+      clickY < tStartY - LINE_HEIGHT ||
+      clickY > tEndY + PAD + LINE_HEIGHT
+    ) {
       i = tEndIndex + 1;
       continue;
     }
@@ -164,7 +169,7 @@ export const parseTableTo2DArray = (text, tStartIndex, tEndIndex) => {
   return rows;
 };
 
-const arrayToTableText = (arr) => {
+const arrayToTableText = arr => {
   let result = T_START;
   for (const row of arr) {
     result += R_START;
@@ -176,7 +181,7 @@ const arrayToTableText = (arr) => {
   return result;
 };
 
-const generateTableStyles = (tableText) => {
+const generateTableStyles = tableText => {
   return Array(tableText.length).fill(null);
 };
 
@@ -334,10 +339,7 @@ export const deleteTable = (doc, tableInfo) => {
   const newDoc = cloneDeep(doc);
 
   newDoc.text = doc.text.slice(0, tStartIndex) + doc.text.slice(tEndIndex + 1);
-  newDoc.styles = [
-    ...doc.styles.slice(0, tStartIndex),
-    ...doc.styles.slice(tEndIndex + 1),
-  ];
+  newDoc.styles = [...doc.styles.slice(0, tStartIndex), ...doc.styles.slice(tEndIndex + 1)];
 
   newDoc.selStart = Math.min(tStartIndex, newDoc.text.length);
   newDoc.selEnd = newDoc.selStart;

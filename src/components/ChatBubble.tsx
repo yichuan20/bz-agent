@@ -12,9 +12,7 @@ export default function ChatBubble({ chat }: ChatBubbleProps) {
 
   return (
     <>
-      {open && (
-        <div className="chat-bubble-overlay" onClick={() => setOpen(false)} />
-      )}
+      {open && <div className="chat-bubble-overlay" onClick={() => setOpen(false)} />}
 
       <div className={open ? 'chat-bubble-panel chat-bubble-panel--open' : 'chat-bubble-panel'}>
         <div className="chat-bubble-panel-header">

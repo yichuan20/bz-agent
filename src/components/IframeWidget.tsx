@@ -1,15 +1,31 @@
 import { useEffect, useRef } from 'react';
 
 const THEME_VARS = [
-  '--bg-primary', '--bg-secondary', '--bg-tertiary',
-  '--text-primary', '--text-secondary', '--text-tertiary',
-  '--border-primary', '--border-secondary',
-  '--accent-blue', '--accent-green', '--accent-red', '--accent-orange',
-  '--accent-pink', '--accent-cyan', '--accent-yellow',
-  '--font-body', '--font-heading',
-  '--radius-sm', '--radius-md', '--radius-lg',
-  '--spacing-xs', '--spacing-sm', '--spacing-md',
-  '--shadow-dropdown', '--text-on-accent',
+  '--bg-primary',
+  '--bg-secondary',
+  '--bg-tertiary',
+  '--text-primary',
+  '--text-secondary',
+  '--text-tertiary',
+  '--border-primary',
+  '--border-secondary',
+  '--accent-blue',
+  '--accent-green',
+  '--accent-red',
+  '--accent-orange',
+  '--accent-pink',
+  '--accent-cyan',
+  '--accent-yellow',
+  '--font-body',
+  '--font-heading',
+  '--radius-sm',
+  '--radius-md',
+  '--radius-lg',
+  '--spacing-xs',
+  '--spacing-sm',
+  '--spacing-md',
+  '--shadow-dropdown',
+  '--text-on-accent',
 ];
 
 function getThemeCss(): string {
@@ -17,11 +33,16 @@ function getThemeCss(): string {
   return THEME_VARS.map(v => `${v}:${cs.getPropertyValue(v).trim() || 'inherit'}`).join(';');
 }
 
-function buildSrcdoc(code: string, agentHttpBase: string, canvasId?: string, sessionId?: string | null): string {
+function buildSrcdoc(
+  code: string,
+  agentHttpBase: string,
+  canvasId?: string,
+  sessionId?: string | null,
+): string {
   const themeCss = getThemeCss();
   const safeCode = code.replace(/<\/script>/gi, '<\\/script>');
-  const isDark   = document.documentElement.getAttribute('data-theme') === 'dark';
-  const safeId   = canvasId ?? '';
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const safeId = canvasId ?? '';
   const safeSession = sessionId ?? '';
 
   return `<!DOCTYPE html>
@@ -141,27 +162,33 @@ window.__sessionId__     = '${safeSession}';
     document.body.innerHTML='<pre style="color:var(--accent-red,#e53);padding:10px;font-size:11px;white-space:pre-wrap">'+e.message+'</pre>';
   }
 })();
-<\/script>
+</script>
 </body>
 </html>`;
 }
 
 type Props = {
-  code:           string;
+  code: string;
   agentHttpBase?: string;
-  canvasId?:      string;
-  sessionId?:     string | null;
-  refreshKey?:    string | number;
+  canvasId?: string;
+  sessionId?: string | null;
+  refreshKey?: string | number;
 };
 
-export function IframeWidget({ code, agentHttpBase = 'http://localhost:18789', canvasId, sessionId, refreshKey }: Props) {
+export function IframeWidget({
+  code,
+  agentHttpBase = 'http://localhost:18789',
+  canvasId,
+  sessionId,
+  refreshKey: _refreshKey,
+}: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const iframe = ref.current;
     if (!iframe) return;
     iframe.srcdoc = buildSrcdoc(code, agentHttpBase, canvasId, sessionId);
-  }, [code, agentHttpBase, canvasId, sessionId, refreshKey]);
+  }, [code, agentHttpBase, canvasId, sessionId]);
 
   useEffect(() => {
     const rebuild = () => {

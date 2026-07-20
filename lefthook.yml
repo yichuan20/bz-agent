@@ -6,8 +6,8 @@ pre-commit:
     - name: check and fix
       run: pnpm -s check:fix {staged_files}
       stage_fixed: true
-      glob: "*.{js,ts,jsx,tsx,json,css}"
+      glob: "src/**/*.{js,ts,jsx,tsx,css}"
 
     - name: typecheck
       run: pnpm -s typecheck
-      glob: "*.{ts,tsx}"
+      glob: "src/**/*.{ts,tsx}"

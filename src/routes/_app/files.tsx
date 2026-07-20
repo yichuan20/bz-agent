@@ -44,6 +44,7 @@ function FilesPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchFiles is local to effect
   useEffect(() => {
     async function fetchFiles() {
       try {
@@ -87,9 +88,12 @@ function FilesPage() {
       attempts++;
 
       try {
-        const { data, error } = await (dynasClient.GET as any)('/v1/apps/{appId}/files/{resourceId}', {
-          params: { path: { appId: import.meta.env.VITE_DYNAS_APP_ID, resourceId } },
-        });
+        const { data, error } = await (dynasClient.GET as any)(
+          '/v1/apps/{appId}/files/{resourceId}',
+          {
+            params: { path: { appId: import.meta.env.VITE_DYNAS_APP_ID, resourceId } },
+          },
+        );
 
         if (error) return;
 
@@ -99,8 +103,8 @@ function FilesPage() {
             prev.map(f =>
               f.resourceId === resourceId
                 ? { ...f, status: processing.status, progress: processing.progress }
-                : f
-            )
+                : f,
+            ),
           );
 
           if (processing.status === 'completed' || processing.status === 'error') {
@@ -137,7 +141,7 @@ function FilesPage() {
       const { data, error: uploadError } = await dynasClient.POST('/v1/apps/{appId}/files', {
         params: { path: { appId: import.meta.env.VITE_DYNAS_APP_ID } },
         body: { files: filesArray } as any,
-        bodySerializer: (body) => {
+        bodySerializer: body => {
           const formData = new FormData();
           for (const file of (body as any).files as Blob[]) {
             formData.append('files', file);
@@ -158,7 +162,7 @@ function FilesPage() {
           name: f.name,
           status: f.processing?.status || 'pending',
           progress: f.processing?.progress || 0,
-        }))
+        })),
       );
 
       for (const f of uploadedFiles) pollFileProcessing(f.resourceId);
@@ -174,8 +178,11 @@ function FilesPage() {
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
 
   const formatSize = (bytes?: number) => {
@@ -186,11 +193,16 @@ function FilesPage() {
   };
 
   const fileTypeLabel: Record<string, string> = {
-    'bz-pdf': 'PDF Document', 'bz-doc': 'Word Document',
-    'bz-spreadsheet': 'Spreadsheet', 'bz-slides': 'Presentation',
-    'bz-email': 'Email', 'bz-chatdoc': 'Chat Document',
-    'bz-app': 'Application', 'bz-ui-config': 'UI Config',
-    'bz-widget': 'Widget', 'bz-table': 'Table',
+    'bz-pdf': 'PDF Document',
+    'bz-doc': 'Word Document',
+    'bz-spreadsheet': 'Spreadsheet',
+    'bz-slides': 'Presentation',
+    'bz-email': 'Email',
+    'bz-chatdoc': 'Chat Document',
+    'bz-app': 'Application',
+    'bz-ui-config': 'UI Config',
+    'bz-widget': 'Widget',
+    'bz-table': 'Table',
   };
 
   const processingStatusLabel = (f: ProcessingFile) => {
@@ -216,7 +228,14 @@ function FilesPage() {
           <UploadIcon size={14} />
           {uploading ? 'Uploading…' : 'Upload File'}
         </button>
-        <input ref={fileInputRef} type="file" onChange={handleFileChange} className="visually-hidden" multiple accept="*/*" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileChange}
+          className="visually-hidden"
+          multiple
+          accept="*/*"
+        />
       </div>
 
       {processingFiles.length > 0 && (

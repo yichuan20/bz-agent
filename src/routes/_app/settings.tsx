@@ -1,8 +1,8 @@
 import {
   ArrowClockwiseIcon,
-  CheckCircleIcon,
   CaretDownIcon,
   CaretRightIcon,
+  CheckCircleIcon,
   HardDriveIcon,
   InfoIcon,
   KeyIcon,
@@ -20,30 +20,31 @@ export const Route = createFileRoute('/_app/settings')({
   component: SettingsPage,
 });
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+const HTTP_BASE =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Resources = {
-  sessions:   { count: number; bytes: number };
+  sessions: { count: number; bytes: number };
   serverData: { bytes: number };
-  disk:       { total: number; used: number; free: number };
+  disk: { total: number; used: number; free: number };
 };
 
 type IntegrationField = {
-  key:         string;
-  label:       string;
+  key: string;
+  label: string;
   placeholder: string;
-  secret?:     boolean;
-  hint?:       string;
+  secret?: boolean;
+  hint?: string;
 };
 
 type Integration = {
-  id:          string;
-  name:        string;
+  id: string;
+  name: string;
   description: string;
-  docsUrl?:    string;
-  fields:      IntegrationField[];
+  docsUrl?: string;
+  fields: IntegrationField[];
 };
 
 // ── Integration definitions ───────────────────────────────────────────────────
@@ -52,13 +53,27 @@ const INTEGRATIONS: Integration[] = [
   {
     id: 'twilio',
     name: 'Twilio / WhatsApp',
-    description: 'Receive and reply to WhatsApp messages through the agent. Set the sandbox webhook to your server URL.',
+    description:
+      'Receive and reply to WhatsApp messages through the agent. Set the sandbox webhook to your server URL.',
     docsUrl: 'https://www.twilio.com/docs/whatsapp/sandbox',
     fields: [
-      { key: 'TWILIO_ACCOUNT_SID', label: 'Account SID',   placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' },
-      { key: 'TWILIO_AUTH_TOKEN',  label: 'Auth Token',    placeholder: 'your_auth_token', secret: true },
-      { key: 'TWILIO_FROM',        label: 'From Number',   placeholder: 'whatsapp:+14155238886',
-        hint: 'Twilio sandbox number in the format whatsapp:+1…' },
+      {
+        key: 'TWILIO_ACCOUNT_SID',
+        label: 'Account SID',
+        placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      },
+      {
+        key: 'TWILIO_AUTH_TOKEN',
+        label: 'Auth Token',
+        placeholder: 'your_auth_token',
+        secret: true,
+      },
+      {
+        key: 'TWILIO_FROM',
+        label: 'From Number',
+        placeholder: 'whatsapp:+14155238886',
+        hint: 'Twilio sandbox number in the format whatsapp:+1…',
+      },
     ],
   },
   {
@@ -67,9 +82,23 @@ const INTEGRATIONS: Integration[] = [
     description: 'Let the agent read and send emails on your behalf via the Gmail API.',
     docsUrl: 'https://developers.google.com/gmail/api/quickstart',
     fields: [
-      { key: 'GMAIL_CLIENT_ID',     label: 'OAuth Client ID',     placeholder: 'xxxx.apps.googleusercontent.com' },
-      { key: 'GMAIL_CLIENT_SECRET', label: 'OAuth Client Secret', placeholder: 'GOCSPX-…', secret: true },
-      { key: 'GMAIL_REFRESH_TOKEN', label: 'Refresh Token',       placeholder: 'your_refresh_token', secret: true },
+      {
+        key: 'GMAIL_CLIENT_ID',
+        label: 'OAuth Client ID',
+        placeholder: 'xxxx.apps.googleusercontent.com',
+      },
+      {
+        key: 'GMAIL_CLIENT_SECRET',
+        label: 'OAuth Client Secret',
+        placeholder: 'GOCSPX-…',
+        secret: true,
+      },
+      {
+        key: 'GMAIL_REFRESH_TOKEN',
+        label: 'Refresh Token',
+        placeholder: 'your_refresh_token',
+        secret: true,
+      },
     ],
   },
   {
@@ -78,9 +107,23 @@ const INTEGRATIONS: Integration[] = [
     description: 'Give the agent access to read and write files in your Google Drive.',
     docsUrl: 'https://developers.google.com/drive/api/quickstart',
     fields: [
-      { key: 'GDRIVE_CLIENT_ID',     label: 'OAuth Client ID',     placeholder: 'xxxx.apps.googleusercontent.com' },
-      { key: 'GDRIVE_CLIENT_SECRET', label: 'OAuth Client Secret', placeholder: 'GOCSPX-…', secret: true },
-      { key: 'GDRIVE_REFRESH_TOKEN', label: 'Refresh Token',       placeholder: 'your_refresh_token', secret: true },
+      {
+        key: 'GDRIVE_CLIENT_ID',
+        label: 'OAuth Client ID',
+        placeholder: 'xxxx.apps.googleusercontent.com',
+      },
+      {
+        key: 'GDRIVE_CLIENT_SECRET',
+        label: 'OAuth Client Secret',
+        placeholder: 'GOCSPX-…',
+        secret: true,
+      },
+      {
+        key: 'GDRIVE_REFRESH_TOKEN',
+        label: 'Refresh Token',
+        placeholder: 'your_refresh_token',
+        secret: true,
+      },
     ],
   },
   {
@@ -128,7 +171,8 @@ function VersionSection() {
     const cur = parse(info.bzcode);
     const lat = parse(info.bzcode_latest);
     for (let i = 0; i < Math.max(cur.length, lat.length); i++) {
-      const c = cur[i] ?? 0, l = lat[i] ?? 0;
+      const c = cur[i] ?? 0,
+        l = lat[i] ?? 0;
       if (c < l) return true;
       if (c > l) return false;
     }
@@ -136,20 +180,28 @@ function VersionSection() {
   }
 
   const rowStyle: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 8,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
     padding: '6px 0',
     borderBottom: '1px solid var(--border-primary)',
     fontSize: 13,
   };
   const labelStyle: React.CSSProperties = { color: 'var(--text-secondary)', minWidth: 80 };
   const codeStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: 12,
     color: 'var(--text-primary)',
     background: 'var(--bg-tertiary)',
     border: '1px solid var(--border-primary)',
-    borderRadius: 4, padding: '2px 6px',
+    borderRadius: 4,
+    padding: '2px 6px',
   };
-  const metaStyle: React.CSSProperties = { color: 'var(--text-tertiary)', fontSize: 11, marginLeft: 'auto' };
+  const metaStyle: React.CSSProperties = {
+    color: 'var(--text-tertiary)',
+    fontSize: 11,
+    marginLeft: 'auto',
+  };
 
   return (
     <section className="settings-section">
@@ -170,9 +222,7 @@ function VersionSection() {
           <div style={{ ...rowStyle, borderBottom: 'none' }}>
             <span style={labelStyle}>bzcode</span>
             <code style={codeStyle}>{info?.bzcode ? `v${info.bzcode}` : '—'}</code>
-            {info?.bzcode_latest && (
-              <span style={metaStyle}>latest: v{info.bzcode_latest}</span>
-            )}
+            {info?.bzcode_latest && <span style={metaStyle}>latest: v{info.bzcode_latest}</span>}
           </div>
           {isOutdated() && (
             <a
@@ -180,12 +230,16 @@ function VersionSection() {
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                marginTop: 12, padding: '9px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                marginTop: 12,
+                padding: '9px 12px',
                 background: 'rgba(249,115,22,0.08)',
                 border: '1px solid rgba(249,115,22,0.30)',
                 borderRadius: 7,
-                color: '#f97316', fontSize: 12,
+                color: '#f97316',
+                fontSize: 12,
                 textDecoration: 'none',
                 fontWeight: 500,
               }}
@@ -203,10 +257,10 @@ function VersionSection() {
 // ── Resource card ─────────────────────────────────────────────────────────────
 
 function ResourcesSection() {
-  const [res,       setRes]       = useState<Resources | null>(null);
-  const [clearing,  setClearing]  = useState(false);
+  const [res, setRes] = useState<Resources | null>(null);
+  const [clearing, setClearing] = useState(false);
   const [clearDays, setClearDays] = useState(30);
-  const [clearMsg,  setClearMsg]  = useState('');
+  const [clearMsg, setClearMsg] = useState('');
 
   const load = useCallback(() => {
     fetch(`${HTTP_BASE}/settings/resources`)
@@ -215,7 +269,9 @@ function ResourcesSection() {
       .catch(() => null);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleClear() {
     setClearing(true);
@@ -224,7 +280,7 @@ function ResourcesSection() {
       method: 'DELETE',
     }).catch(() => null);
     if (r?.ok) {
-      const d = await r.json() as { deleted: number };
+      const d = (await r.json()) as { deleted: number };
       setClearMsg(`Deleted ${d.deleted} session${d.deleted !== 1 ? 's' : ''}.`);
       load();
     } else {
@@ -247,13 +303,27 @@ function ResourcesSection() {
         <div className="settings-card">
           <div className="settings-card-header">
             <span className="settings-card-label">Disk usage</span>
-            {res && <span className="settings-card-meta">{fmtBytes(res.disk.used)} / {fmtBytes(res.disk.total)}</span>}
+            {res && (
+              <span className="settings-card-meta">
+                {fmtBytes(res.disk.used)} / {fmtBytes(res.disk.total)}
+              </span>
+            )}
           </div>
           {res && (
             <>
               <div className="settings-disk-bar">
-                <div className="settings-disk-fill" style={{ width: `${diskUsed}%`,
-                  background: diskUsed > 85 ? 'var(--accent-red)' : diskUsed > 65 ? 'var(--accent-orange)' : 'var(--accent-blue)' }} />
+                <div
+                  className="settings-disk-fill"
+                  style={{
+                    width: `${diskUsed}%`,
+                    background:
+                      diskUsed > 85
+                        ? 'var(--accent-red)'
+                        : diskUsed > 65
+                          ? 'var(--accent-orange)'
+                          : 'var(--accent-blue)',
+                  }}
+                />
               </div>
               <div className="settings-disk-legend">
                 <span>{diskUsed}% used</span>
@@ -267,11 +337,19 @@ function ResourcesSection() {
         <div className="settings-card">
           <div className="settings-card-header">
             <span className="settings-card-label">Conversation sessions</span>
-            {res && <span className="settings-card-meta">{res.sessions.count} files · {fmtBytes(res.sessions.bytes)}</span>}
+            {res && (
+              <span className="settings-card-meta">
+                {res.sessions.count} files · {fmtBytes(res.sessions.bytes)}
+              </span>
+            )}
           </div>
-          <p className="settings-card-hint">Remove old sessions to free disk space. Active sessions are unaffected.</p>
+          <p className="settings-card-hint">
+            Remove old sessions to free disk space. Active sessions are unaffected.
+          </p>
           <div className="settings-clear-row">
-            <span className="settings-card-hint" style={{ flexShrink: 0 }}>Delete sessions older than</span>
+            <span className="settings-card-hint" style={{ flexShrink: 0 }}>
+              Delete sessions older than
+            </span>
             <select
               className="settings-select"
               value={clearDays}
@@ -312,28 +390,40 @@ function ResourcesSection() {
 
 // ── Integration card ──────────────────────────────────────────────────────────
 
-function IntegrationCard({ integration, credKeys }: { integration: Integration; credKeys: string[] }) {
+function IntegrationCard({
+  integration,
+  credKeys,
+}: {
+  integration: Integration;
+  credKeys: string[];
+}) {
   const configured = integration.fields.every(f => credKeys.includes(f.key));
-  const partial    = !configured && integration.fields.some(f => credKeys.includes(f.key));
-  const [open,    setOpen]    = useState(false);
-  const [values,  setValues]  = useState<Record<string, string>>({});
-  const [saving,  setSaving]  = useState(false);
+  const partial = !configured && integration.fields.some(f => credKeys.includes(f.key));
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
-  const [error,   setError]   = useState('');
+  const [error, setError] = useState('');
 
   async function handleSave() {
-    setSaving(true); setError(''); setSavedOk(false);
+    setSaving(true);
+    setError('');
+    setSavedOk(false);
     try {
       for (const [key, value] of Object.entries(values)) {
         if (!value.trim()) continue;
         const r = await fetch(`${HTTP_BASE}/credentials`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, value: value.trim() }),
         });
         if (!r.ok) throw new Error(`Failed to save ${key}`);
       }
       setSavedOk(true);
-      setTimeout(() => { setSavedOk(false); setOpen(false); }, 1500);
+      setTimeout(() => {
+        setSavedOk(false);
+        setOpen(false);
+      }, 1500);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -341,26 +431,43 @@ function IntegrationCard({ integration, credKeys }: { integration: Integration; 
     }
   }
 
-  const statusColor = configured ? 'var(--accent-green)' : partial ? 'var(--accent-orange)' : 'var(--text-tertiary)';
+  const statusColor = configured
+    ? 'var(--accent-green)'
+    : partial
+      ? 'var(--accent-orange)'
+      : 'var(--text-tertiary)';
   const statusLabel = configured ? 'Connected' : partial ? 'Partial' : 'Not configured';
-  const StatusIcon  = configured ? CheckCircleIcon : partial ? WarningCircleIcon : XCircleIcon;
+  const StatusIcon = configured ? CheckCircleIcon : partial ? WarningCircleIcon : XCircleIcon;
 
   return (
     <div className={`settings-integration${open ? ' settings-integration--open' : ''}`}>
-      <button type="button" className="settings-integration-header" onClick={() => setOpen(v => !v)}>
+      <button
+        type="button"
+        className="settings-integration-header"
+        onClick={() => setOpen(v => !v)}
+      >
         <span className="settings-integration-name">{integration.name}</span>
         <span className="settings-integration-status" style={{ color: statusColor }}>
           <StatusIcon size={12} weight="fill" />
           {statusLabel}
         </span>
-        {open ? <CaretDownIcon size={13} color="var(--text-tertiary)" /> : <CaretRightIcon size={13} color="var(--text-tertiary)" />}
+        {open ? (
+          <CaretDownIcon size={13} color="var(--text-tertiary)" />
+        ) : (
+          <CaretRightIcon size={13} color="var(--text-tertiary)" />
+        )}
       </button>
 
       {open && (
         <div className="settings-integration-body">
           <p className="settings-card-hint">{integration.description}</p>
           {integration.docsUrl && (
-            <a href={integration.docsUrl} target="_blank" rel="noreferrer" className="settings-docs-link">
+            <a
+              href={integration.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="settings-docs-link"
+            >
               <LinkIcon size={11} />
               Documentation
             </a>
@@ -408,10 +515,10 @@ function IntegrationCard({ integration, credKeys }: { integration: Integration; 
 // ── Custom credential manager (raw key-value) ─────────────────────────────────
 
 function CustomCredentials({ credKeys, onRefresh }: { credKeys: string[]; onRefresh: () => void }) {
-  const [open,    setOpen]    = useState(false);
-  const [newKey,  setNewKey]  = useState('');
-  const [newVal,  setNewVal]  = useState('');
-  const [saving,  setSaving]  = useState(false);
+  const [open, setOpen] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const knownKeys = new Set(INTEGRATIONS.flatMap(i => i.fields.map(f => f.key)));
   const customKeys = credKeys.filter(k => !knownKeys.has(k));
@@ -420,38 +527,56 @@ function CustomCredentials({ credKeys, onRefresh }: { credKeys: string[]; onRefr
     if (!newKey.trim() || !newVal.trim()) return;
     setSaving(true);
     await fetch(`${HTTP_BASE}/credentials`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: newKey.trim(), value: newVal.trim() }),
     }).catch(() => null);
-    setNewKey(''); setNewVal('');
+    setNewKey('');
+    setNewVal('');
     setSaving(false);
     onRefresh();
   }
 
   async function handleDelete(key: string) {
-    await fetch(`${HTTP_BASE}/credentials/${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(() => null);
+    await fetch(`${HTTP_BASE}/credentials/${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(
+      () => null,
+    );
     onRefresh();
   }
 
   return (
     <div className={`settings-integration${open ? ' settings-integration--open' : ''}`}>
-      <button type="button" className="settings-integration-header" onClick={() => setOpen(v => !v)}>
+      <button
+        type="button"
+        className="settings-integration-header"
+        onClick={() => setOpen(v => !v)}
+      >
         <span className="settings-integration-name">Custom credentials</span>
         <span className="settings-integration-status" style={{ color: 'var(--text-tertiary)' }}>
           {customKeys.length} key{customKeys.length !== 1 ? 's' : ''}
         </span>
-        {open ? <CaretDownIcon size={13} color="var(--text-tertiary)" /> : <CaretRightIcon size={13} color="var(--text-tertiary)" />}
+        {open ? (
+          <CaretDownIcon size={13} color="var(--text-tertiary)" />
+        ) : (
+          <CaretRightIcon size={13} color="var(--text-tertiary)" />
+        )}
       </button>
       {open && (
         <div className="settings-integration-body">
-          <p className="settings-card-hint">Store arbitrary API keys and tokens for use in widgets via <code className="settings-code">{'{{KEY}}'}</code> placeholders.</p>
+          <p className="settings-card-hint">
+            Store arbitrary API keys and tokens for use in widgets via{' '}
+            <code className="settings-code">{'{{KEY}}'}</code> placeholders.
+          </p>
           {customKeys.length > 0 && (
             <div className="settings-cred-list">
               {customKeys.map(k => (
                 <div key={k} className="settings-cred-row">
                   <code className="settings-code settings-cred-key">{k}</code>
-                  <button type="button" className="settings-btn settings-btn--danger settings-btn--sm"
-                    onClick={() => void handleDelete(k)}>
+                  <button
+                    type="button"
+                    className="settings-btn settings-btn--danger settings-btn--sm"
+                    onClick={() => void handleDelete(k)}
+                  >
                     <TrashIcon size={11} />
                   </button>
                 </div>
@@ -459,12 +584,25 @@ function CustomCredentials({ credKeys, onRefresh }: { credKeys: string[]; onRefr
             </div>
           )}
           <div className="settings-cred-add">
-            <input className="settings-input" placeholder="KEY_NAME" value={newKey}
-              onChange={e => setNewKey(e.target.value.toUpperCase().replace(/\s/g, '_'))} />
-            <input className="settings-input" placeholder="value" value={newVal} type="password"
-              onChange={e => setNewVal(e.target.value)} />
-            <button type="button" className="settings-btn settings-btn--primary"
-              onClick={() => void handleAdd()} disabled={saving || !newKey.trim() || !newVal.trim()}>
+            <input
+              className="settings-input"
+              placeholder="KEY_NAME"
+              value={newKey}
+              onChange={e => setNewKey(e.target.value.toUpperCase().replace(/\s/g, '_'))}
+            />
+            <input
+              className="settings-input"
+              placeholder="value"
+              value={newVal}
+              type="password"
+              onChange={e => setNewVal(e.target.value)}
+            />
+            <button
+              type="button"
+              className="settings-btn settings-btn--primary"
+              onClick={() => void handleAdd()}
+              disabled={saving || !newKey.trim() || !newVal.trim()}
+            >
               Add
             </button>
           </div>
@@ -486,7 +624,9 @@ function IntegrationsSection() {
       .catch(() => null);
   }, []);
 
-  useEffect(() => { loadKeys(); }, [loadKeys]);
+  useEffect(() => {
+    loadKeys();
+  }, [loadKeys]);
 
   return (
     <section className="settings-section">
@@ -507,11 +647,11 @@ function IntegrationsSection() {
 // ── API key section ───────────────────────────────────────────────────────────
 
 function ApiKeySection() {
-  const [status,  setStatus]  = useState<{ present: boolean; last4: string | null } | null>(null);
-  const [value,   setValue]   = useState('');
-  const [saving,  setSaving]  = useState(false);
+  const [status, setStatus] = useState<{ present: boolean; last4: string | null } | null>(null);
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
-  const [error,   setError]   = useState('');
+  const [error, setError] = useState('');
 
   const loadStatus = useCallback(() => {
     fetch(`${HTTP_BASE}/api/apikey-status`)
@@ -520,11 +660,15 @@ function ApiKeySection() {
       .catch(() => null);
   }, []);
 
-  useEffect(() => { loadStatus(); }, [loadStatus]);
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   async function handleSave() {
     if (!value.trim()) return;
-    setSaving(true); setError(''); setSavedOk(false);
+    setSaving(true);
+    setError('');
+    setSavedOk(false);
     try {
       const r = await fetch(`${HTTP_BASE}/agent-key`, {
         method: 'POST',
@@ -557,24 +701,40 @@ function ApiKeySection() {
       <div className="settings-cards">
         <div className="settings-card">
           <p className="settings-card-hint">
-            The <code className="settings-code">BZ_API_KEY</code> authorises bzcode to make AI model calls.
-            Required for chat to work on remote deployments.
+            The <code className="settings-code">BZ_API_KEY</code> authorises bzcode to make AI model
+            calls. Required for chat to work on remote deployments.
           </p>
 
           {status && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13 }}>
-              {status.present
-                ? <><CheckCircleIcon size={14} weight="fill" color="var(--accent-green)" />
-                    <span>Key set</span>
-                    <code className="settings-code">····{status.last4}</code>
-                    <button type="button" className="settings-btn settings-btn--danger settings-btn--sm"
-                      onClick={() => void handleDelete()} style={{ marginLeft: 'auto' }}>
-                      <TrashIcon size={11} /> Remove
-                    </button>
-                  </>
-                : <><XCircleIcon size={14} weight="fill" color="var(--accent-red)" />
-                    <span style={{ color: 'var(--text-secondary)' }}>No key set</span>
-                  </>}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 12,
+                fontSize: 13,
+              }}
+            >
+              {status.present ? (
+                <>
+                  <CheckCircleIcon size={14} weight="fill" color="var(--accent-green)" />
+                  <span>Key set</span>
+                  <code className="settings-code">····{status.last4}</code>
+                  <button
+                    type="button"
+                    className="settings-btn settings-btn--danger settings-btn--sm"
+                    onClick={() => void handleDelete()}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    <TrashIcon size={11} /> Remove
+                  </button>
+                </>
+              ) : (
+                <>
+                  <XCircleIcon size={14} weight="fill" color="var(--accent-red)" />
+                  <span style={{ color: 'var(--text-secondary)' }}>No key set</span>
+                </>
+              )}
             </div>
           )}
 
@@ -609,8 +769,8 @@ function ApiKeySection() {
 type ServerLogInfo = { bzHome: string; logFile: string; lines: string[] };
 
 function ServerLogSection() {
-  const [info,     setInfo]     = useState<ServerLogInfo | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [info, setInfo] = useState<ServerLogInfo | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -621,14 +781,18 @@ function ServerLogSection() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const codeStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: 11,
     color: 'var(--text-primary)',
     background: 'var(--bg-tertiary)',
     border: '1px solid var(--border-primary)',
-    borderRadius: 4, padding: '2px 6px',
+    borderRadius: 4,
+    padding: '2px 6px',
     wordBreak: 'break-all',
   };
 
@@ -651,7 +815,15 @@ function ServerLogSection() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 6 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 14,
+              marginBottom: 6,
+            }}
+          >
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
               Last {info?.lines.length ?? 0} lines
             </span>
@@ -667,25 +839,29 @@ function ServerLogSection() {
             </button>
           </div>
 
-          <pre style={{
-            margin: 0,
-            padding: '8px 10px',
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: 6,
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: 11,
-            lineHeight: 1.5,
-            color: 'var(--text-primary)',
-            overflowX: 'auto',
-            overflowY: 'auto',
-            maxHeight: 360,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-          }}>
+          <pre
+            style={{
+              margin: 0,
+              padding: '8px 10px',
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 6,
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: 'var(--text-primary)',
+              overflowX: 'auto',
+              overflowY: 'auto',
+              maxHeight: 360,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}
+          >
             {info?.lines.length
               ? info.lines.join('\n')
-              : loading ? 'Loading…' : 'No log entries yet.'}
+              : loading
+                ? 'Loading…'
+                : 'No log entries yet.'}
           </pre>
         </div>
       </div>

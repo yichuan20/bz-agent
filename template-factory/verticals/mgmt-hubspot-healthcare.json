@@ -1,0 +1,19 @@
+{
+  "id": "mgmt-hubspot-healthcare",
+  "name": "Healthcare Practice CRM",
+  "description": "CRM for healthcare practices — manage patients, clinics, and care cases with table and kanban views.",
+  "tags": ["healthcare", "crm", "management", "patients"],
+  "text_replacements": [
+    { "from": "Contacts", "to": "Patients" },
+    { "from": "Contact", "to": "Patient" },
+    { "from": "Companies", "to": "Clinics" },
+    { "from": "Company", "to": "Clinic" },
+    { "from": "Deals", "to": "Cases" },
+    { "from": "Deal", "to": "Case" },
+    { "from": "Sales Pipeline", "to": "Care Pipeline" },
+    { "from": "Sales Rep", "to": "Care Coordinator" },
+    { "from": "Lead", "to": "Referral" },
+    { "from": "Close Date", "to": "Discharge Date" },
+    { "from": "Amount", "to": "Case Value" }
+  ]
+}

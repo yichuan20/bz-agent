@@ -1,0 +1,16 @@
+{
+  "id": "mkt-airbnb-coworking",
+  "name": "Coworking Space Finder",
+  "description": "Marketplace for coworking and office spaces — desk rentals, meeting rooms, and private offices.",
+  "tags": ["coworking", "offices", "marketing", "workspace"],
+  "text_replacements": [
+    { "from": "Airbnb", "to": "WorkFinder" },
+    { "from": "Homes", "to": "Spaces" },
+    { "from": "Experiences", "to": "Day Passes" },
+    { "from": "Host", "to": "Space Manager" },
+    { "from": "Guests", "to": "Members" },
+    { "from": "Check-in", "to": "Book" },
+    { "from": "Check-out", "to": "End" },
+    { "from": "Superhost", "to": "Verified Space" }
+  ]
+}

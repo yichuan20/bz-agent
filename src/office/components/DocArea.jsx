@@ -2,27 +2,27 @@ import { clamp, cloneDeep } from 'lodash';
 import { useEffect, useRef, useState } from 'react';
 import useClickOutside from '../hooks/useClickOutside';
 import {
-  addMultiClickSelection,
   ARROW_KEYS,
+  addMultiClickSelection,
+  addTableColumn,
+  addTableRow,
+  C_START,
+  deleteTable,
+  deleteTableColumn,
+  deleteTableRow,
   deleteText,
   drawDoc,
   EMPTY_DOC,
   getStartEnd,
   insertText,
   moveCaret,
-  setImageLoadCallback,
-  SF,
-  VIEW_W,
-  PAGE_HEIGHT,
   PAGE_GAP,
-  deleteTableRow,
-  addTableRow,
-  addTableColumn,
-  deleteTableColumn,
-  deleteTable,
+  PAGE_HEIGHT,
   R_START,
-  C_START,
+  SF,
+  setImageLoadCallback,
   T_END,
+  VIEW_W,
 } from '../utils/word-utils-refactor';
 
 // ── Scratch-built cursor engine ───────────────────────────────────────────────
@@ -33,19 +33,27 @@ const LINE_SNAP = 4;
 function findCursorIndex(clickX, clickY, xs, ys) {
   if (!xs || !ys || xs.length === 0) return 0;
   // Step 1: find the line whose Y is nearest to clickY
-  let nearestLineY = null, minYDist = Infinity;
+  let nearestLineY = null,
+    minYDist = Infinity;
   for (let i = 0; i < ys.length; i++) {
     if (ys[i] == null) continue;
     const d = Math.abs(ys[i] - clickY);
-    if (d < minYDist) { minYDist = d; nearestLineY = ys[i]; }
+    if (d < minYDist) {
+      minYDist = d;
+      nearestLineY = ys[i];
+    }
   }
   if (nearestLineY === null) return 0;
   // Step 2: on that line, find the char with nearest X
-  let bestIdx = 0, minXDist = Infinity;
+  let bestIdx = 0,
+    minXDist = Infinity;
   for (let i = 0; i < xs.length; i++) {
     if (ys[i] == null || Math.abs(ys[i] - nearestLineY) > LINE_SNAP) continue;
     const d = Math.abs(xs[i] - clickX);
-    if (d < minXDist) { minXDist = d; bestIdx = i; }
+    if (d < minXDist) {
+      minXDist = d;
+      bestIdx = i;
+    }
   }
   // Step 3: if click is past the char centre, advance to next char on same line
   if (xs[bestIdx] != null && clickX > xs[bestIdx]) {
@@ -58,7 +66,8 @@ function findCursorIndex(clickX, clickY, xs, ys) {
 }
 
 function paintCursor(ctx, xs, ys, selStart, scrollY, styles, topMargin) {
-  const absX = xs[selStart], contentY = ys[selStart];
+  const absX = xs[selStart],
+    contentY = ys[selStart];
   if (absX == null || contentY == null) return;
   // ys are in content space — convert to canvas draw space
   const drawY = contentYToDrawY(contentY, topMargin) - scrollY;
@@ -69,25 +78,44 @@ function paintCursor(ctx, xs, ys, selStart, scrollY, styles, topMargin) {
 
   const prev = { stroke: ctx.strokeStyle, width: ctx.lineWidth, cap: ctx.lineCap };
   ctx.strokeStyle = '#111111';
-  ctx.lineWidth   = 2 * SF;
-  ctx.lineCap     = 'round';
+  ctx.lineWidth = 2 * SF;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(absX, drawY - fontSize);   // top of cursor (one font-size above baseline)
+  ctx.moveTo(absX, drawY - fontSize); // top of cursor (one font-size above baseline)
   ctx.lineTo(absX, drawY + fontSize * 0.2); // slight descender below baseline
   ctx.stroke();
   ctx.strokeStyle = prev.stroke;
-  ctx.lineWidth   = prev.width;
-  ctx.lineCap     = prev.cap;
+  ctx.lineWidth = prev.width;
+  ctx.lineCap = prev.cap;
 }
+
+import { getCellAtClick } from '../utils/table-utils';
 // ─────────────────────────────────────────────────────────────────────────────
 import { contentYToDrawY, drawYToContentY } from '../utils/word-render-utils';
-import { getCellAtClick } from '../utils/table-utils';
 import ImageResizeOverlay from './ImageResizeOverlay';
 import TableContextMenu from './TableContextMenu';
 
-const Container = ({ children, ...props }) => <div style={{overflow:'auto',overscrollBehavior:'none',height:'100%',width:'100%',background:'var(--bg-tertiary,#e8e8e8)',position:'relative',display:'grid',justifyContent:'center'}} {...props}>{children}</div>;
+const Container = ({ children, ...props }) => (
+  <div
+    style={{
+      overflow: 'auto',
+      overscrollBehavior: 'none',
+      height: '100%',
+      width: '100%',
+      background: 'var(--bg-tertiary,#e8e8e8)',
+      position: 'relative',
+      display: 'grid',
+      justifyContent: 'center',
+    }}
+    {...props}
+  >
+    {children}
+  </div>
+);
 
-const Canvas = (props) => <canvas style={{height:'100%',width:VIEW_W,marginTop:0,border:'none'}} {...props} />;
+const Canvas = props => (
+  <canvas style={{ height: '100%', width: VIEW_W, marginTop: 0, border: 'none' }} {...props} />
+);
 
 const initCanvasSize = canvasRef => {
   const canvas = canvasRef?.current;
@@ -102,7 +130,6 @@ const initCanvasSize = canvasRef => {
 };
 
 const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin = 160 }) => {
-
   doc = doc || EMPTY_DOC;
 
   const [scrollY, setScrollY] = useState(0);
@@ -110,11 +137,11 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
   const [xs, setXs] = useState([]);
   const [ys, setYs] = useState([]);
   const [isFocussed, setIsFocussed] = useState(false);
-  const [canvasVersion, setCanvasVersion] = useState(0); // increments when canvas is resized
+  const [_canvasVersion, setCanvasVersion] = useState(0); // increments when canvas is resized
   // Track mousedown position to require a minimum drag distance before extending selection.
   // This prevents single-click jitter from accidentally creating a selection.
   const mouseDownPosRef = useRef({ x: 0, y: 0 });
-  const [imageLoadTrigger, setImageLoadTrigger] = useState(0);
+  const [_imageLoadTrigger, setImageLoadTrigger] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
@@ -123,7 +150,9 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     tableInfo: null,
   });
   const [caretVisible, setCaretVisible] = useState(true);
-  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'light');
+  const [_theme, setTheme] = useState(
+    () => document.documentElement.getAttribute('data-theme') || 'light',
+  );
 
   const canvasRef = useRef();
   const caretBlinkRef = useRef();
@@ -156,14 +185,17 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     // Also attempt immediately in case dimensions are already known
     initCanvasSize(canvasRef);
     return () => observer.disconnect();
-  }, [canvasRef]);
+  }, []);
 
   // Listen for theme changes (data-theme attribute on <html>) to re-render canvas
   useEffect(() => {
     const observer = new MutationObserver(() => {
       setTheme(document.documentElement.getAttribute('data-theme') || 'light');
     });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
     return () => observer.disconnect();
   }, []);
 
@@ -248,7 +280,8 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       document.removeEventListener('copy', onCopy);
       document.removeEventListener('cut', onCut);
     };
-  }, [selStart, selEnd, text?.length, styles?.length, isFocussed, selectedImageIndex]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: callbacks stable
+  }, [onCopy, onCut, onKeyDown, onPaste]);
 
   // redrawing loop
   useEffect(() => {
@@ -259,34 +292,32 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       : '#e8e8e8';
     // Pass caretVisible=false so drawDoc never paints the cursor itself.
     // Our scratch-built paintCursor handles it separately, using draw-space xs/ys.
-    const [newXs, newYs] = drawDoc({ ctx, doc, scrollY, xs, ys, topMargin, hideCaretAtIndex: selectedImageIndex, caretVisible: false, gapColor });
+    const [newXs, newYs] = drawDoc({
+      ctx,
+      doc,
+      scrollY,
+      xs,
+      ys,
+      topMargin,
+      hideCaretAtIndex: selectedImageIndex,
+      caretVisible: false,
+      gapColor,
+    });
     setXs(newXs || []);
     setYs(newYs || []);
     // Paint cursor on top using the new engine (draw-space coords)
     if (caretVisible && selStart === selEnd && selectedImageIndex == null) {
       paintCursor(ctx, newXs, newYs, selStart, scrollY, styles, topMargin);
     }
-  }, [
-    text?.length,
-    styles,
-    selStart,
-    selEnd,
-    canvasRef,
-    scrollY,
-    canvasVersion,
-    imageLoadTrigger,
-    selectedImageIndex,
-    caretVisible,
-    theme,
-  ]);
+  }, [styles, selStart, selEnd, scrollY, selectedImageIndex, caretVisible, doc, topMargin, xs, ys]);
 
   const onMouseDown = e => {
     e.preventDefault();
     document.activeElement.blur();
 
-    const clickX      = e.nativeEvent.offsetX * SF;
-    const clickCanvasY = e.nativeEvent.offsetY * SF + scrollY;           // draw/canvas space
-    const clickY       = drawYToContentY(clickCanvasY, topMargin);        // content space (for ys)
+    const clickX = e.nativeEvent.offsetX * SF;
+    const clickCanvasY = e.nativeEvent.offsetY * SF + scrollY; // draw/canvas space
+    const clickY = drawYToContentY(clickCanvasY, topMargin); // content space (for ys)
 
     // Pre-check: hit-test placed (non-inline) images BEFORE findCursorIndex.
     // findCursorIndex maps to the nearest text character, which may not be the image
@@ -297,12 +328,9 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       // imagePlacedX/Y are in CSS px; convert to canvas px for comparison with clickX/Y
       const spx = s.imagePlacedX * SF;
       const spy = s.imagePlacedY * SF;
-      const imgW = (s.imageWidth  || 64) * SF;
+      const imgW = (s.imageWidth || 64) * SF;
       const imgH = (s.imageHeight || 64) * SF;
-      if (
-        clickX >= spx && clickX <= spx + imgW &&
-        clickY >= spy - imgH && clickY <= spy
-      ) {
+      if (clickX >= spx && clickX <= spx + imgW && clickY >= spy - imgH && clickY <= spy) {
         setSelectedImageIndex(si);
         setIsFocussed(true);
         onDocChange({ ...doc, selStart: si, selEnd: si });
@@ -322,18 +350,26 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       // Locate [cellStart, cellEnd) for the clicked cell
       // cellStart = index of this cell's C_START
       // cellEnd   = index of the next separator (C_START / R_START / T_END)
-      let row = -1, col = -1, cellStart = -1, cellEnd = tEndIndex + 1;
+      let row = -1,
+        col = -1,
+        cellStart = -1,
+        cellEnd = tEndIndex + 1;
       for (let k = tStartIndex; k <= tEndIndex; k++) {
-        if (text[k] === R_START) { row++; col = -1; }
-        else if (text[k] === C_START) {
+        if (text[k] === R_START) {
+          row++;
+          col = -1;
+        } else if (text[k] === C_START) {
           col++;
           if (row === rowIndex && col === columnIndex) {
             cellStart = k;
             let sep = k + 1;
-            while (sep <= tEndIndex &&
-                   text[sep] !== C_START &&
-                   text[sep] !== R_START &&
-                   text[sep] !== T_END) sep++;
+            while (
+              sep <= tEndIndex &&
+              text[sep] !== C_START &&
+              text[sep] !== R_START &&
+              text[sep] !== T_END
+            )
+              sep++;
             cellEnd = sep;
             break;
           }
@@ -342,18 +378,21 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
 
       if (cellStart >= 0) {
         const contentStart = cellStart + 1; // first typeable position in cell
-        const contentEnd   = cellEnd;       // exclusive (= the separator char)
+        const contentEnd = cellEnd; // exclusive (= the separator char)
 
         if (contentStart >= contentEnd) {
           // Empty cell — cursor goes to contentStart (= separator), user types here
           clampedInd = contentStart;
         } else {
           // Find the content char whose x is closest to clickX
-          let bestIdx  = contentStart;
+          let bestIdx = contentStart;
           let bestDist = Infinity;
           for (let k = contentStart; k < contentEnd; k++) {
             const d = Math.abs((xs[k] || 0) - clickX);
-            if (d < bestDist) { bestDist = d; bestIdx = k; }
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = k;
+            }
           }
           // If click is to the right of the last content char, place after it
           const lastK = contentEnd - 1;
@@ -425,15 +464,15 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     if (selectedImageIndex === null) return;
     const newDoc = cloneDeep(doc);
     const i = selectedImageIndex;
-    newDoc.text   = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
+    newDoc.text = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
     newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
     newDoc.selStart = i;
-    newDoc.selEnd   = i;
+    newDoc.selEnd = i;
     setSelectedImageIndex(null);
     onDocChange(newDoc);
   };
 
-  const handleImageWrapChange = (wrap) => {
+  const handleImageWrapChange = wrap => {
     if (selectedImageIndex === null) return;
     const newDoc = cloneDeep(doc);
     const cur = newDoc.styles[selectedImageIndex];
@@ -580,7 +619,9 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
         tStartIndex: tableInfo.tStartIndex,
         tEndIndex: tableInfo.tEndIndex,
       });
-      console.log(`Current position: Row ${tableInfo.rowIndex + 1}, Column ${tableInfo.columnIndex + 1} (out of ${tableInfo.numRows} rows, ${tableInfo.numColumns} columns)`);
+      console.log(
+        `Current position: Row ${tableInfo.rowIndex + 1}, Column ${tableInfo.columnIndex + 1} (out of ${tableInfo.numRows} rows, ${tableInfo.numColumns} columns)`,
+      );
 
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
@@ -645,8 +686,10 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
   };
 
   const onKeyDown = e => {
-    const hasSelection = doc.selStart !== doc.selEnd || (doc.text?.length > 0 && doc.selStart !== undefined);
-    const shouldHandleKey = isFocussed || (hasSelection && document?.activeElement?.tagName === 'BODY');
+    const hasSelection =
+      doc.selStart !== doc.selEnd || (doc.text?.length > 0 && doc.selStart !== undefined);
+    const shouldHandleKey =
+      isFocussed || (hasSelection && document?.activeElement?.tagName === 'BODY');
 
     if (!shouldHandleKey || document?.activeElement?.tagName !== 'BODY') {
       return;
@@ -685,10 +728,12 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
 
       // Check if caret is at image position and pressing ArrowRight to select image
       const currentIndex = doc.selStart;
-      if (e.key === 'ArrowRight' &&
-          currentIndex >= 0 &&
-          currentIndex < styles?.length &&
-          styles[currentIndex]?.imageUrl) {
+      if (
+        e.key === 'ArrowRight' &&
+        currentIndex >= 0 &&
+        currentIndex < styles?.length &&
+        styles[currentIndex]?.imageUrl
+      ) {
         // Select the image instead of moving past it
         setSelectedImageIndex(currentIndex);
         setIsFocussed(true);
@@ -696,10 +741,12 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       }
 
       // Check if caret is after image and pressing ArrowLeft to select image
-      if (e.key === 'ArrowLeft' &&
-          currentIndex > 0 &&
-          currentIndex <= styles?.length &&
-          styles[currentIndex - 1]?.imageUrl) {
+      if (
+        e.key === 'ArrowLeft' &&
+        currentIndex > 0 &&
+        currentIndex <= styles?.length &&
+        styles[currentIndex - 1]?.imageUrl
+      ) {
         // Select the image instead of moving past it
         setSelectedImageIndex(currentIndex - 1);
         setIsFocussed(true);
@@ -732,10 +779,10 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     if ((e.key === 'Backspace' || e.key === 'Delete') && selectedImageIndex !== null) {
       const newDoc = cloneDeep(doc);
       const i = selectedImageIndex;
-      newDoc.text   = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
+      newDoc.text = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
       newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
       newDoc.selStart = i;
-      newDoc.selEnd   = i;
+      newDoc.selEnd = i;
       setSelectedImageIndex(null);
       onDocChange(newDoc);
       return;

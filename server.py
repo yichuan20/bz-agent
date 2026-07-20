@@ -239,6 +239,42 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
 # Bzcode session files live under BZ_HOME/sessions/
 SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser() / "sessions"
 
+# ── Secret redaction ──────────────────────────────────────────────────────────
+# Applied to every raw JSON string before it reaches the frontend WebSocket.
+# Patterns cover the credential formats that appear in Bash tool output when
+# the agent cats credential files or prints env vars.
+
+_SECRET_KEY_RE = re.compile(
+    r'(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
+    r'|accessToken|refreshToken|access_token|refresh_token'
+    r'|api_key|apikey|apiKey)',
+    re.IGNORECASE,
+)
+
+# JSON double-quoted value:  "KEY": "VALUE{16+}"
+_JSON_SECRET_RE = re.compile(
+    r'(?i)(")(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
+    r'|accessToken|refreshToken|access_token|refresh_token'
+    r'|api_?key|apiKey)(")\s*:\s*"([^"]{16,})"',
+)
+# Env-var / plain  KEY=VALUE  or  KEY: VALUE  (unquoted values)
+_PLAIN_SECRET_RE = re.compile(
+    r'(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
+    r'|access_?token|refresh_?token|api_?key|apiKey)\s*[=:]\s*([A-Za-z0-9._~+/\-]{16,})',
+)
+# BoltzBit API key literal (always safe to redact wherever it appears)
+_BZ_KEY_RE   = re.compile(r'bz_[A-Za-z0-9]{15,}')
+# Bearer / Basic auth headers
+_BEARER_RE   = re.compile(r'(?i)(Bearer|Basic)\s+[A-Za-z0-9._~+/\-]{16,}=*')
+
+
+def _redact(raw: str) -> str:
+    raw = _BZ_KEY_RE.sub('[REDACTED]', raw)
+    raw = _JSON_SECRET_RE.sub(lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)}: "[REDACTED]"', raw)
+    raw = _PLAIN_SECRET_RE.sub(lambda m: f'{m.group(1)}=[REDACTED]', raw)
+    raw = _BEARER_RE.sub(lambda m: f'{m.group(1)} [REDACTED]', raw)
+    return raw
+
 # Per-file cursor positions: abs_path -> {selStart, selEnd}
 # Stored in-memory (survives tab switches, cleared on server restart).
 _cursor_store: dict = {}
@@ -702,13 +738,23 @@ _PUSH_EXCLUDE  = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "ven
 
 
 def _boltzhub_token() -> Optional[str]:
+    """Return an auth token. BZ_API_KEY (non-expiring) takes priority over OAuth JWT from credentials.json."""
+    # API key first — never expires
+    api_keys = _read_api_keys()
+    api_key = api_keys.get("BZ_API_KEY") or os.environ.get("BZ_API_KEY")
+    if api_key:
+        return api_key
+    # Fallback: OAuth JWT from credentials.json (can expire)
     try:
         import json as _json
         bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
         creds = _json.loads((bz_home / "credentials.json").read_text())
-        return creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
+        tok = creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
+        if tok:
+            return tok
     except Exception:
-        return None
+        pass
+    return None
 
 
 def _credentials_valid() -> Tuple[bool, str]:
@@ -756,8 +802,38 @@ def _write_app_config(cwd: str, config: dict) -> None:
     (bzhub / "app_config.json").write_text(json.dumps(config, indent=2))
 
 
+def _sync_env_oauth_client_id(cwd: str, app_id: str) -> None:
+    """Ensure VITE_OAUTH_CLIENT_ID in .env matches the app ID from app_config.json."""
+    env_path = Path(cwd) / ".env"
+    if not env_path.exists():
+        return
+    lines = env_path.read_text().splitlines(keepends=True)
+    new_lines = []
+    found = False
+    for line in lines:
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, _, _ = line.partition("=")
+            if key.strip() == "VITE_OAUTH_CLIENT_ID":
+                new_lines.append(f"VITE_OAUTH_CLIENT_ID={app_id}\n")
+                found = True
+                continue
+        new_lines.append(line)
+    if not found:
+        new_lines.append(f"VITE_OAUTH_CLIENT_ID={app_id}\n")
+    env_path.write_text("".join(new_lines))
+
+
 def _bz_headers(token: str) -> dict:
+    if token.startswith("bz_"):
+        return {"X-API-Key": token, "Content-Type": "application/json"}
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+
+def _bz_auth(token: str) -> dict:
+    """Auth-only headers (no Content-Type) for multipart/form-data requests."""
+    if token.startswith("bz_"):
+        return {"X-API-Key": token}
+    return {"Authorization": f"Bearer {token}"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1069,7 +1145,16 @@ class AgentPoolEntry:
         """Add a subscriber queue. If replay=True, pre-fill with current turn's buffered messages."""
         q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         if replay:
+            still_waiting = self.agent_status in ("waiting_input", "waiting_permission")
             for msg in self._turn_buffer:
+                # Skip prompt events that the user has already answered so they
+                # don't re-appear on reconnect.
+                if not still_waiting and msg and msg[0] == "{":
+                    try:
+                        if json.loads(msg).get("type") == "prompt":
+                            continue
+                    except Exception:
+                        pass
                 try:
                     q.put_nowait(msg)
                 except asyncio.QueueFull:
@@ -2259,7 +2344,7 @@ async def send_to_client(queue: asyncio.Queue, ws: "web.WebSocketResponse") -> N
             break
         if raw and raw[0] == "{":
             try:
-                await ws.send_str(raw)
+                await ws.send_str(_redact(raw))
             except Exception:
                 # Socket already closing — stop sending
                 break

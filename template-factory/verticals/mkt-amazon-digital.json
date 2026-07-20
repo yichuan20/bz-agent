@@ -1,0 +1,15 @@
+{
+  "id": "mkt-amazon-digital",
+  "name": "Digital Downloads Store",
+  "description": "Online store for digital products — templates, software, courses, and downloadable assets.",
+  "tags": ["digital", "downloads", "marketing", "shop"],
+  "text_replacements": [
+    { "from": "Amazon", "to": "Downloads" },
+    { "from": "Prime", "to": "Pro" },
+    { "from": "Ships in", "to": "Instant access" },
+    { "from": "Add to Cart", "to": "Add to Cart" },
+    { "from": "Buy Now", "to": "Get Instant Access" },
+    { "from": "delivery", "to": "download" },
+    { "from": "Delivery", "to": "Download" }
+  ]
+}

@@ -20,3 +20,5 @@ twilio_config.sh
 __pycache__
 ws-doc-1
 logs/
+.bzcanvas.json
+openapi.json

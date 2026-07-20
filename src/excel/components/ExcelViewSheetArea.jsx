@@ -1,31 +1,8 @@
 /* eslint-disable no-unused-vars */
 
-import ExcelTextInputWithFormulaDropdown, {
-  getCellLocationToColorMap,
-} from './ExcelTextInputWithFormulaDropdown';
-import ExcelToolbar from './ExcelToolbar';
-import MSExcelFormulaBar from './MSExcelFormulaBar';
-import { FormulaIcon, PdfIcon } from './Icons';
-import {
-  CellLocSpan,
-  CellsContainer,
-  Container,
-  ExcelTextInputWithFormulaDropdownBorderLeft,
-  FormulaBar,
-  FormulaIconWrapper,
-  FormulaInputWrapper,
-  GridCanvas,
-  IconContainer,
-  OverlayCanvas,
-  SrcTriggerContainer,
-  StyledSearchInput,
-  TopLeftCorner,
-  VerticalDivider,
-} from './ExcelViewSheetArea.styles';
-import SelectedImageContainer from './SelectedImageContainer';
-import useSearchParamsState from '../hooks/useSearchParamsState';
 import { isNil, range } from 'lodash';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSearchParamsState from '../hooks/useSearchParamsState';
 import { COLORS } from '../utils/common';
 import {
   CELL_PADDING,
@@ -52,6 +29,28 @@ import {
   X_OFFSET,
   Y_OFFSET,
 } from '../utils/excel-utils';
+import ExcelTextInputWithFormulaDropdown, {
+  getCellLocationToColorMap,
+} from './ExcelTextInputWithFormulaDropdown';
+import ExcelToolbar from './ExcelToolbar';
+import {
+  CellLocSpan,
+  CellsContainer,
+  Container,
+  ExcelTextInputWithFormulaDropdownBorderLeft,
+  FormulaBar,
+  FormulaIconWrapper,
+  FormulaInputWrapper,
+  GridCanvas,
+  IconContainer,
+  OverlayCanvas,
+  SrcTriggerContainer,
+  StyledSearchInput,
+  TopLeftCorner,
+} from './ExcelViewSheetArea.styles';
+import { FormulaIcon, PdfIcon } from './Icons';
+import MSExcelFormulaBar from './MSExcelFormulaBar';
+import SelectedImageContainer from './SelectedImageContainer';
 
 /*
 
@@ -206,7 +205,7 @@ const recalculateRowHeightsForGrid = ({
   // Find affected rows
   const affectedRows = new Set();
   Object.keys(cells).forEach(cellId => {
-    const rowIndex = parseInt(cellId.match(/\d+/)?.[0]) - 1;
+    const rowIndex = parseInt(cellId.match(/\d+/)?.[0], 10) - 1;
 
     // If onlyNewRows is enabled, skip rows that have already been calculated
     if (onlyNewRows && calculatedRows?.has(rowIndex)) {
@@ -337,26 +336,30 @@ const formatCellValue = (rawValue, dataFormatString) => {
 
   const str = rawValue == null ? '' : String(rawValue);
   const num = parseFloat(str);
-  const isNum = str !== '' && !isNaN(num);
+  const isNum = str !== '' && !Number.isNaN(num);
 
   // ── Percentage ───────────────────────────────────────────────────────────
   if (dataFormatString === '0%') {
-    return isNum ? Math.round(num * 100) + '%' : str;
+    return isNum ? `${Math.round(num * 100)}%` : str;
   }
   if (dataFormatString === '0.00%') {
-    return isNum ? (num * 100).toFixed(2) + '%' : str;
+    return isNum ? `${(num * 100).toFixed(2)}%` : str;
   }
 
   // ── Currency / Accounting ─────────────────────────────────────────────────
   if (dataFormatString === '"$"#,##0') {
     if (!isNum) return str;
     const sign = num < 0 ? '-' : '';
-    return sign + '$' + Math.abs(Math.round(num)).toLocaleString('en-US');
+    return `${sign}$${Math.abs(Math.round(num)).toLocaleString('en-US')}`;
   }
   if (dataFormatString === '"$"#,##0.00') {
     if (!isNum) return str;
     const sign = num < 0 ? '-' : '';
-    return sign + '$' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (
+      sign +
+      '$' +
+      Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    );
   }
 
   // ── Plain number with thousands separator ────────────────────────────────
@@ -407,13 +410,19 @@ const formatCellValue = (rawValue, dataFormatString) => {
   if (dataFormatString === '# ?/?') {
     if (!isNum) return str;
     const whole = Math.floor(Math.abs(num));
-    const frac  = Math.abs(num) - whole;
+    const frac = Math.abs(num) - whole;
     if (frac < 0.001) return String(num < 0 ? -whole : whole);
-    let bestN = 1, bestD = 1, bestDiff = Infinity;
+    let bestN = 1,
+      bestD = 1,
+      bestDiff = Infinity;
     for (let d = 2; d <= 9; d++) {
       const n = Math.round(frac * d);
       const diff = Math.abs(frac - n / d);
-      if (diff < bestDiff) { bestDiff = diff; bestN = n; bestD = d; }
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestN = n;
+        bestD = d;
+      }
     }
     const sign = num < 0 ? '-' : '';
     return whole > 0 ? `${sign}${whole} ${bestN}/${bestD}` : `${sign}${bestN}/${bestD}`;
@@ -423,7 +432,10 @@ const formatCellValue = (rawValue, dataFormatString) => {
   let fmt = dataFormatString;
   let prefix = '';
   const prefixMatch = fmt.match(/^"([^"]+)"/);
-  if (prefixMatch) { prefix = prefixMatch[1]; fmt = fmt.slice(prefixMatch[0].length); }
+  if (prefixMatch) {
+    prefix = prefixMatch[1];
+    fmt = fmt.slice(prefixMatch[0].length);
+  }
 
   if (isNum) {
     const decimalMatch = fmt.match(/\.(\d+)/);
@@ -432,7 +444,10 @@ const formatCellValue = (rawValue, dataFormatString) => {
     const isPercent = fmt.trimEnd().endsWith('%');
     const val = isPercent ? num * 100 : num;
     const formatted = useComma
-      ? Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+      ? Math.abs(val).toLocaleString('en-US', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        })
       : Math.abs(val).toFixed(decimals);
     const sign = num < 0 ? '-' : '';
     return `${sign}${prefix}${formatted}${isPercent ? '%' : ''}`;
@@ -441,12 +456,12 @@ const formatCellValue = (rawValue, dataFormatString) => {
   return str;
 };
 
-const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
+const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight, zoom = 1 }) => {
   if (!cell) {
     return;
   }
 
-  const fontSize = (cell?.fontSize || 200) * SF * FONT_SIZE_MULTIPLIER;
+  const fontSize = (cell?.fontSize || 200) * SF * FONT_SIZE_MULTIPLIER * zoom;
   const fontStyle = cell?.fontItalic ? 'italic ' : '';
   const fontWeight = cell?.fontBold ? '600 ' : '';
   const fontFamily = cell?.fontFamily || 'Arial';
@@ -470,7 +485,7 @@ const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
 
   if (cell?.dataFormatString?.includes('[Red]')) {
     const rawNum = parseFloat(cell?.['f-value'] ?? cell?.value);
-    if (!isNaN(rawNum) && rawNum < 0) ctx.fillStyle = '#ff0000';
+    if (!Number.isNaN(rawNum) && rawNum < 0) ctx.fillStyle = '#ff0000';
   }
 
   const [_rawHorizAlign, _rawVertAlign] = cell?.align?.split(';') || [];
@@ -494,7 +509,7 @@ const drawText = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
     ctxTextAlign = 'center';
   }
 
-  const rawValue  = cell?.['f-value'] ?? cell?.value ?? '';
+  const rawValue = cell?.['f-value'] ?? cell?.value ?? '';
   const cellValue = formatCellValue(rawValue, cell?.dataFormatString);
   const availableWidth = cellWidth * SF - CELL_PADDING * 2;
 
@@ -597,7 +612,7 @@ const drawCellBorder = ({ ctx, cell, topY, leftX, cellWidth, cellHeight }) => {
 const parseRefToIndices = ref => {
   const m = ref.toUpperCase().match(/([A-Z]+)(\d+)/);
   if (!m) return [0, 0];
-  return [ALPHABET_EXTENDED.indexOf(m[1]), parseInt(m[2]) - 1];
+  return [ALPHABET_EXTENDED.indexOf(m[1]), parseInt(m[2], 10) - 1];
 };
 
 const drawBlueRectAroundSelectedCell = ({
@@ -654,9 +669,12 @@ const drawRangeHighlights = ({ ctx, cellLocationToColor, rowIndToTopY, colIndToL
   });
 
   Object.entries(colorToCells).forEach(([color, cells]) => {
-    let minRow = Infinity, maxRow = -Infinity, minCol = Infinity, maxCol = -Infinity;
+    let minRow = Infinity,
+      maxRow = -Infinity,
+      minCol = Infinity,
+      maxCol = -Infinity;
     cells.forEach(loc => {
-      const row = parseInt(loc.match(/\d+$/)[0]) - 1;
+      const row = parseInt(loc.match(/\d+$/)[0], 10) - 1;
       const col = ALPHABET_EXTENDED.indexOf(loc.match(/^[A-Z]+/)[0]);
       if (row < minRow) minRow = row;
       if (row > maxRow) maxRow = row;
@@ -666,10 +684,14 @@ const drawRangeHighlights = ({ ctx, cellLocationToColor, rowIndToTopY, colIndToL
 
     if (minRow === Infinity) return;
 
-    const topY    = Y_OFFSET + (rowIndToTopY?.[minRow] ?? 0);
-    const leftX   = X_OFFSET + (colIndToLeftX?.[minCol] ?? 0);
-    const bottomY = Y_OFFSET + (rowIndToTopY?.[maxRow] ?? 0) + (grid?.rowIndexToHeight?.[maxRow] ?? DEFAULT_CELL_HEIGHT);
-    const rightX  = X_OFFSET + (colIndToLeftX?.[maxCol] ?? 0) + (grid?.columnIndexToWidth?.[maxCol] ?? 100);
+    const topY = Y_OFFSET + (rowIndToTopY?.[minRow] ?? 0);
+    const leftX = X_OFFSET + (colIndToLeftX?.[minCol] ?? 0);
+    const bottomY =
+      Y_OFFSET +
+      (rowIndToTopY?.[maxRow] ?? 0) +
+      (grid?.rowIndexToHeight?.[maxRow] ?? DEFAULT_CELL_HEIGHT);
+    const rightX =
+      X_OFFSET + (colIndToLeftX?.[maxCol] ?? 0) + (grid?.columnIndexToWidth?.[maxCol] ?? 100);
 
     const inset = 1;
     ctx.strokeStyle = color;
@@ -694,7 +716,12 @@ const drawRegion = ({ ctx, window, grid, dragStartLocation, dragEndLocation, isE
   ctx.fillRect(0, 0, X_OFFSET * SF, Y_OFFSET * SF);
 
   // Don't draw selection region if editing or there's no valid selection
-  if (isEditing || !dragStartLocation || !dragEndLocation || dragStartLocation === dragEndLocation) {
+  if (
+    isEditing ||
+    !dragStartLocation ||
+    !dragEndLocation ||
+    dragStartLocation === dragEndLocation
+  ) {
     return;
   }
 
@@ -783,7 +810,8 @@ const fillBgOfRemainingRow = ({
     const leftX = X_OFFSET + colIndToLeftX[c];
     let cellWidth = grid?.columnIndexToWidth?.[c] ?? 100;
     if (mergeInfo) {
-      for (let i = 1; i < mergeInfo.colSpan; i++) cellWidth += grid?.columnIndexToWidth?.[c + i] ?? 100;
+      for (let i = 1; i < mergeInfo.colSpan; i++)
+        cellWidth += grid?.columnIndexToWidth?.[c + i] ?? 100;
     }
 
     if (cellWidth === 0 || cellHeight === 0) {
@@ -857,9 +885,11 @@ const drawCells = ({
   cellLocationToColor,
   labels = [],
   editingCellLocation = null,
+  zoom: _zoom,
   mergedSlaveMap = {},
   mergedMasterMap = {},
 }) => {
+  const zoom = _zoom ?? grid?._zoom ?? 1;
   ctx.clearRect(0, 0, 100000, 100000);
 
   // Fill the top-left corner area with background color
@@ -889,8 +919,10 @@ const drawCells = ({
       let cellWidth = grid?.columnIndexToWidth?.[colInd] ?? 100;
       let cellHeight = grid?.rowIndexToHeight?.[rowInd] ?? DEFAULT_CELL_HEIGHT;
       if (mergeInfo) {
-        for (let i = 1; i < mergeInfo.colSpan; i++) cellWidth += grid?.columnIndexToWidth?.[colInd + i] ?? 100;
-        for (let i = 1; i < mergeInfo.rowSpan; i++) cellHeight += grid?.rowIndexToHeight?.[rowInd + i] ?? DEFAULT_CELL_HEIGHT;
+        for (let i = 1; i < mergeInfo.colSpan; i++)
+          cellWidth += grid?.columnIndexToWidth?.[colInd + i] ?? 100;
+        for (let i = 1; i < mergeInfo.rowSpan; i++)
+          cellHeight += grid?.rowIndexToHeight?.[rowInd + i] ?? DEFAULT_CELL_HEIGHT;
       }
 
       if (cellWidth === 0 || cellHeight === 0) {
@@ -929,8 +961,10 @@ const drawCells = ({
       let cellWidth = grid?.columnIndexToWidth?.[colInd] ?? 100;
       let cellHeight = grid?.rowIndexToHeight?.[rowInd] ?? DEFAULT_CELL_HEIGHT;
       if (mergeInfo) {
-        for (let i = 1; i < mergeInfo.colSpan; i++) cellWidth += grid?.columnIndexToWidth?.[colInd + i] ?? 100;
-        for (let i = 1; i < mergeInfo.rowSpan; i++) cellHeight += grid?.rowIndexToHeight?.[rowInd + i] ?? DEFAULT_CELL_HEIGHT;
+        for (let i = 1; i < mergeInfo.colSpan; i++)
+          cellWidth += grid?.columnIndexToWidth?.[colInd + i] ?? 100;
+        for (let i = 1; i < mergeInfo.rowSpan; i++)
+          cellHeight += grid?.rowIndexToHeight?.[rowInd + i] ?? DEFAULT_CELL_HEIGHT;
       }
 
       if (cellWidth === 0 || cellHeight === 0) {
@@ -963,7 +997,7 @@ const drawCells = ({
 
       // Skip drawing text for the cell being edited (editor overlay handles it)
       if (cellId !== editingCellLocation) {
-        drawText({ ctx, cell, topY, leftX, cellWidth, cellHeight });
+        drawText({ ctx, cell, topY, leftX, cellWidth, cellHeight, zoom });
       }
 
       if (cellToLabelColors.has(cellId)) {
@@ -975,15 +1009,18 @@ const drawCells = ({
   // Final pass: redraw merged master cells on top to cover any stray borders from adjacent cells
   Object.entries(mergedMasterMap).forEach(([masterRef, mergeInfo]) => {
     const [masterCol, masterRow] = parseRefToIndices(masterRef);
-    if (masterRow < startRow || masterRow >= endRow || masterCol < startCol || masterCol >= endCol) return;
+    if (masterRow < startRow || masterRow >= endRow || masterCol < startCol || masterCol >= endCol)
+      return;
     if (!rowIndToTopY[masterRow] === undefined || !colIndToLeftX[masterCol] === undefined) return;
 
     const topY = Y_OFFSET + rowIndToTopY[masterRow];
     const leftX = X_OFFSET + colIndToLeftX[masterCol];
     let cellWidth = 0;
-    for (let i = 0; i < mergeInfo.colSpan; i++) cellWidth += grid?.columnIndexToWidth?.[masterCol + i] ?? 100;
+    for (let i = 0; i < mergeInfo.colSpan; i++)
+      cellWidth += grid?.columnIndexToWidth?.[masterCol + i] ?? 100;
     let cellHeight = 0;
-    for (let i = 0; i < mergeInfo.rowSpan; i++) cellHeight += grid?.rowIndexToHeight?.[masterRow + i] ?? DEFAULT_CELL_HEIGHT;
+    for (let i = 0; i < mergeInfo.rowSpan; i++)
+      cellHeight += grid?.rowIndexToHeight?.[masterRow + i] ?? DEFAULT_CELL_HEIGHT;
 
     if (cellWidth === 0 || cellHeight === 0) return;
 
@@ -1056,7 +1093,7 @@ const adjustFormula = (formula, rowDelta, colDelta) => {
       if (colIdx === -1) return match; // not a valid column label — leave as-is
       const newColIdx = dc === '$' ? colIdx : Math.max(0, colIdx + colDelta);
       const newCol = ALPHABET_EXTENDED[newColIdx] || colUpper;
-      const newRow = dr === '$' ? parseInt(row) : Math.max(1, parseInt(row) + rowDelta);
+      const newRow = dr === '$' ? parseInt(row, 10) : Math.max(1, parseInt(row, 10) + rowDelta);
       return `${sheetRef || ''}${dc}${newCol}${dr}${newRow}`;
     },
   );
@@ -1081,10 +1118,14 @@ const drawFillRange = ({ ctx, grid, window: win, sourceLocation, targetLocation 
   const minCol = Math.min(srcCol, tgtCol);
   const maxCol = Math.max(srcCol, tgtCol);
 
-  const topY   = Y_OFFSET + (rowIndToTopY[minRow] ?? 0);
-  const leftX  = X_OFFSET + (colIndToLeftX[minCol] ?? 0);
-  const bottomY = Y_OFFSET + (rowIndToTopY[maxRow] ?? 0) + (grid?.rowIndexToHeight?.[maxRow] ?? DEFAULT_CELL_HEIGHT);
-  const rightX  = X_OFFSET + (colIndToLeftX[maxCol] ?? 0) + (grid?.columnIndexToWidth?.[maxCol] ?? 100);
+  const topY = Y_OFFSET + (rowIndToTopY[minRow] ?? 0);
+  const leftX = X_OFFSET + (colIndToLeftX[minCol] ?? 0);
+  const bottomY =
+    Y_OFFSET +
+    (rowIndToTopY[maxRow] ?? 0) +
+    (grid?.rowIndexToHeight?.[maxRow] ?? DEFAULT_CELL_HEIGHT);
+  const rightX =
+    X_OFFSET + (colIndToLeftX[maxCol] ?? 0) + (grid?.columnIndexToWidth?.[maxCol] ?? 100);
 
   const accentBlue = getCSSVar('--accent-blue');
   ctx.strokeStyle = accentBlue;
@@ -1195,7 +1236,7 @@ const getSegStartToSegLength = (hiddenRowIndices = []) => {
 
 const getWindow = (scrollTop, scrollLeft, grid = {}, canvasSize = {}) => {
   let startRow = Math.floor(scrollTop / SCROLL_Y_SENSITIVITY);
-  const hiddenRowIndices = grid?.hiddenRowIndices?.map(i => parseInt(i)) || [];
+  const hiddenRowIndices = grid?.hiddenRowIndices?.map(i => parseInt(i, 10)) || [];
   const rowsSegStartToSegLength = getSegStartToSegLength(hiddenRowIndices);
   Object.entries(rowsSegStartToSegLength).forEach(([segStart, segLength]) => {
     if (startRow >= segStart) {
@@ -1211,7 +1252,7 @@ const getWindow = (scrollTop, scrollLeft, grid = {}, canvasSize = {}) => {
   }
 
   let startCol = Math.floor(scrollLeft / SCROLL_X_SENSITIVITY);
-  const hiddenColIndices = grid?.hiddenColIndices?.map(i => parseInt(i)) || [];
+  const hiddenColIndices = grid?.hiddenColIndices?.map(i => parseInt(i, 10)) || [];
   const colsSegStartToSegLength = getSegStartToSegLength(hiddenColIndices);
   Object.entries(colsSegStartToSegLength).forEach(([segStart, segLength]) => {
     if (startCol >= segStart) {
@@ -1250,7 +1291,7 @@ const getSelectedCellStyle = (cellLocation, grid, viewWindow, scrollTop = 0, scr
   const leftX =
     X_OFFSET + getColIndToLeftX(viewWindow?.startCol, columnIndex + 1, grid)[columnIndex];
 
-  const width = grid?.columnIndexToWidth?.[columnIndex] ?? 100;
+  const _width = grid?.columnIndexToWidth?.[columnIndex] ?? 100;
   const height = grid?.rowIndexToHeight?.[rowIndex] ?? DEFAULT_CELL_HEIGHT;
 
   return {
@@ -1304,6 +1345,7 @@ const ExcelViewSheetArea = ({
   onScrollViewWindow = ({ startRow, startCol, endRow, endCol }) => {},
   cells = {},
   grid = {},
+  zoom = 1,
   onNewCellToPatch = () => {},
   sheetName,
   isPatching,
@@ -1321,11 +1363,33 @@ const ExcelViewSheetArea = ({
   mergedCellRanges = [],
   onMergeCells = () => {},
 }) => {
+  // Scale grid dimensions by zoom factor so all rendering code zooms automatically.
+  // Uses Proxy so that even cells using default widths/heights (not in the map) are scaled.
+  const scaledGrid = useMemo(() => {
+    if (!grid || zoom === 1) return grid;
+    const makeScaledProxy = (obj, defaultVal) =>
+      new Proxy(obj ?? {}, {
+        get(target, key) {
+          if (typeof key === 'symbol') return target[key];
+          const val = target[key];
+          if (val !== undefined) return typeof val === 'number' ? val * zoom : val;
+          if (!Number.isNaN(key)) return defaultVal * zoom;
+          return target[key];
+        },
+      });
+    return {
+      ...grid,
+      columnIndexToWidth: makeScaledProxy(grid.columnIndexToWidth, 100),
+      rowIndexToHeight: makeScaledProxy(grid.rowIndexToHeight, DEFAULT_CELL_HEIGHT),
+      _zoom: zoom,
+    };
+  }, [grid, zoom]);
+
   // Replaces styled-components useTheme() — listens to the app's themechange event
   // AND watches data-theme attribute as a fallback
   // Light mode = data-theme attribute REMOVED; dark mode = data-theme="dark"
   const getThemeName = () => document.documentElement.getAttribute('data-theme') ?? 'light';
-  const [theme, setTheme] = React.useState({ name: getThemeName() });
+  const [_theme, setTheme] = React.useState({ name: getThemeName() });
   React.useEffect(() => {
     const updateTheme = () => {
       clearCSSVarCache();
@@ -1340,7 +1404,8 @@ const ExcelViewSheetArea = ({
       window.removeEventListener('themechange', updateTheme);
       obs.disconnect();
     };
-  }, []);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: getThemeName stable
+  }, [getThemeName]);
   const gridCanvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -1374,12 +1439,12 @@ const ExcelViewSheetArea = ({
   const [rowResizeAmount, setRowResizeAmount] = useState(null);
   const [rowResizeStartX, setRowResizeStartX] = useState(null);
 
-  const [isSidebarOpen, setIsSidebarOpen] = useSearchParamsState({
+  const [_isSidebarOpen, _setIsSidebarOpen] = useSearchParamsState({
     paramName: 'isSidebarOpen',
     initialValue: false,
   });
 
-  const [modalTableDocumentLocation, setModalTableDocumentLocation] = useState(null);
+  const [_modalTableDocumentLocation, setModalTableDocumentLocation] = useState(null);
 
   const handleInsertFunction = funcName => {
     setIsEditing(true);
@@ -1460,7 +1525,7 @@ const ExcelViewSheetArea = ({
   // Container position for coordinate conversion
   const containerRectRef = useRef(null);
   // Force re-render trigger for image loading
-  const [imageLoadTrigger, setImageLoadTrigger] = useState(0);
+  const [_imageLoadTrigger, setImageLoadTrigger] = useState(0);
 
   // Merge cell lookup maps derived from mergedCellRanges prop
   const mergedSlaveMap = useMemo(() => {
@@ -1509,14 +1574,14 @@ const ExcelViewSheetArea = ({
     calculatedRowsRef.current = new Set();
     setSelectedImageId(null);
     setImageDragInfo(null);
-  }, [sheetName]);
+  }, []);
 
   // Clear CSS variable cache and force redraw when theme changes
   useEffect(() => {
     clearCSSVarCache();
     // Force canvas redraw by triggering a state update
     setCanvasSize(prev => ({ ...prev }));
-  }, [theme.name]);
+  }, []);
 
   // Update container rect for coordinate conversion only
   // Canvas size is updated separately via debounced resize handler to prevent blinking
@@ -1536,86 +1601,97 @@ const ExcelViewSheetArea = ({
     const colStr = selectedCellLocation.match(/[A-Z]+/)?.[0];
     const rowStr = selectedCellLocation.match(/\d+/)?.[0];
     if (!colStr || !rowStr) return null;
-    const rowIdx = parseInt(rowStr) - 1;
+    const rowIdx = parseInt(rowStr, 10) - 1;
     const colIdx = ALPHABET_EXTENDED.indexOf(colStr);
     const { startRow, endRow, startCol, endCol } = viewWindow || {};
     if (rowIdx < startRow || rowIdx > endRow || colIdx < startCol || colIdx > endCol) return null;
-    const rowIndToTopY  = getRowIndToTopY(startRow, endRow, grid);
-    const colIndToLeftX = getColIndToLeftX(startCol, endCol, grid);
-    const leftX     = X_OFFSET + (colIndToLeftX[colIdx] ?? 0);
-    const topY      = Y_OFFSET + (rowIndToTopY[rowIdx] ?? 0);
-    const cellWidth  = grid?.columnIndexToWidth?.[colIdx] ?? 100;
-    const cellHeight = grid?.rowIndexToHeight?.[rowIdx] ?? DEFAULT_CELL_HEIGHT;
+    const rowIndToTopY = getRowIndToTopY(startRow, endRow, scaledGrid);
+    const colIndToLeftX = getColIndToLeftX(startCol, endCol, scaledGrid);
+    const leftX = X_OFFSET + (colIndToLeftX[colIdx] ?? 0);
+    const topY = Y_OFFSET + (rowIndToTopY[rowIdx] ?? 0);
+    const cellWidth = scaledGrid?.columnIndexToWidth?.[colIdx] ?? 100;
+    const cellHeight = scaledGrid?.rowIndexToHeight?.[rowIdx] ?? DEFAULT_CELL_HEIGHT;
     return { x: leftX + cellWidth, y: topY + cellHeight };
-  }, [selectedCellLocation, isEditing, fillDragEndLocation, grid, viewWindow]);
+  }, [selectedCellLocation, isEditing, fillDragEndLocation, scaledGrid, viewWindow]);
 
-  const applyFill = useCallback((targetCell) => {
-    const srcColStr = selectedCellLocation.match(/[A-Z]+/)?.[0];
-    const srcRow    = parseInt(selectedCellLocation.match(/\d+/)?.[0]);
-    const tgtColStr = targetCell.match(/[A-Z]+/)?.[0];
-    const tgtRow    = parseInt(targetCell.match(/\d+/)?.[0]);
-    if (!srcColStr || !tgtColStr || isNaN(srcRow) || isNaN(tgtRow)) return;
+  const applyFill = useCallback(
+    targetCell => {
+      const srcColStr = selectedCellLocation.match(/[A-Z]+/)?.[0];
+      const srcRow = parseInt(selectedCellLocation.match(/\d+/)?.[0], 10);
+      const tgtColStr = targetCell.match(/[A-Z]+/)?.[0];
+      const tgtRow = parseInt(targetCell.match(/\d+/)?.[0], 10);
+      if (!srcColStr || !tgtColStr || Number.isNaN(srcRow) || Number.isNaN(tgtRow)) return;
 
-    const srcColIdx = ALPHABET_EXTENDED.indexOf(srcColStr);
-    const tgtColIdx = ALPHABET_EXTENDED.indexOf(tgtColStr);
-    const rowDelta  = tgtRow - srcRow;
-    const colDelta  = tgtColIdx - srcColIdx;
-    if (rowDelta === 0 && colDelta === 0) return;
+      const srcColIdx = ALPHABET_EXTENDED.indexOf(srcColStr);
+      const tgtColIdx = ALPHABET_EXTENDED.indexOf(tgtColStr);
+      const rowDelta = tgtRow - srcRow;
+      const colDelta = tgtColIdx - srcColIdx;
+      if (rowDelta === 0 && colDelta === 0) return;
 
-    const fillRows = Math.abs(rowDelta) >= Math.abs(colDelta);
-    const step = fillRows ? (rowDelta > 0 ? 1 : -1) : (colDelta > 0 ? 1 : -1);
-    const srcData = cells[selectedCellLocation] || {};
-    const patches = {};
+      const fillRows = Math.abs(rowDelta) >= Math.abs(colDelta);
+      const step = fillRows ? (rowDelta > 0 ? 1 : -1) : colDelta > 0 ? 1 : -1;
+      const srcData = cells[selectedCellLocation] || {};
+      const patches = {};
 
-    if (fillRows) {
-      for (let r = srcRow + step; step > 0 ? r <= tgtRow : r >= tgtRow; r += step) {
-        const ref = `${srcColStr}${r}`;
-        const delta = r - srcRow;
-        patches[ref] = srcData.formula
-          ? { formula: adjustFormula(srcData.formula, delta, 0), dataType: 'FORMULA', value: '' }
-          : { ...srcData };
+      if (fillRows) {
+        for (let r = srcRow + step; step > 0 ? r <= tgtRow : r >= tgtRow; r += step) {
+          const ref = `${srcColStr}${r}`;
+          const delta = r - srcRow;
+          patches[ref] = srcData.formula
+            ? { formula: adjustFormula(srcData.formula, delta, 0), dataType: 'FORMULA', value: '' }
+            : { ...srcData };
+        }
+      } else {
+        for (let c = srcColIdx + step; step > 0 ? c <= tgtColIdx : c >= tgtColIdx; c += step) {
+          const ref = `${ALPHABET_EXTENDED[c]}${srcRow}`;
+          const delta = c - srcColIdx;
+          patches[ref] = srcData.formula
+            ? { formula: adjustFormula(srcData.formula, 0, delta), dataType: 'FORMULA', value: '' }
+            : { ...srcData };
+        }
       }
-    } else {
-      for (let c = srcColIdx + step; step > 0 ? c <= tgtColIdx : c >= tgtColIdx; c += step) {
-        const ref = `${ALPHABET_EXTENDED[c]}${srcRow}`;
-        const delta = c - srcColIdx;
-        patches[ref] = srcData.formula
-          ? { formula: adjustFormula(srcData.formula, 0, delta), dataType: 'FORMULA', value: '' }
-          : { ...srcData };
-      }
-    }
-    if (Object.keys(patches).length) onNewCellToPatch(patches);
-  }, [selectedCellLocation, cells, onNewCellToPatch]);
+      if (Object.keys(patches).length) onNewCellToPatch(patches);
+    },
+    [selectedCellLocation, cells, onNewCellToPatch],
+  );
 
-  const handleFillHandleMouseDown = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    fillDragEndRef.current = '';
-
-    const onMove = (me) => {
-      const rect = containerRectRef.current;
-      if (!rect) return;
-      const loc = getCellLocationFromOffset(me.clientX - rect.left, me.clientY - rect.top, grid, viewWindow);
-      if (loc && loc !== fillDragEndRef.current) {
-        fillDragEndRef.current = loc;
-        setFillDragEndLocation(loc);
-      }
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      const endLoc = fillDragEndRef.current;
-      if (endLoc && endLoc !== selectedCellLocation) applyFill(endLoc);
+  const handleFillHandleMouseDown = useCallback(
+    e => {
+      e.preventDefault();
+      e.stopPropagation();
       fillDragEndRef.current = '';
-      setFillDragEndLocation('');
-    };
 
-    document.body.style.cursor = 'crosshair';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, [selectedCellLocation, grid, viewWindow, applyFill]);
+      const onMove = me => {
+        const rect = containerRectRef.current;
+        if (!rect) return;
+        const loc = getCellLocationFromOffset(
+          me.clientX - rect.left,
+          me.clientY - rect.top,
+          scaledGrid,
+          viewWindow,
+        );
+        if (loc && loc !== fillDragEndRef.current) {
+          fillDragEndRef.current = loc;
+          setFillDragEndLocation(loc);
+        }
+      };
+
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        const endLoc = fillDragEndRef.current;
+        if (endLoc && endLoc !== selectedCellLocation) applyFill(endLoc);
+        fillDragEndRef.current = '';
+        setFillDragEndLocation('');
+      };
+
+      document.body.style.cursor = 'crosshair';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [selectedCellLocation, scaledGrid, viewWindow, applyFill],
+  );
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1626,17 +1702,25 @@ const ExcelViewSheetArea = ({
     if (!container) return;
     const onWheel = e => {
       e.preventDefault();
-      const delta = e.deltaMode === 1 ? e.deltaY * 18 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-      const deltaX = e.deltaMode === 1 ? e.deltaX * 50 : e.deltaMode === 2 ? e.deltaX * 400 : e.deltaX;
-      scrollTopRef.current  = Math.max(0, scrollTopRef.current  + delta);
+      const delta =
+        e.deltaMode === 1 ? e.deltaY * 18 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      const deltaX =
+        e.deltaMode === 1 ? e.deltaX * 50 : e.deltaMode === 2 ? e.deltaX * 400 : e.deltaX;
+      scrollTopRef.current = Math.max(0, scrollTopRef.current + delta);
       scrollLeftRef.current = Math.max(0, scrollLeftRef.current + deltaX);
-      const newWindow = getWindow(scrollTopRef.current, scrollLeftRef.current, grid, canvasSize);
+      const newWindow = getWindow(
+        scrollTopRef.current,
+        scrollLeftRef.current,
+        scaledGrid,
+        canvasSize,
+      );
       onScrollViewWindow(newWindow);
       updateContainerRect();
     };
     container.addEventListener('wheel', onWheel, { passive: false });
     return () => container.removeEventListener('wheel', onWheel);
-  }, [grid, canvasSize, onScrollViewWindow]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: updateContainerRect stable
+  }, [scaledGrid, canvasSize, onScrollViewWindow, updateContainerRect]);
 
   // Initialize container rect and listen for resize using ResizeObserver
   useEffect(() => {
@@ -1707,11 +1791,12 @@ const ExcelViewSheetArea = ({
       resizeObserver.disconnect();
       window.removeEventListener('resize', debouncedUpdateContainerRect);
     };
-  }, []);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: updateContainerRect stable
+  }, [updateContainerRect]);
 
   // Load images into cache for canvas rendering
   useEffect(() => {
-    let needsUpdate = false;
+    let _needsUpdate = false;
 
     images.forEach(imgData => {
       if (!imageElementCacheRef.current[imgData.id]) {
@@ -1722,7 +1807,7 @@ const ExcelViewSheetArea = ({
           // Trigger re-render to draw the loaded image
           setImageLoadTrigger(prev => prev + 1);
         };
-        needsUpdate = true;
+        _needsUpdate = true;
       }
     });
 
@@ -1786,14 +1871,14 @@ const ExcelViewSheetArea = ({
       isCalculatingHeightRef.current = true;
       onNewGrid(updatedGrid);
     }
-  }, [JSON.stringify(cells), JSON.stringify(viewWindow)]);
+  }, [cells, grid, onNewGrid, viewWindow]);
 
   useEffect(() => {
     if (grid?.sheetName) {
       const newWindow = getWindow(
         scrollTopRef.current,
         scrollLeftRef.current,
-        grid,
+        scaledGrid,
         canvasSize,
       );
       onScrollViewWindow(newWindow);
@@ -1802,9 +1887,9 @@ const ExcelViewSheetArea = ({
     const { width, height } = containerRef.current.getBoundingClientRect();
     setCanvasSize({ width, height });
 
-    const initialWindow = getWindow(0, 0, grid, { width, height });
+    const initialWindow = getWindow(0, 0, scaledGrid, { width, height });
     onScrollViewWindow(initialWindow);
-  }, [JSON.stringify(grid)]);
+  }, [canvasSize, grid?.sheetName, onScrollViewWindow, scaledGrid]);
 
   // Recalculate view window when canvas size changes (e.g., sidebar collapse/expand)
   useEffect(() => {
@@ -1812,11 +1897,18 @@ const ExcelViewSheetArea = ({
     const newWindow = getWindow(
       scrollTopRef.current,
       scrollLeftRef.current,
-      grid,
+      scaledGrid,
       canvasSize,
     );
     onScrollViewWindow(newWindow);
-  }, [canvasSize.width, canvasSize.height]);
+  }, [
+    canvasSize.width,
+    canvasSize.height,
+    grid?.sheetName,
+    onScrollViewWindow,
+    canvasSize,
+    scaledGrid,
+  ]);
 
   // Image interaction handlers
   const handleImageMouseDown = (e, imageId) => {
@@ -1878,7 +1970,7 @@ const ExcelViewSheetArea = ({
     setValueToEdit(
       cells?.[selectedCellLocation]?.formula || cells?.[selectedCellLocation]?.value || '',
     );
-  }, [selectedCellLocation]);
+  }, [selectedCellLocation, cells]);
 
   // Drawing useEffect - should NOT affect edit state
   // Uses double-buffering to prevent canvas blinking during resize
@@ -1909,7 +2001,7 @@ const ExcelViewSheetArea = ({
     drawCells({
       ctx: offscreenCtx,
       window: viewWindow,
-      grid,
+      grid: scaledGrid,
       cells,
       selectedCellLocation,
       labels,
@@ -1925,7 +2017,7 @@ const ExcelViewSheetArea = ({
       selectedImageId,
       imageElementCache: imageElementCacheRef.current,
       viewWindow,
-      grid,
+      grid: scaledGrid,
     });
 
     // Copy offscreen canvas to visible canvas in one operation (prevents blinking)
@@ -1936,7 +2028,7 @@ const ExcelViewSheetArea = ({
     // Draw overlay separately (it's on a different canvas)
     drawRegion({
       ctx: overlayCanvasRef.current.getContext('2d'),
-      grid,
+      grid: scaledGrid,
       window: viewWindow,
       dragStartLocation,
       dragEndLocation,
@@ -1946,19 +2038,20 @@ const ExcelViewSheetArea = ({
     // Update container rect for coordinate conversion
     updateContainerRect();
   }, [
-    JSON.stringify(cells),
-    JSON.stringify(grid),
-    JSON.stringify(viewWindow),
     selectedCellLocation,
-    JSON.stringify(currentImages),
     selectedImageId,
-    imageLoadTrigger,
-    JSON.stringify(labels),
-    theme.name,
-    canvasSize.width,
-    canvasSize.height,
     isEditing,
-    JSON.stringify(mergedCellRanges),
+    cells,
+    currentImages,
+    dragEndLocation,
+    dragStartLocation,
+    labels,
+    mergedMasterMap,
+    mergedSlaveMap,
+    scaledGrid, // Update container rect for coordinate conversion
+    // biome-ignore lint/correctness/useExhaustiveDependencies: updateContainerRect stable
+    updateContainerRect,
+    viewWindow,
   ]);
 
   // Global mouse events for image dragging
@@ -1973,7 +2066,7 @@ const ExcelViewSheetArea = ({
       }));
     };
 
-    const handleGlobalMouseUp = e => {
+    const handleGlobalMouseUp = _e => {
       if (imageDragInfo) {
         // Calculate final state based on the current images derived state
         // However, currentImages inside this closure might be stale if we don't include it in deps
@@ -2002,21 +2095,30 @@ const ExcelViewSheetArea = ({
         document.removeEventListener('mouseup', handleGlobalMouseUp);
       };
     }
-  }, [imageDragInfo, currentImages]);
+  }, [
+    imageDragInfo,
+    currentImages, // Calculate final state based on the current images derived state
+    // However, currentImages inside this closure might be stale if we don't include it in deps
+    // But since we want to avoid re-attaching listeners on every move, we can't easily rely on currentImages closure
+    // So we recalculate the final state here using the latest drag info
+
+    // Actually, since we have currentImages in the scope and it updates via useMemo when imageDragInfo updates,
+    // we can just use currentImages if we include it in deps.
+    // But including it in deps causes re-bind on every frame.
+    // Let's assume onNewImagesToPatch can handle the update.
+
+    // Wait, handleGlobalMouseUp is a closure. It captures currentImages at the time of binding.
+    // If we don't rebind, currentImages is stale (initial state).
+    // Since we are updating imageDragInfo, and imageDragInfo is in deps, this effect runs on every move anyway!
+    // So currentImages IS fresh.
+    onNewImagesToPatch,
+  ]);
 
   useEffect(() => {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [
-    selectedCellLocation,
-    isEditing,
-    valueToEdit,
-    isPatching,
-    dragStartLocation,
-    dragEndLocation,
-    selectedImageId,
-    currentImages,
-  ]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: onKeyDown stable
+  }, [onKeyDown]);
 
   useEffect(() => {
     const ctx = gridCanvasRef.current.getContext('2d');
@@ -2025,7 +2127,7 @@ const ExcelViewSheetArea = ({
       drawCells({
         ctx,
         window: viewWindow,
-        grid,
+        grid: scaledGrid,
         cells,
         selectedCellLocation,
         cellLocationToColor: {},
@@ -2040,7 +2142,7 @@ const ExcelViewSheetArea = ({
         selectedImageId,
         imageElementCache: imageElementCacheRef.current,
         viewWindow,
-        grid,
+        grid: scaledGrid,
       });
       return;
     }
@@ -2049,7 +2151,7 @@ const ExcelViewSheetArea = ({
     drawCells({
       ctx,
       window: viewWindow,
-      grid,
+      grid: scaledGrid,
       cells,
       selectedCellLocation,
       cellLocationToColor,
@@ -2065,29 +2167,50 @@ const ExcelViewSheetArea = ({
       selectedImageId,
       imageElementCache: imageElementCacheRef.current,
       viewWindow,
-      grid,
+      grid: scaledGrid,
     });
   }, [
     isEditing,
     valueToEdit,
-    JSON.stringify(cells),
-    JSON.stringify(grid),
-    JSON.stringify(viewWindow),
     selectedCellLocation,
-    JSON.stringify(currentImages),
     selectedImageId,
-    JSON.stringify(labels),
-    theme.name,
-    JSON.stringify(mergedCellRanges),
+    cells,
+    currentImages,
+    labels,
+    mergedMasterMap,
+    mergedSlaveMap,
+    scaledGrid,
+    viewWindow,
   ]);
 
   useEffect(() => {
     const ctx = overlayCanvasRef.current.getContext('2d');
-    drawRegion({ ctx, grid, window: viewWindow, dragStartLocation, dragEndLocation, isEditing });
+    drawRegion({
+      ctx,
+      grid: scaledGrid,
+      window: viewWindow,
+      dragStartLocation,
+      dragEndLocation,
+      isEditing,
+    });
     if (fillDragEndLocation && selectedCellLocation) {
-      drawFillRange({ ctx, grid, window: viewWindow, sourceLocation: selectedCellLocation, targetLocation: fillDragEndLocation });
+      drawFillRange({
+        ctx,
+        grid: scaledGrid,
+        window: viewWindow,
+        sourceLocation: selectedCellLocation,
+        targetLocation: fillDragEndLocation,
+      });
     }
-  }, [dragStartLocation, dragEndLocation, fillDragEndLocation, selectedCellLocation, JSON.stringify(grid), JSON.stringify(viewWindow), theme.name, isEditing]);
+  }, [
+    dragStartLocation,
+    dragEndLocation,
+    fillDragEndLocation,
+    selectedCellLocation,
+    isEditing,
+    scaledGrid,
+    viewWindow,
+  ]);
 
   const handleImageUpload = event => {
     const file = event.target.files[0];
@@ -2107,7 +2230,7 @@ const ExcelViewSheetArea = ({
         const displayY = (canvasSize.height - defaultHeight) / 2;
 
         // Convert display position to absolute position (relative to entire sheet)
-        const viewOffset = getViewWindowPixelOffset(viewWindow, grid);
+        const viewOffset = getViewWindowPixelOffset(viewWindow, scaledGrid);
         const absoluteX = displayX + viewOffset.offsetX - X_OFFSET;
         const absoluteY = displayY + viewOffset.offsetY - Y_OFFSET;
 
@@ -2131,7 +2254,6 @@ const ExcelViewSheetArea = ({
     reader.readAsDataURL(file);
   };
 
-
   // Check if click position hits any image (for canvas-rendered images)
   const getClickedImageId = (clientX, clientY) => {
     const containerRect = containerRectRef.current;
@@ -2142,7 +2264,7 @@ const ExcelViewSheetArea = ({
       clientX,
       clientY,
       viewWindow,
-      grid,
+      scaledGrid,
       containerRect,
     );
 
@@ -2202,7 +2324,7 @@ const ExcelViewSheetArea = ({
     const rawMouseLocation = getCellLocationFromOffset(
       e.nativeEvent.offsetX,
       e.nativeEvent.offsetY,
-      grid,
+      scaledGrid,
       viewWindow,
     );
     // Remap slave cells to their master so clicking anywhere in a merge selects the master
@@ -2215,7 +2337,7 @@ const ExcelViewSheetArea = ({
 
     const nearestBoundaryColumnIndex = getNearestBoundaryColumnIndex({
       e,
-      grid,
+      grid: scaledGrid,
       viewWindow,
     });
     if (!isNil(nearestBoundaryColumnIndex)) {
@@ -2225,7 +2347,7 @@ const ExcelViewSheetArea = ({
 
     const nearestBoundaryRowIndex = getNearestBoundaryRowIndex({
       e,
-      grid,
+      grid: scaledGrid,
       viewWindow,
     });
     if (!isNil(nearestBoundaryRowIndex)) {
@@ -2322,7 +2444,7 @@ const ExcelViewSheetArea = ({
     const mouseLocation = getCellLocationFromOffset(
       e.nativeEvent.offsetX,
       e.nativeEvent.offsetY,
-      grid,
+      scaledGrid,
       viewWindow,
     );
 
@@ -2335,7 +2457,7 @@ const ExcelViewSheetArea = ({
       drawRegion({
         ctx: overlayCanvasRef.current.getContext('2d'),
         window: viewWindow,
-        grid,
+        grid: scaledGrid,
         dragStartLocation,
         dragEndLocation: mouseLocation,
         isEditing,
@@ -2368,7 +2490,7 @@ const ExcelViewSheetArea = ({
     containerRef.current.style.cursor = 'default';
     const nearestBoundaryColumnIndex = getNearestBoundaryColumnIndex({
       e,
-      grid,
+      grid: scaledGrid,
       viewWindow,
     });
     if (!isNil(nearestBoundaryColumnIndex)) {
@@ -2378,7 +2500,7 @@ const ExcelViewSheetArea = ({
       const newResizeAmount = e.nativeEvent.offsetX - columnResizeStartX;
       setColumnResizeAmount(newResizeAmount);
 
-      const boundaryX = getColumnX(columnResizeIndex + 1, grid, viewWindow) * SF;
+      const boundaryX = getColumnX(columnResizeIndex + 1, scaledGrid, viewWindow) * SF;
 
       drawVerticalLine({
         ctx: overlayCanvasRef.current.getContext('2d'),
@@ -2388,7 +2510,7 @@ const ExcelViewSheetArea = ({
 
     const nearestBoundaryRowIndex = getNearestBoundaryRowIndex({
       e,
-      grid,
+      grid: scaledGrid,
       viewWindow,
     });
     if (!isNil(nearestBoundaryRowIndex)) {
@@ -2398,7 +2520,7 @@ const ExcelViewSheetArea = ({
       const newResizeAmount = e.nativeEvent.offsetY - rowResizeStartX;
       setRowResizeAmount(newResizeAmount);
 
-      const boundaryY = getRowY(rowResizeIndex + 1, grid, viewWindow) * SF;
+      const boundaryY = getRowY(rowResizeIndex + 1, scaledGrid, viewWindow) * SF;
 
       drawHorizontalLine({
         ctx: overlayCanvasRef.current.getContext('2d'),
@@ -2413,7 +2535,7 @@ const ExcelViewSheetArea = ({
     const mouseLocation = getCellLocationFromOffset(
       e.nativeEvent.offsetX,
       e.nativeEvent.offsetY,
-      grid,
+      scaledGrid,
       viewWindow,
     );
     setDragEndLocation(mouseLocation);
@@ -2527,7 +2649,7 @@ const ExcelViewSheetArea = ({
     if (dragEndLocation !== '') {
       // Handle full row selection (e.g., "2ZZZZZZ")
       if (dragEndLocation?.includes('ZZZZZZ')) {
-        const rowNumber = parseInt(dragStartLocation?.match(/\d+/)?.[0]);
+        const rowNumber = parseInt(dragStartLocation?.match(/\d+/)?.[0], 10);
         // Get max column index from cells
         const maxColIndex = Math.max(
           ...Object.keys(cells).map(id => {
@@ -2548,7 +2670,7 @@ const ExcelViewSheetArea = ({
         // Get max row index from cells
         const maxRowIndex = Math.max(
           ...Object.keys(cells).map(id => {
-            return parseInt(id.match(/\d+/)?.[0]) - 1;
+            return parseInt(id.match(/\d+/)?.[0], 10) - 1;
           }),
           viewWindow?.endRow || 100,
         );
@@ -2594,7 +2716,7 @@ const ExcelViewSheetArea = ({
     let cellLocations = [selectedCellLocation];
     if (dragEndLocation !== '') {
       if (dragEndLocation?.includes('ZZZZZZ')) {
-        const rowNumber = parseInt(dragStartLocation?.match(/\d+/)?.[0]);
+        const rowNumber = parseInt(dragStartLocation?.match(/\d+/)?.[0], 10);
         const maxColIndex = Math.max(
           ...Object.keys(cells).map(id => {
             const colLetter = id.match(/[A-Z]+/)?.[0];
@@ -2610,7 +2732,7 @@ const ExcelViewSheetArea = ({
         const startColIndex = ALPHABET_EXTENDED.indexOf(startColLetter);
         const maxRowIndex = Math.max(
           ...Object.keys(cells).map(id => {
-            return parseInt(id.match(/\d+/)?.[0]) - 1;
+            return parseInt(id.match(/\d+/)?.[0], 10) - 1;
           }),
           viewWindow?.endRow || 100,
         );
@@ -2629,7 +2751,7 @@ const ExcelViewSheetArea = ({
   const selectedCell = cells?.[selectedCellLocation];
 
   const columnIndex = ALPHABET_EXTENDED.indexOf(selectedCellLocation?.match(/[A-Z]+/)?.[0]);
-  const cellWidth = grid?.columnIndexToWidth?.[columnIndex] ?? 100;
+  const cellWidth = scaledGrid?.columnIndexToWidth?.[columnIndex] ?? 100;
 
   const handleResetGrid = () => {
     const resetGrid = {
@@ -2699,13 +2821,7 @@ const ExcelViewSheetArea = ({
         {selectedCell?.flowLink && (
           <SrcTriggerContainer
             style={{
-              ...getSelectedCellStyle(
-                selectedCellLocation,
-                grid,
-                viewWindow,
-                0,
-                0,
-              ),
+              ...getSelectedCellStyle(selectedCellLocation, scaledGrid, viewWindow, 0, 0),
               position: 'absolute',
               zIndex: 1,
             }}
@@ -2735,13 +2851,7 @@ const ExcelViewSheetArea = ({
             value={valueToEdit}
             onChangeValue={newValue => setValueToEdit(newValue)}
             style={{
-              ...getSelectedCellStyle(
-                selectedCellLocation,
-                grid,
-                viewWindow,
-                0,
-                0,
-              ),
+              ...getSelectedCellStyle(selectedCellLocation, scaledGrid, viewWindow, 0, 0),
               position: 'absolute',
               outline: '2px solid rgba(0, 128, 0, 0.5)',
               outlineOffset: '-2px',
@@ -2760,13 +2870,7 @@ const ExcelViewSheetArea = ({
           <StyledSearchInput
             placeholder=""
             style={{
-              ...getSelectedCellStyle(
-                selectedCellLocation,
-                grid,
-                viewWindow,
-                0,
-                0,
-              ),
+              ...getSelectedCellStyle(selectedCellLocation, scaledGrid, viewWindow, 0, 0),
               position: 'absolute',
               outline: '2px solid rgba(0, 128, 0, 0.5)',
               outlineOffset: '-2px',

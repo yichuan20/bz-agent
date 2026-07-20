@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AGENT_MODES, MODE_FALLBACK, type AgentMode, type ModeConfig } from '#/lib/agentModes';
-import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
+import { MODE_COLORS, ModeIconSvg } from '#/components/ModeIconSvg';
+import { AGENT_MODES, type AgentMode, MODE_FALLBACK, type ModeConfig } from '#/lib/agentModes';
 
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+const HTTP_BASE =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
 interface Props {
   selected: AgentMode;
@@ -41,10 +42,19 @@ export function ModeSelector({ selected, onSelect }: Props) {
             key={mode}
             type="button"
             className={`mode-card${active ? ' mode-card--active' : ''}`}
-            style={active ? { borderColor: MODE_COLORS[cfg.icon], background: `color-mix(in srgb, ${MODE_COLORS[cfg.icon]} 8%, var(--bg-primary))` } : undefined}
+            style={
+              active
+                ? {
+                    borderColor: MODE_COLORS[cfg.icon],
+                    background: `color-mix(in srgb, ${MODE_COLORS[cfg.icon]} 8%, var(--bg-primary))`,
+                  }
+                : undefined
+            }
             onClick={() => onSelect(mode)}
           >
-            <span className="mode-card-icon" style={{ color: MODE_COLORS[cfg.icon] }}><ModeIconSvg iconKey={cfg.icon} size={28} /></span>
+            <span className="mode-card-icon" style={{ color: MODE_COLORS[cfg.icon] }}>
+              <ModeIconSvg iconKey={cfg.icon} size={28} />
+            </span>
             <span className="mode-card-label">{cfg.label}</span>
             <span className="mode-card-desc">{cfg.description}</span>
           </button>

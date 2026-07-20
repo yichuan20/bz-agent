@@ -5,16 +5,16 @@
 
 import { cloneDeep, isEmpty } from 'lodash';
 import {
+  C_START,
   FONT_SIZE,
   getPrevNewlineIndex,
   getStartEnd,
   insertText,
   isNumberedStyle,
-  scanAndRenumber,
-  T_START,
   R_START,
-  C_START,
+  scanAndRenumber,
   T_END,
+  T_START,
 } from './word-utils-refactor';
 
 // Types
@@ -70,7 +70,7 @@ const MAX_INDENT = 800;
  * Get the current selection style from the document
  */
 export const getSelectionStyle = (doc: Doc): SelectionStyle => {
-  const [start, end] = getStartEnd(doc);
+  const [start, end] = getStartEnd(doc) as [number, number];
   const selectedStyles = doc?.styles?.slice(start, end);
 
   // Get the paragraph style at selection start
@@ -86,7 +86,7 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
     // No selection — read style of the character immediately left of the cursor
     // (falls back to the character at cursor position for position 0)
     const s = start ?? 0;
-    const leftStyle  = doc?.styles?.[Math.max(0, s - 1)] ?? null;
+    const leftStyle = doc?.styles?.[Math.max(0, s - 1)] ?? null;
     const rightStyle = doc?.styles?.[s] ?? null;
     // For most properties, left-of-cursor is canonical (matches typing behavior).
     // For fontFamily: if the char to the left is a newline (\n), its fontFamily
@@ -94,8 +94,12 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
     const leftIsNewline = s > 0 && doc?.text?.[s - 1] === '\n';
     const cursorStyle = leftStyle ?? rightStyle;
     const fontFamilyStyle = leftIsNewline
-      ? (rightStyle?.fontFamily ? rightStyle : leftStyle)
-      : (leftStyle?.fontFamily ? leftStyle : rightStyle);
+      ? rightStyle?.fontFamily
+        ? rightStyle
+        : leftStyle
+      : leftStyle?.fontFamily
+        ? leftStyle
+        : rightStyle;
     return {
       isBold: cursorStyle?.isBold ?? false,
       isItalic: cursorStyle?.isItalic ?? false,
@@ -117,14 +121,18 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
     isBold: selectedStyles?.every((style: DocStyle | null) => style?.isBold) ?? false,
     isItalic: selectedStyles?.every((style: DocStyle | null) => style?.isItalic) ?? false,
     isUnderlined: selectedStyles?.every((style: DocStyle | null) => style?.isUnderlined) ?? false,
-    isStrikethrough: selectedStyles?.every((style: DocStyle | null) => style?.isStrikethrough) ?? false,
+    isStrikethrough:
+      selectedStyles?.every((style: DocStyle | null) => style?.isStrikethrough) ?? false,
     isBullet,
     isNumbered,
-    textColor: selectedStyles?.find((style: DocStyle | null) => style?.textColor)?.textColor || '#000000',
-    bgColor: selectedStyles?.find((style: DocStyle | null) => style?.bgColor)?.bgColor || 'transparent',
+    textColor:
+      selectedStyles?.find((style: DocStyle | null) => style?.textColor)?.textColor || '#000000',
+    bgColor:
+      selectedStyles?.find((style: DocStyle | null) => style?.bgColor)?.bgColor || 'transparent',
     url: selectedStyles?.find((style: DocStyle | null) => style?.url)?.url,
     fontSize: selectedStyles?.find((style: DocStyle | null) => style?.fontSize)?.fontSize || 16,
-    fontFamily: selectedStyles?.find((style: DocStyle | null) => style?.fontFamily)?.fontFamily || '',
+    fontFamily:
+      selectedStyles?.find((style: DocStyle | null) => style?.fontFamily)?.fontFamily || '',
     alignment,
     lineSpacing,
   };
@@ -134,9 +142,11 @@ export const getSelectionStyle = (doc: Doc): SelectionStyle => {
  * Toggle a style field (bold, italic, underline, strikethrough)
  */
 export const toggleStyle = (doc: Doc, styleField: string): Doc => {
-  const [start, end] = getStartEnd(doc);
+  const [start, end] = getStartEnd(doc) as [number, number];
   const selectedStyles = doc?.styles?.slice(start, end);
-  const isActive = selectedStyles?.every((style: DocStyle | null) => style?.[styleField as keyof DocStyle]);
+  const isActive = selectedStyles?.every(
+    (style: DocStyle | null) => style?.[styleField as keyof DocStyle],
+  );
 
   const newDoc = cloneDeep(doc);
   let i = start;
@@ -166,7 +176,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
 
   if (fieldName === 'fontSize') {
     const fontSize = typeof fieldValue === 'string' ? parseInt(fieldValue) : fieldValue;
-    const [start, end] = getStartEnd(doc);
+    const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
       if (fontSize === FONT_SIZE) {
@@ -185,7 +195,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
   }
 
   if (fieldName === 'url') {
-    const [start, end] = getStartEnd(doc);
+    const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
       if (!fieldValue) {
@@ -204,7 +214,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
   }
 
   if (fieldName === 'bgColor') {
-    const [start, end] = getStartEnd(doc);
+    const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
       if (fieldValue === 'transparent') {
@@ -223,7 +233,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
   }
 
   if (fieldName === 'textColor') {
-    const [start, end] = getStartEnd(doc);
+    const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
       if (fieldValue === 'black') {
@@ -242,7 +252,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
   }
 
   if (fieldName === 'fontFamily') {
-    const [start, end] = getStartEnd(doc);
+    const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
       if (!fieldValue) {
@@ -342,7 +352,7 @@ export const setAlignment = (doc: Doc, alignment: string): Doc => {
  * Get all prefix indices (newline positions) for the current selection
  */
 const getPrefixIndices = (doc: Doc): number[] => {
-  const [, end] = getStartEnd(doc);
+  const [, end] = getStartEnd(doc) as [number, number];
   const firstPrefixIndex = getPrevNewlineIndex(doc);
 
   const prefixIndices = [firstPrefixIndex];
@@ -451,7 +461,7 @@ export const removeNumberedList = (doc: Doc): Doc => {
   });
 
   // Renumber the following list items if they exist
-  const lastIndex = prefixIndices[prefixIndices.length - 1];
+  const lastIndex = prefixIndices[prefixIndices.length - 1]!;
   let nextLineIndex = lastIndex + 1;
   while (nextLineIndex < newDoc.text.length && newDoc.text[nextLineIndex] !== '\n') {
     nextLineIndex++;
@@ -565,7 +575,15 @@ const generateTableString = (rows: number, cols: number): string => {
 /**
  * Insert a table at the current cursor position
  */
-export const insertTable = ({ doc, rows = 1, cols = 1 }: { doc: Doc; rows?: number; cols?: number }): Doc => {
+export const insertTable = ({
+  doc,
+  rows = 1,
+  cols = 1,
+}: {
+  doc: Doc;
+  rows?: number;
+  cols?: number;
+}): Doc => {
   const tableString = generateTableString(rows, cols);
   if (!tableString) {
     return doc;

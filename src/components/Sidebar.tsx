@@ -16,20 +16,20 @@ import {
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clearAccessToken } from '#/auth-store';
-import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
+import { MODE_COLORS, ModeIconSvg } from '#/components/ModeIconSvg';
 
 const HTTP_BASE =
-  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
-const SIDEBAR_WIDTH = 220;   // px — matches bz-codespace --spacing-bl-sidebar
+const SIDEBAR_WIDTH = 220; // px — matches bz-codespace --spacing-bl-sidebar
 
 const NAV_ITEMS = [
-  { to: '/',          label: 'Home',     Icon: HouseSimpleIcon,    exact: true  },
-  { to: '/agent',     label: 'Agent',    Icon: TerminalIcon,       exact: false },
-  { to: '/learning',  label: 'Learning', Icon: BrainIcon,          exact: false },
+  { to: '/', label: 'Home', Icon: HouseSimpleIcon, exact: true },
+  { to: '/agent', label: 'Agent', Icon: TerminalIcon, exact: false },
+  { to: '/learning', label: 'Learning', Icon: BrainIcon, exact: false },
 ] as const;
 
 type SessionItem = {
@@ -42,66 +42,160 @@ type SessionItem = {
 };
 
 interface SidebarProps {
-  open:             boolean;
-  overlay?:         boolean;   // true = position:absolute over content (hover reveal mode)
-  onMouseLeave?:    () => void;
-  onCollapse?:      () => void;
-  bzcodeOutdated?:  boolean;
-  onNewChat?:       () => void;
+  open: boolean;
+  overlay?: boolean; // true = position:absolute over content (hover reveal mode)
+  onMouseLeave?: () => void;
+  onCollapse?: () => void;
+  bzcodeOutdated?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcodeOutdated, onNewChat }: SidebarProps) {
+// ── Context menu ──────────────────────────────────────────────────────────────
+interface CtxMenu {
+  sessionId: string;
+  title: string;
+  x: number;
+  y: number;
+}
+
+export default function Sidebar({
+  open,
+  overlay,
+  onMouseLeave,
+  onCollapse,
+  bzcodeOutdated,
+  onNewChat,
+}: SidebarProps) {
   const navigate = useNavigate();
   const { location } = useRouterState();
   const [sessions, setSessions] = useState<SessionItem[]>([]);
 
+  // Context menu state
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [copied, setCopied] = useState(false);
+  // Rename inline state
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  const renameRef = useRef<HTMLInputElement>(null);
+
   // Read current sessionId from URL search params for active highlight
-  const currentSessionId = ((location.search as Record<string, string | undefined>).sessionId) ?? null;
+  const currentSessionId =
+    (location.search as Record<string, string | undefined>).sessionId ?? null;
 
-  // Fetch all sessions for the sidebar list
-  useEffect(() => {
-    function load() {
-      fetch(`${HTTP_BASE}/sessions`)
-        .then(r => r.json())
-        .then((d: { sessions: SessionItem[] }) => {
-          setSessions((d.sessions ?? []).sort((a, b) => b.lastModified - a.lastModified));
-        })
-        .catch(() => null);
-    }
-    load();
-    const id = setInterval(load, 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Re-fetch when a session is opened (sidebar may be showing stale list)
-  useEffect(() => {
-    if (!currentSessionId) return;
+  const loadSessions = useCallback(() => {
     fetch(`${HTTP_BASE}/sessions`)
       .then(r => r.json())
       .then((d: { sessions: SessionItem[] }) => {
         setSessions((d.sessions ?? []).sort((a, b) => b.lastModified - a.lastModified));
       })
       .catch(() => null);
-  }, [currentSessionId]);
+  }, []);
+
+  // Fetch all sessions for the sidebar list
+  useEffect(() => {
+    loadSessions();
+    const id = setInterval(loadSessions, 30_000);
+    return () => clearInterval(id);
+  }, [loadSessions]);
+
+  // Re-fetch when a session is opened (sidebar may be showing stale list)
+  useEffect(() => {
+    if (!currentSessionId) return;
+    loadSessions();
+  }, [currentSessionId, loadSessions]);
+
+  // Dismiss context menu on outside click / scroll.
+  // Use bubbling (not capture) so stopPropagation on the menu container
+  // prevents dismiss when clicking menu items.
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const dismiss = () => setCtxMenu(null);
+    window.addEventListener('click', dismiss);
+    window.addEventListener('keydown', dismiss);
+    window.addEventListener('scroll', dismiss, { capture: true });
+    return () => {
+      window.removeEventListener('click', dismiss);
+      window.removeEventListener('keydown', dismiss);
+      window.removeEventListener('scroll', dismiss, { capture: true });
+    };
+  }, [ctxMenu]);
+
+  // Focus rename input when it mounts
+  useEffect(() => {
+    if (renamingId) renameRef.current?.focus();
+  }, [renamingId]);
 
   function handleSessionClick(s: SessionItem) {
-    // Navigate first so URL reflects the new session
-    void navigate({ to: '/agent', search: { cwd: s.workingDir, sessionId: s.sessionId, mode: (s.mode ?? 'general') } as never });
-    // Dispatch event so agent page (if already mounted) switches session without a remount
-    window.dispatchEvent(new CustomEvent('bz:open-session', {
-      detail: { cwd: s.workingDir, sessionId: s.sessionId, mode: s.mode ?? 'general' },
-    }));
+    if (renamingId === s.sessionId) return; // don't navigate while renaming
+    void navigate({
+      to: '/agent',
+      search: { cwd: s.workingDir, sessionId: s.sessionId, mode: s.mode ?? 'general' } as never,
+    });
+    window.dispatchEvent(
+      new CustomEvent('bz:open-session', {
+        detail: { cwd: s.workingDir, sessionId: s.sessionId, mode: s.mode ?? 'general' },
+      }),
+    );
+  }
+
+  function handleContextMenu(e: React.MouseEvent, s: SessionItem) {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ sessionId: s.sessionId, title: s.title || s.dirName, x: e.clientX, y: e.clientY });
+  }
+
+  function copySessionId(sessionId: string) {
+    navigator.clipboard.writeText(sessionId).catch(() => null);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+      setCtxMenu(null);
+    }, 1200);
+  }
+
+  function startRename(sessionId: string, currentTitle: string) {
+    setCtxMenu(null);
+    setRenamingId(sessionId);
+    setRenameVal(currentTitle);
+  }
+
+  function commitRename(sessionId: string) {
+    const trimmed = renameVal.trim();
+    setRenamingId(null);
+    if (!trimmed) return;
+    fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(sessionId)}/title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed }),
+    })
+      .then(() => loadSessions())
+      .catch(() => null);
+  }
+
+  function deleteSession(sessionId: string) {
+    setCtxMenu(null);
+    if (!confirm('Delete this session? This cannot be undone.')) return;
+    fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+      .then(() => {
+        setSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+        // If we deleted the active session, go back to /agent
+        if (sessionId === currentSessionId) {
+          void navigate({ to: '/agent' });
+        }
+      })
+      .catch(() => null);
   }
 
   function isActive(to: string, exact: boolean) {
     return exact ? location.pathname === to : location.pathname.startsWith(to);
   }
 
-
   function handleLogout() {
-    const authUrl  = (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
+    const authUrl =
+      (import.meta.env.VITE_BZCODE_AUTH_URL as string | undefined) ?? 'https://boltzhub.com';
     fetch(`${HTTP_BASE}/auth/logout`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authUrl }),
     }).finally(() => {
       clearAccessToken();
@@ -114,129 +208,147 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
     <aside
       onMouseLeave={onMouseLeave}
       style={{
-        width:      open ? SIDEBAR_WIDTH : 0,
+        width: open ? SIDEBAR_WIDTH : 0,
         flexShrink: 0,
-        height:     '100%',
-        display:    'flex',
+        height: '100%',
+        display: 'flex',
         flexDirection: 'column',
-        overflow:   'hidden',
+        overflow: 'hidden',
         background: 'var(--bg-primary)',
         borderRight: '1px solid var(--border-primary)',
         /* When overlay: float over content so mouse can travel freely from expand zone into sidebar */
-        position:   overlay ? 'absolute' : 'relative',
-        top:        overlay ? 0 : undefined,
-        left:       overlay ? 0 : undefined,
-        zIndex:     overlay ? 50 : undefined,
-        boxShadow:  overlay && open ? '4px 0 20px rgba(0,0,0,0.12)' : 'none',
+        position: overlay ? 'absolute' : 'relative',
+        top: overlay ? 0 : undefined,
+        left: overlay ? 0 : undefined,
+        zIndex: overlay ? 50 : undefined,
+        boxShadow: overlay && open ? '4px 0 20px rgba(0,0,0,0.12)' : 'none',
         transition: 'width 300ms ease-in-out',
         willChange: 'width',
       }}
     >
-      {/* ── Scrollable nav — flex-1 ── */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        minHeight: 0,
-        /* custom thin scrollbar matching bz-codespace */
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'rgba(20,115,223,0.2) transparent',
-      }}>
-        <nav style={{
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '8px 12px 16px',
-          /* width must be explicit so content doesn't reflow during animation */
+      {/* ── Fixed top: new chat + nav items ── */}
+      <div
+        style={{
+          flexShrink: 0,
+          padding: '8px 12px 4px',
           width: SIDEBAR_WIDTH,
           minWidth: SIDEBAR_WIDTH,
-        }}>
-          {/* ── New chat button ── */}
-          <button
-            type="button"
-            onClick={() => onNewChat?.()}
+        }}
+      >
+        {/* New chat button */}
+        <button
+          type="button"
+          onClick={() => onNewChat?.()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            width: '100%',
+            margin: '0 0 8px',
+            padding: '8px 8px',
+            borderRadius: 8,
+            border: '1px solid var(--border-primary)',
+            background: 'var(--bg-secondary)',
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            whiteSpace: 'nowrap',
+            transition: 'background 120ms ease, border-color 120ms ease',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent-blue)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-secondary)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-primary)';
+          }}
+        >
+          <span
             style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
-              width: '100%',
-              margin: '0 0 8px',
-              padding: '8px 8px',
-              borderRadius: 8,
-              border: '1px solid var(--border-primary)',
-              background: 'var(--bg-secondary)',
-              fontSize: 13,
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              textAlign: 'left',
-              whiteSpace: 'nowrap',
-              transition: 'background 120ms ease, border-color 120ms ease',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent-blue)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-secondary)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-primary)';
-            }}
-          >
-            <span style={{
-              flexShrink: 0,
-              width: 24, height: 24,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              justifyContent: 'center',
               borderRadius: 6,
               background: 'var(--accent-blue)',
               color: '#fff',
-            }}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </span>
-            <span>New chat</span>
-          </button>
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <line
+                x1="6"
+                y1="1"
+                x2="6"
+                y2="11"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <line
+                x1="1"
+                y1="6"
+                x2="11"
+                y2="6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <span>New chat</span>
+        </button>
 
-          {NAV_ITEMS.map(({ to, label, Icon, exact }) => {
-            const active = isActive(to, exact);
-            return (
-              <Link
-                key={to}
-                to={to}
+        {NAV_ITEMS.map(({ to, label, Icon, exact }) => {
+          const active = isActive(to, exact);
+          return (
+            <Link
+              key={to}
+              to={to}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                margin: '1px 0',
+                padding: '8px 8px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: active ? 500 : 400,
+                color: active ? '#fff' : 'var(--text-secondary)',
+                background: active ? 'var(--accent-blue)' : 'transparent',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+                transition: 'background 120ms ease, color 120ms ease',
+              }}
+              onMouseEnter={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-tertiary)';
+                  (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)';
+                  const icon = e.currentTarget.querySelector('span') as HTMLSpanElement | null;
+                  if (icon) {
+                    icon.style.borderColor = 'var(--accent-blue)';
+                    icon.style.color = 'var(--accent-blue)';
+                  }
+                }
+              }}
+              onMouseLeave={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)';
+                  const icon = e.currentTarget.querySelector('span') as HTMLSpanElement | null;
+                  if (icon) {
+                    icon.style.borderColor = 'var(--border-primary)';
+                    icon.style.color = 'var(--text-secondary)';
+                  }
+                }
+              }}
+            >
+              <span
                 style={{
-                  display:     'flex',
-                  alignItems:  'center',
-                  gap:         10,           /* mr-2.5 ≈ 10px */
-                  margin:      '1px 0',
-                  padding:     '8px 8px',
-                  borderRadius: 8,
-                  fontSize:    13,
-                  fontWeight:  active ? 500 : 400,
-                  color:       active ? '#fff' : 'var(--text-secondary)',
-                  background:  active ? 'var(--accent-blue)' : 'transparent',
-                  textDecoration: 'none',
-                  whiteSpace:  'nowrap',
-                  transition:  'background 120ms ease, color 120ms ease',
-                }}
-                onMouseEnter={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-tertiary)';
-                    (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)';
-                    const icon = e.currentTarget.querySelector('span') as HTMLSpanElement | null;
-                    if (icon) { icon.style.borderColor = 'var(--accent-blue)'; icon.style.color = 'var(--accent-blue)'; }
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
-                    (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)';
-                    const icon = e.currentTarget.querySelector('span') as HTMLSpanElement | null;
-                    if (icon) { icon.style.borderColor = 'var(--border-primary)'; icon.style.color = 'var(--text-secondary)'; }
-                  }
-                }}
-              >
-                {/* Square icon container — matches TopBar logo-mark style */}
-                <span style={{
                   flexShrink: 0,
                   width: 24,
                   height: 24,
@@ -244,38 +356,31 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: 6,
-                  background: active
-                    ? 'rgba(255,255,255,0.18)'
-                    : 'var(--bg-tertiary)',
+                  background: active ? 'rgba(255,255,255,0.18)' : 'var(--bg-tertiary)',
                   border: active
                     ? '1px solid rgba(255,255,255,0.12)'
                     : '1px solid var(--border-primary)',
                   color: active ? '#fff' : 'var(--text-secondary)',
                   transition: 'background 120ms ease, border-color 120ms ease',
-                }}>
-                  <Icon size={14} weight={active ? 'fill' : 'duotone'} />
-                </span>
-                <span style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  lineHeight: '1',
-                }}>
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
+                }}
+              >
+                <Icon size={14} weight={active ? 'fill' : 'duotone'} />
+              </span>
+              <span
+                style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}
+              >
+                {label}
+              </span>
+            </Link>
+          );
+        })}
 
-          {/* ── Recent sessions ── */}
-          {sessions.length > 0 && (
-            <>
-              <div style={{
-                height: 1,
-                background: 'var(--border-primary)',
-                margin: '8px 0 4px',
-              }} />
-              <div style={{
+        {/* Divider + "Recent" label — only shown when there are sessions */}
+        {sessions.length > 0 && (
+          <>
+            <div style={{ height: 1, background: 'var(--border-primary)', margin: '8px 0 4px' }} />
+            <div
+              style={{
                 padding: '2px 8px 4px',
                 fontSize: 10,
                 fontWeight: 600,
@@ -283,102 +388,156 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
                 textTransform: 'uppercase',
                 color: 'var(--text-tertiary)',
                 userSelect: 'none',
-              }}>
-                Recent
-              </div>
-              {sessions.map(s => {
-                const modeKey = s.mode === 'widget' ? 'canvas' : s.mode === 'worker' ? 'document' : s.mode === 'coder' ? 'code' : 'chat';
-                const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
-                const modeLabel = s.mode === 'widget' ? 'Widget' : s.mode === 'worker' ? 'Worker' : s.mode === 'coder' ? 'Coder' : 'General';
-                const label = s.title || s.dirName;
-                const isSessionActive = s.sessionId === currentSessionId;
+              }}
+            >
+              Recent
+            </div>
+          </>
+        )}
+      </div>
 
-                return (
-                  <button
-                    key={s.sessionId}
-                    type="button"
-                    className="sidebar-session-row"
-                    data-tooltip={modeLabel}
-                    onClick={() => handleSessionClick(s)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      width: '100%',
-                      margin: '1px 0',
-                      padding: '5px 8px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: isSessionActive ? 'var(--bg-tertiary)' : 'transparent',
-                      fontSize: 12,
-                      color: isSessionActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      whiteSpace: 'nowrap',
-                      transition: 'background 120ms ease, color 120ms ease',
-                      borderLeft: isSessionActive ? `2px solid ${accentColor}` : '2px solid transparent',
-                      paddingLeft: isSessionActive ? 6 : 6,
-                    }}
-                    onMouseEnter={e => {
-                      if (!isSessionActive) {
-                        (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
-                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!isSessionActive) {
-                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
-                      }
-                    }}
-                  >
-                    <span style={{ flexShrink: 0, color: accentColor, display: 'flex', alignItems: 'center' }}>
-                      <ModeIconSvg iconKey={modeKey} size={12} />
-                    </span>
-                    <span style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      lineHeight: '1.3',
-                    }}>
-                      {label}
-                    </span>
-                  </button>
-                );
-              })}
-            </>
-          )}
-        </nav>
+      {/* ── Scrollable sessions list only ── */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          minHeight: 0,
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(20,115,223,0.2) transparent',
+          padding: '0 12px 12px',
+          width: SIDEBAR_WIDTH,
+          minWidth: SIDEBAR_WIDTH,
+          boxSizing: 'border-box',
+        }}
+      >
+        {sessions.map(s => {
+          const modeKey =
+            s.mode === 'widget'
+              ? 'canvas'
+              : s.mode === 'worker'
+                ? 'document'
+                : s.mode === 'coder'
+                  ? 'code'
+                  : 'chat';
+          const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
+          const modeLabel =
+            s.mode === 'widget'
+              ? 'Widget'
+              : s.mode === 'worker'
+                ? 'Worker'
+                : s.mode === 'coder'
+                  ? 'Coder'
+                  : 'General';
+          const label = s.title || s.dirName;
+          const isSessionActive = s.sessionId === currentSessionId;
+          const isRenaming = renamingId === s.sessionId;
+
+          return (
+            <button
+              key={s.sessionId}
+              type="button"
+              className="sidebar-session-row"
+              data-tooltip={modeLabel}
+              onClick={() => handleSessionClick(s)}
+              onContextMenu={e => handleContextMenu(e, s)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                width: '100%',
+                margin: '1px 0',
+                padding: '5px 8px',
+                borderRadius: 6,
+                border: 'none',
+                background: isSessionActive ? 'var(--bg-tertiary)' : 'transparent',
+                fontSize: 12,
+                color: isSessionActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+                transition: 'background 120ms ease, color 120ms ease',
+                borderLeft: isSessionActive ? `2px solid ${accentColor}` : '2px solid transparent',
+              }}
+              onMouseEnter={e => {
+                if (!isSessionActive) {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isSessionActive) {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                }
+              }}
+            >
+              <span
+                style={{ flexShrink: 0, color: accentColor, display: 'flex', alignItems: 'center' }}
+              >
+                <ModeIconSvg iconKey={modeKey} size={12} />
+              </span>
+              {isRenaming ? (
+                <input
+                  ref={renameRef}
+                  className="sidebar-rename-input"
+                  value={renameVal}
+                  onChange={e => setRenameVal(e.target.value)}
+                  onKeyDown={e => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') commitRename(s.sessionId);
+                    if (e.key === 'Escape') setRenamingId(null);
+                  }}
+                  onBlur={() => commitRename(s.sessionId)}
+                  onClick={e => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    lineHeight: '1.3',
+                  }}
+                >
+                  {label}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Footer — shrink-0, border-top ── */}
-      <div style={{
-        flexShrink: 0,
-        borderTop: '1px solid var(--border-primary)',
-        width: SIDEBAR_WIDTH,
-        minWidth: SIDEBAR_WIDTH,
-        padding: '8px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-      }}>
+      <div
+        style={{
+          flexShrink: 0,
+          borderTop: '1px solid var(--border-primary)',
+          width: SIDEBAR_WIDTH,
+          minWidth: SIDEBAR_WIDTH,
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
         {/* Settings link */}
         <Link
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           to={'/settings' as any}
           style={{
-            display:     'flex',
-            alignItems:  'center',
-            gap:         8,
-            padding:     '8px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 8px',
             borderRadius: 8,
-            fontSize:    13,
-            fontWeight:  isActive('/settings', false) ? 500 : 400,
-            color:       isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
-            background:  isActive('/settings', false) ? 'var(--accent-blue)' : 'transparent',
+            fontSize: 13,
+            fontWeight: isActive('/settings', false) ? 500 : 400,
+            color: isActive('/settings', false) ? '#fff' : 'var(--text-secondary)',
+            background: isActive('/settings', false) ? 'var(--accent-blue)' : 'transparent',
             textDecoration: 'none',
-            whiteSpace:  'nowrap',
-            transition:  'background 120ms ease, color 120ms ease',
+            whiteSpace: 'nowrap',
+            transition: 'background 120ms ease, color 120ms ease',
           }}
           onMouseEnter={e => {
             if (!isActive('/settings', false)) {
@@ -396,17 +555,24 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
           <span style={{ position: 'relative', flexShrink: 0, display: 'flex' }}>
             <GearIcon size={15} weight={isActive('/settings', false) ? 'fill' : 'regular'} />
             {bzcodeOutdated && (
-              <span style={{
-                position: 'absolute', top: -3, right: -3,
-                width: 7, height: 7,
-                borderRadius: '50%',
-                background: '#f97316',
-                border: '1.5px solid var(--bg-primary)',
-                pointerEvents: 'none',
-              }} />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -3,
+                  right: -3,
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#f97316',
+                  border: '1.5px solid var(--bg-primary)',
+                  pointerEvents: 'none',
+                }}
+              />
             )}
           </span>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>Settings</span>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1' }}>
+            Settings
+          </span>
         </Link>
 
         {/* Collapse button */}
@@ -416,20 +582,20 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
             onClick={onCollapse}
             title="Collapse navigation"
             style={{
-              display:     'flex',
-              alignItems:  'center',
-              gap:         8,
-              width:       '100%',
-              padding:     '8px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '8px 8px',
               borderRadius: 8,
-              border:      'none',
-              background:  'transparent',
-              fontSize:    13,
-              color:       'var(--text-secondary)',
-              cursor:      'pointer',
-              textAlign:   'left',
-              whiteSpace:  'nowrap',
-              transition:  'background 120ms ease, color 120ms ease',
+              border: 'none',
+              background: 'transparent',
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              whiteSpace: 'nowrap',
+              transition: 'background 120ms ease, color 120ms ease',
             }}
             onMouseEnter={e => {
               (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
@@ -441,9 +607,28 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
             }}
           >
             {/* ‹‹ double chevron left */}
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden style={{ flexShrink: 0 }}>
-              <path d="M8.5 3L4.5 7.5L8.5 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M12 3L8 7.5L12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 15 15"
+              fill="none"
+              aria-hidden
+              style={{ flexShrink: 0 }}
+            >
+              <path
+                d="M8.5 3L4.5 7.5L8.5 12"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 3L8 7.5L12 12"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
             <span>Collapse</span>
           </button>
@@ -453,20 +638,20 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
           type="button"
           onClick={handleLogout}
           style={{
-            display:     'flex',
-            alignItems:  'center',
-            gap:         8,
-            width:       '100%',
-            padding:     '8px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            padding: '8px 8px',
             borderRadius: 8,
-            border:      'none',
-            background:  'transparent',
-            fontSize:    13,
-            color:       'var(--text-secondary)',
-            cursor:      'pointer',
-            textAlign:   'left',
-            whiteSpace:  'nowrap',
-            transition:  'background 120ms ease, color 120ms ease',
+            border: 'none',
+            background: 'transparent',
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            whiteSpace: 'nowrap',
+            transition: 'background 120ms ease, color 120ms ease',
           }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
@@ -480,8 +665,39 @@ export default function Sidebar({ open, overlay, onMouseLeave, onCollapse, bzcod
           <SignOutIcon size={15} style={{ flexShrink: 0 }} />
           <span>Sign out</span>
         </button>
-
       </div>
+
+      {/* ── Context menu (portal-style, fixed position) ── */}
+      {ctxMenu && (
+        <div
+          className="sidebar-ctx-menu"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="sidebar-ctx-item"
+            onClick={() => copySessionId(ctxMenu.sessionId)}
+          >
+            {copied ? 'Copied!' : 'Copy session ID'}
+          </button>
+          <button
+            type="button"
+            className="sidebar-ctx-item"
+            onClick={() => startRename(ctxMenu.sessionId, ctxMenu.title)}
+          >
+            Rename
+          </button>
+          <div className="sidebar-ctx-divider" />
+          <button
+            type="button"
+            className="sidebar-ctx-item sidebar-ctx-item--danger"
+            onClick={() => deleteSession(ctxMenu.sessionId)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

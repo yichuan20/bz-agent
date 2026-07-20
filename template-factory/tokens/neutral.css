@@ -1,0 +1,16 @@
+/* bzapp-token-override: neutral */
+/* Slate palette — Inter font — medium radius — comfortable density */
+/* Appended after app theme; overrides --font-sans and radius scale universally. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@theme {
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+}

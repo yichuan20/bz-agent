@@ -64,7 +64,14 @@ export const PdfIcon = ({
 );
 
 export const FormulaIcon = ({ height = '20px', className, style = {}, onClick = () => {} }) => (
-  <svg height={height} className={className} style={style} onClick={onClick} viewBox="20 20 60 60" fill="currentColor">
+  <svg
+    height={height}
+    className={className}
+    style={style}
+    onClick={onClick}
+    viewBox="20 20 60 60"
+    fill="currentColor"
+  >
     <path
       d="M55.3,21.2c-1.1-0.7-2.4-1.1-4.1-1.1c-0.4,0-0.8,0-1.2,0.1c-4.4,0.7-7.3,4.7-9.1,8.5
 	c-0.8,1.8-1.5,3.7-2.2,5.5c-0.3,0.9-0.7,1.7-1,2.6c0,0.1-0.5,1.8-0.6,1.8c0,0-4,0-4,0l0,0h-0.5c-0.6,0-1.1,0.5-1.1,1.1
@@ -87,13 +94,13 @@ export const FormulaIcon = ({ height = '20px', className, style = {}, onClick = 
   </svg>
 );
 
-export const TickIcon = ({ height = "16px", className, style = {}, onClick = () => {} }) => (
+export const TickIcon = ({ height = '16px', className, style = {}, onClick = () => {} }) => (
   <svg className={className} style={style} height={height} viewBox="0 0 28 28" onClick={onClick}>
     <path d="M13.9976 0C21.7246 0 27.9951 6.26567 28 13.9927C28.0049 21.7294 21.7246 28.0098 13.9878 28C6.26078 27.9951 -0.00488456 21.7246 2.85731e-06 13.9976C0.00489027 6.26567 6.27056 0 13.9976 0ZM11.9839 17.3552C11.8666 17.2184 11.808 17.1353 11.7396 17.0669C10.591 15.9134 9.44249 14.7551 8.29395 13.6017C7.86874 13.1765 7.44842 12.7415 7.01344 12.3212C6.6811 11.9986 6.28033 11.9057 5.84046 12.0475C5.41037 12.1843 5.14156 12.4922 5.05359 12.9321C4.96073 13.3769 5.1269 13.7385 5.44458 14.0562C7.28225 15.8939 9.12481 17.7218 10.938 19.5839C11.4854 20.1459 12.4482 20.141 13.0005 19.5839C16.1529 16.4022 19.3297 13.2449 22.4968 10.0778C22.5603 10.0143 22.6238 9.95078 22.6825 9.88235C23.2397 9.23233 22.9318 8.23041 22.1107 8.0007C21.6317 7.86874 21.2358 8.02514 20.8937 8.37214C17.9955 11.2704 15.0972 14.1637 12.199 17.0571C12.1306 17.1353 12.0817 17.2233 11.9839 17.3552Z" />
   </svg>
 );
 
-export const LogoInner = ({ height = "16px", className, style = {}, onClick = () => {} }) => (
+export const LogoInner = ({ height = '16px', className, style = {}, onClick = () => {} }) => (
   <svg height={height} viewBox="0 0 21 21" className={className} style={style} onClick={onClick}>
     <defs>
       <linearGradient id="logo-gradient" x1="50%" y1="0%" x2="50%" y2="100%">
@@ -120,7 +127,7 @@ export const LogoInner = ({ height = "16px", className, style = {}, onClick = ()
 );
 
 export const BoltzhubLogoInner = ({
-  height = "16px",
+  height = '16px',
   className,
   style = {},
   onClick = () => {},
@@ -148,7 +155,7 @@ export const BoltzhubLogoInner = ({
   </svg>
 );
 
-export const GearIcon = ({ className, style = {}, height = "16px" }) => (
+export const GearIcon = ({ className, style = {}, height = '16px' }) => (
   <svg className={className} style={style} height={height} viewBox="0 0 100 100">
     <path d="M97.23,39.78q-4.85-.72-9.7-1.39a.75.75,0,0,1-.7-.56c-.67-1.72-1.37-3.44-2.12-5.13a.92.92,0,0,1,.09-1.11c1.94-2.55,3.87-5.12,5.75-7.71a11.35,11.35,0,0,0,.9-1.87,3.82,3.82,0,0,0-1-2.23c-3.41-3.42-6.82-6.85-10.27-10.24a3.7,3.7,0,0,0-1.7-.81,3.08,3.08,0,0,0-2.59.81c-2.53,1.91-5.07,3.79-7.6,5.69a.76.76,0,0,1-.89.11q-2.63-1.14-5.3-2.2a.71.71,0,0,1-.52-.66q-.68-4.85-1.39-9.7A3.07,3.07,0,0,0,57,0H43a3.07,3.07,0,0,0-3.26,2.8c-.47,3.23-.94,6.47-1.39,9.7a.75.75,0,0,1-.59.68c-1.72.68-3.43,1.38-5.13,2.12a.89.89,0,0,1-1.05-.09c-2.51-1.9-5-3.78-7.55-5.65a3.13,3.13,0,0,0-4.66.32L9.86,19.43A3.11,3.11,0,0,0,9.51,24q2.85,3.83,5.72,7.65a.8.8,0,0,1,.11.94q-1.14,2.6-2.17,5.24a.75.75,0,0,1-.7.56q-4.85.67-9.7,1.39A3.06,3.06,0,0,0,0,43q0,7,0,14a3.06,3.06,0,0,0,2.77,3.22q4.82.72,9.64,1.38a.83.83,0,0,1,.79.62c.66,1.71,1.35,3.4,2.09,5.07a.92.92,0,0,1-.09,1.11c-1.93,2.54-3.82,5.1-5.73,7.65a3.08,3.08,0,0,0,.3,4.43l9.72,9.72a3.09,3.09,0,0,0,4.47.31q3.86-2.87,7.71-5.76a.76.76,0,0,1,.89-.11q2.63,1.14,5.3,2.2a.71.71,0,0,1,.52.66q.68,4.85,1.39,9.7A3.07,3.07,0,0,0,43,100H57a3.07,3.07,0,0,0,3.26-2.8c.47-3.23.94-6.47,1.39-9.7a.75.75,0,0,1,.59-.68c1.72-.68,3.43-1.38,5.13-2.12a.89.89,0,0,1,1.05.09c2.54,1.92,5.1,3.82,7.65,5.73a3.09,3.09,0,0,0,4.47-.31l9.72-9.72a3.08,3.08,0,0,0,.3-4.43q-2.87-3.86-5.76-7.7a.8.8,0,0,1-.11-.94c.75-1.71,1.46-3.44,2.15-5.18a.79.79,0,0,1,.72-.62q4.86-.66,9.7-1.39A3.06,3.06,0,0,0,100,57q0-7,0-14A3.06,3.06,0,0,0,97.23,39.78ZM93.81,54.49l-5.17.76c-1.5.22-3,.41-4.51.65a2.89,2.89,0,0,0-2.49,2.17,36.37,36.37,0,0,1-3.54,8.57,3,3,0,0,0,.29,3.45l5.38,7.21.33.45-6.36,6.36L71.6,79.52c-.52-.39-1-.78-1.55-1.16a3,3,0,0,0-3.51-.21A34.59,34.59,0,0,1,58.2,81.6a3,3,0,0,0-2.33,2.7q-.63,4.42-1.27,8.84c0,.22-.09.44-.14.69H45.52c-.21-1.44-.43-2.87-.64-4.31-.26-1.79-.49-3.59-.78-5.38a2.91,2.91,0,0,0-2.22-2.52,35.9,35.9,0,0,1-8.51-3.52,3,3,0,0,0-3.45.27l-7.21,5.38-.49.36-6.35-6.35,1.67-2.25c1.33-1.79,2.66-3.57,4-5.35a3.12,3.12,0,0,0,.24-3.73,32.8,32.8,0,0,1-3.35-8.1,3.13,3.13,0,0,0-2.86-2.48c-2.91-.4-5.81-.83-8.71-1.25-.23,0-.45-.09-.7-.14V45.52L9.53,45c2.1-.3,4.2-.58,6.3-.91a2.9,2.9,0,0,0,2.53-2.2,35.92,35.92,0,0,1,3.52-8.51,3,3,0,0,0-.29-3.51L15.92,22.3l6.38-6.37,2.17,1.62c1.79,1.33,3.58,2.66,5.35,4a3.15,3.15,0,0,0,3.78.23,31.91,31.91,0,0,1,8-3.31,3.2,3.2,0,0,0,2.56-2.93c.42-3.11.9-6.22,1.36-9.36h9l.89,6.12c.17,1.19.32,2.39.52,3.58a2.9,2.9,0,0,0,2.18,2.48,36.38,36.38,0,0,1,8.57,3.54,3,3,0,0,0,3.45-.3l7.21-5.38.46-.33,6.33,6.34c-.05.08-.14.24-.25.38-1.79,2.4-3.58,4.81-5.38,7.21a3.16,3.16,0,0,0-.24,3.78,32,32,0,0,1,3.31,8,3.2,3.2,0,0,0,2.92,2.57c3.11.42,6.22.9,9.37,1.36Z" />
     <path d="M43.9,57.08H58.07V42.91H43.9Z" />
@@ -156,7 +163,7 @@ export const GearIcon = ({ className, style = {}, height = "16px" }) => (
 );
 
 export const CrossIcon = ({
-  height = "16px",
+  height = '16px',
   className,
   style = {},
   onClick = () => {},
@@ -174,7 +181,7 @@ export const CrossIcon = ({
   </svg>
 );
 
-export const WarningIcon = ({ height = "16px", className, style, onClick = () => {} }) => (
+export const WarningIcon = ({ height = '16px', className, style, onClick = () => {} }) => (
   <svg height={height} viewBox="0 0 22 20" className={className} style={style} onClick={onClick}>
     <path d="M21.8259 17.9077L11.7547 0.435356C11.6096 0.174143 11.3193 0 11.0001 0C10.6808 0 10.3906 0.174143 10.2455 0.435356L0.116163 17.9657C-0.0289555 18.2269 -0.0289555 18.5752 0.116163 18.8364C0.261282 19.0976 0.551519 19.2718 0.870781 19.2718H21.1294C21.5937 19.2718 22.0001 18.8654 22.0001 18.4011C22.0001 18.2269 21.942 18.0528 21.8259 17.9077ZM19.6201 17.5303H2.38002L11.0001 2.61214L19.6201 17.5303Z" />
     <path d="M11.0001 13.9894C11.4935 13.9894 11.8708 13.6121 11.8708 13.1187V6.44327C11.8708 5.94987 11.4935 5.57256 11.0001 5.57256C10.5067 5.57256 10.1294 5.94987 10.1294 6.44327V13.1187C10.1294 13.6121 10.5067 13.9894 11.0001 13.9894Z" />
@@ -183,9 +190,9 @@ export const WarningIcon = ({ height = "16px", className, style, onClick = () =>
 );
 
 export const ExcelIcon = ({
-  height = "20px",
+  height = '20px',
   className,
-  style = { fill: "#127e45" },
+  style = { fill: '#127e45' },
   onClick = () => {},
 }) => (
   <svg
@@ -201,7 +208,7 @@ export const ExcelIcon = ({
   </svg>
 );
 
-export const EmailIcon = ({ height = "20px", className, style = {}, onClick = () => {} }) => (
+export const EmailIcon = ({ height = '20px', className, style = {}, onClick = () => {} }) => (
   <svg height={height} viewBox="0 0 71 65" className={className} style={style} onClick={onClick}>
     <path
       fillRule="evenodd"
@@ -216,7 +223,7 @@ export const EmailIcon = ({ height = "20px", className, style = {}, onClick = ()
   </svg>
 );
 
-export const CubeIcon = ({ className, height = "14px" }) => (
+export const CubeIcon = ({ className, height = '14px' }) => (
   <svg viewBox="0 0 100 100" height={height} className={className}>
     <path
       d="M91.7,68.8V31.2c1.3-0.8,2.1-2.2,2.1-3.8c0-2.5-2-4.5-4.5-4.5c-0.8,0-1.5,0.2-2.2,0.6L54.4,4.6c0,0,0,0,0,0
@@ -235,49 +242,49 @@ export const CubeIcon = ({ className, height = "14px" }) => (
   </svg>
 );
 
-export const SigmaIcon = ({ height = "16px", className, style = {} }) => (
+export const SigmaIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M18 6H8.83l4.59 4.59L8.83 15.17H18v2H6v-2l4.59-4.59L6 6V4h12v2z" />
   </svg>
 );
 
-export const InternetIcon = ({ height = "16px", className, style = {} }) => (
+export const InternetIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
   </svg>
 );
 
-export const WordIcon = ({ height = "16px", className, style = { fill: "#175bbc" } }) => (
+export const WordIcon = ({ height = '16px', className, style = { fill: '#175bbc' } }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M6 2C4.90575 2 4 2.90575 4 4V9C2.895 9 2 9.895 2 11V16C2 17.105 2.895 18 4 18V20C4 21.0943 4.90575 22 6 22H18C19.0943 22 20 21.0943 20 20V7.41406C19.9999 7.14886 19.8946 6.89454 19.707 6.70703L15.293 2.29297C15.1055 2.10543 14.8511 2.00005 14.5859 2H6ZM6 4H14V7C14 7.552 14.448 8 15 8H18V9H6V4ZM4 11H5.5L6.5 14.5L7.5 11H9L10 14.5L11 11H12.5L10.75 16H9.25L8.25 12.5L7.25 16H5.75L4 11ZM6 18H18V20H6V18Z" />
   </svg>
 );
 
-export const DownloadIcon = ({ height = "16px", className, style = {} }) => (
+export const DownloadIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
   </svg>
 );
 
-export const FilesIcon = ({ height = "16px", className, style = {} }) => (
+export const FilesIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm-1 4l6 6v10c0 1.1-.9 2-2 2H7.99C6.89 23 6 22.1 6 21l.01-14c0-1.1.89-2 1.99-2h7zm-1 7h5.5L14 6.5V12z" />
   </svg>
 );
 
-export const ChatIcon = ({ height = "16px", className, style = {} }) => (
+export const ChatIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
   </svg>
 );
 
-export const FolderIcon = ({ height = "16px", className, style = {} }) => (
+export const FolderIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
   </svg>
 );
 
-export const SearchIcon = ({ height = "16px", className, style = {} }) => (
+export const SearchIcon = ({ height = '16px', className, style = {} }) => (
   <svg height={height} className={className} style={style} viewBox="0 0 24 24">
     <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
   </svg>

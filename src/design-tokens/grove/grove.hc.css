@@ -1,33 +1,32 @@
 [data-theme="grove-hc"] {
-  --color-bg-primary: #FFFFFF;
-  --color-bg-secondary: #FFFFFF;
-  --color-bg-tertiary: #EEEEEE;
-  --color-bg-elevated: #FFFFFF;
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eeeeee;
+  --color-bg-elevated: #ffffff;
   --color-text-primary: #000000;
   --color-text-secondary: #000000;
   --color-text-tertiary: #222222;
   --color-border-primary: #000000;
   --color-border-secondary: #000000;
-  --color-accent-1: #004D35;
+  --color-accent-1: #004d35;
   --color-accent-2: #336644;
   --color-accent-3: #775500;
   --color-accent-4: #005533;
   --shadow-card: 0 0 0 2px #000000;
-  --shadow-hover: 0 0 0 3px #004D35;
+  --shadow-hover: 0 0 0 3px #004d35;
   --radius-sm: 6px;
   --radius-md: 14px;
   --radius-lg: 28px;
   --motion-transition: all 0.2s ease;
-  --font-display: 'Instrument Serif', serif;
-  --font-body: 'Epilogue', sans-serif;
+  --font-display: "Instrument Serif", serif;
+  --font-body: "Epilogue", sans-serif;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
-  --font-size-md: 15px;
+  --font-size-md: 16px;
   --font-size-lg: 19px;
   --font-size-xl: 29px;
   --font-size-2xl: 44px;
   --card-padding: 28px;
   --hero-padding: 56px;
   --section-gap: 48px;
-  --font-size-md: 16px; /* HC: +1px for readability */
 }

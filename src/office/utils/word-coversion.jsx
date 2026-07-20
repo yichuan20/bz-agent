@@ -74,14 +74,14 @@ export const getBlocksFromDoc = (doc = { text: '', styles: [] }) => {
       if (charStyle && !isCharStyleQueryOnly(charStyle)) {
         block?.styles?.push({
           start: iInBlock,
-          end: iInBlock + 1,  // exclusive end: covers [start, end)
+          end: iInBlock + 1, // exclusive end: covers [start, end)
           ...charStyle,
         });
       }
     }
 
     if (charStyle && JSON.stringify(charStyle) === styleHash && !isCharStyleQueryOnly(charStyle)) {
-      last(block?.styles).end = iInBlock + 1;  // exclusive end
+      last(block?.styles).end = iInBlock + 1; // exclusive end
     }
 
     if (char === T_START) {

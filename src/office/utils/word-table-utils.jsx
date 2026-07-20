@@ -1,17 +1,17 @@
 import {
-  T_START,
-  R_START,
   C_START,
-  T_END,
-  START_X,
   END_X,
   LINE_HEIGHT,
   PAD,
   PAGE_CONTENT_HEIGHT,
-  PAGE_MARGIN_TOP,
-  PAGE_MARGIN_BOTTOM,
-  PAGE_HEIGHT,
   PAGE_GAP,
+  PAGE_HEIGHT,
+  PAGE_MARGIN_BOTTOM,
+  PAGE_MARGIN_TOP,
+  R_START,
+  START_X,
+  T_END,
+  T_START,
 } from './word-constants';
 import { contentYToDrawY } from './word-render-utils';
 
@@ -212,8 +212,10 @@ const collectRowInfo = ({ text, ys, tStartI, topMargin }) => {
     if (
       currentRowStartY !== null &&
       ys[i] !== undefined &&
-      text[i] !== T_START && text[i] !== T_END &&
-      text[i] !== R_START && text[i] !== C_START
+      text[i] !== T_START &&
+      text[i] !== T_END &&
+      text[i] !== R_START &&
+      text[i] !== C_START
     ) {
       const charDrawY = contentYToDrawY(ys[i], topMargin);
       if (charDrawY > currentRowMaxY) currentRowMaxY = charDrawY;
@@ -297,14 +299,14 @@ export const drawTableLines = ({ ctx, ys = [], text, startI, endI, scrollY, topM
       for (let page = startPage; page <= endPage; page++) {
         // Page white-area bounds (includes margins) — borders may draw in the margin area
         const pageStart = topMargin + page * (PAGE_HEIGHT + PAGE_GAP);
-        const pageEnd   = pageStart + PAGE_HEIGHT;
+        const pageEnd = pageStart + PAGE_HEIGHT;
         // Content area bounds — used for row filtering and row-separator clamping
-        const pageContentTop    = getPageContentTop(page, topMargin);
+        const pageContentTop = getPageContentTop(page, topMargin);
         const pageContentBottom = getPageContentBottom(page, topMargin);
 
         // Find rows that are on this page (within content area)
         const rowsOnPage = rows.filter(row => {
-          const rowTop    = row.startY - LINE_HEIGHT + PAD;
+          const rowTop = row.startY - LINE_HEIGHT + PAD;
           const rowBottom = row.endY + PAD;
           return rowBottom > pageContentTop && rowTop < pageContentBottom;
         });
@@ -314,8 +316,8 @@ export const drawTableLines = ({ ctx, ys = [], text, startI, endI, scrollY, topM
         // Section bounds clamped to the white-page area (not the content area) so
         // top/bottom borders can sit in the margin while never bleeding into the gap.
         const firstRowOnPage = rowsOnPage[0];
-        const lastRowOnPage  = rowsOnPage[rowsOnPage.length - 1];
-        const sectionTop    = Math.max(firstRowOnPage.startY - LINE_HEIGHT + PAD, pageStart);
+        const lastRowOnPage = rowsOnPage[rowsOnPage.length - 1];
+        const sectionTop = Math.max(firstRowOnPage.startY - LINE_HEIGHT + PAD, pageStart);
         const sectionBottom = Math.min(lastRowOnPage.endY + PAD, pageEnd);
 
         if (sectionBottom <= sectionTop) continue;

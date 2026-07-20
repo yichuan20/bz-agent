@@ -1,0 +1,17 @@
+{
+  "id": "prod-calendly-medical",
+  "name": "Medical Appointment Scheduler",
+  "description": "Appointment scheduling for healthcare providers — consultation types, practitioner availability, and patient booking.",
+  "tags": ["healthcare", "scheduling", "productivity", "appointments"],
+  "text_replacements": [
+    { "from": "Event Types", "to": "Appointment Types" },
+    { "from": "Event Type", "to": "Appointment Type" },
+    { "from": "Meetings", "to": "Appointments" },
+    { "from": "Meeting", "to": "Appointment" },
+    { "from": "Invitee", "to": "Patient" },
+    { "from": "Invitees", "to": "Patients" },
+    { "from": "Availability", "to": "Practitioner Schedule" },
+    { "from": "Workflows", "to": "Reminders" },
+    { "from": "Contacts", "to": "Patients" }
+  ]
+}

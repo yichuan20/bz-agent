@@ -12,43 +12,58 @@
 
   "color": {
     "accent": {
-      "blue":   { "value": "#1473DF", "description": "Links, active states, primary CTA, focus rings" },
-      "green":  { "value": "#3FDC7E", "description": "Success states, positive numbers, earnings indicators" },
+      "blue": {
+        "value": "#1473DF",
+        "description": "Links, active states, primary CTA, focus rings"
+      },
+      "green": {
+        "value": "#3FDC7E",
+        "description": "Success states, positive numbers, earnings indicators"
+      },
       "orange": { "value": "#F59E0B", "description": "Warnings, pending states" },
-      "red":    { "value": "#FA4B42", "description": "Errors, destructive actions, notification badges" },
-      "pink":   { "value": "#EC4899", "description": "Category accent (interests page)" },
-      "cyan":   { "value": "#06B6D4", "description": "Category accent (interests page)" },
+      "red": {
+        "value": "#FA4B42",
+        "description": "Errors, destructive actions, notification badges"
+      },
+      "pink": { "value": "#EC4899", "description": "Category accent (interests page)" },
+      "cyan": { "value": "#06B6D4", "description": "Category accent (interests page)" },
       "yellow": { "value": "#EAB308", "description": "Category accent (interests page)" }
     },
     "light": {
       "bg": {
-        "primary":   { "value": "#FFFFFF", "description": "Main background, cards, navbar" },
+        "primary": { "value": "#FFFFFF", "description": "Main background, cards, navbar" },
         "secondary": { "value": "#FAFAFA", "description": "Page background, form inputs" },
-        "tertiary":  { "value": "#F5F5F5", "description": "Card backgrounds, icon containers, table headers" }
+        "tertiary": {
+          "value": "#F5F5F5",
+          "description": "Card backgrounds, icon containers, table headers"
+        }
       },
       "text": {
-        "primary":   { "value": "#000000", "description": "Main body text, headings" },
-        "secondary": { "value": "#737373", "description": "Secondary text, meta info, descriptions" },
-        "tertiary":  { "value": "#A3A3A3", "description": "Disabled text, timestamps, placeholders" }
+        "primary": { "value": "#000000", "description": "Main body text, headings" },
+        "secondary": {
+          "value": "#737373",
+          "description": "Secondary text, meta info, descriptions"
+        },
+        "tertiary": { "value": "#A3A3A3", "description": "Disabled text, timestamps, placeholders" }
       },
       "border": {
-        "primary":   { "value": "#E5E5E5", "description": "All standard borders" },
+        "primary": { "value": "#E5E5E5", "description": "All standard borders" },
         "secondary": { "value": "#D4D4D4", "description": "Secondary/heavier borders" }
       }
     },
     "dark": {
       "bg": {
-        "primary":   { "value": "#000000" },
+        "primary": { "value": "#000000" },
         "secondary": { "value": "#0A0A0A" },
-        "tertiary":  { "value": "#1A1A1A" }
+        "tertiary": { "value": "#1A1A1A" }
       },
       "text": {
-        "primary":   { "value": "#FFFFFF" },
+        "primary": { "value": "#FFFFFF" },
         "secondary": { "value": "#A3A3A3" },
-        "tertiary":  { "value": "#737373" }
+        "tertiary": { "value": "#737373" }
       },
       "border": {
-        "primary":   { "value": "#262626" },
+        "primary": { "value": "#262626" },
         "secondary": { "value": "#1F1F1F" }
       }
     },
@@ -59,8 +74,14 @@
 
   "typography": {
     "fontFamily": {
-      "heading":  { "value": "'Martian Mono', monospace", "description": "Headlines, section titles, stat values, credits" },
-      "body":     { "value": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", "description": "Body text, buttons, form labels" }
+      "heading": {
+        "value": "'Martian Mono', monospace",
+        "description": "Headlines, section titles, stat values, credits"
+      },
+      "body": {
+        "value": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        "description": "Body text, buttons, form labels"
+      }
     },
     "preset": {
       "h1": {
@@ -140,16 +161,16 @@
   },
 
   "spacing": {
-    "xs":  { "value": "8px",  "description": "Minimal gaps, icon-to-text" },
-    "sm":  { "value": "16px", "description": "Small gaps, inner card padding" },
-    "md":  { "value": "24px", "description": "Standard gaps, section padding" },
-    "lg":  { "value": "32px", "description": "Large gaps, section margins" },
-    "xl":  { "value": "48px", "description": "Extra-large gaps, page sections" },
+    "xs": { "value": "8px", "description": "Minimal gaps, icon-to-text" },
+    "sm": { "value": "16px", "description": "Small gaps, inner card padding" },
+    "md": { "value": "24px", "description": "Standard gaps, section padding" },
+    "lg": { "value": "32px", "description": "Large gaps, section margins" },
+    "xl": { "value": "48px", "description": "Extra-large gaps, page sections" },
     "2xl": { "value": "64px", "description": "Maximum spacing, hero sections" }
   },
 
   "borderRadius": {
-    "sm": { "value": "8px",  "description": "Buttons, small cards, inputs, icon containers" },
+    "sm": { "value": "8px", "description": "Buttons, small cards, inputs, icon containers" },
     "md": { "value": "12px", "description": "Standard cards, dropdowns" },
     "lg": { "value": "16px", "description": "Large cards, modals" }
   },
@@ -159,12 +180,15 @@
   },
 
   "shadow": {
-    "none":     { "value": "none", "description": "Default — brutal minimalism = no shadows" },
+    "none": { "value": "none", "description": "Default — brutal minimalism = no shadows" },
     "dropdown": { "value": "0 4px 12px rgba(0, 0, 0, 0.1)", "description": "Dropdowns only" }
   },
 
   "transition": {
-    "default": { "value": "all 0.2s ease", "description": "Standard transition for all interactive elements" }
+    "default": {
+      "value": "all 0.2s ease",
+      "description": "Standard transition for all interactive elements"
+    }
   },
 
   "animation": {
@@ -188,24 +212,24 @@
   "layout": {
     "maxWidth": {
       "container": { "value": "1400px", "description": "Max content width" },
-      "modal":     { "value": "480px", "description": "Max modal width" }
+      "modal": { "value": "480px", "description": "Max modal width" }
     },
     "navbar": {
-      "padding":    "16px 32px",
-      "position":   "sticky",
-      "zIndex":     "1000",
+      "padding": "16px 32px",
+      "position": "sticky",
+      "zIndex": "1000",
       "borderBottom": "1px solid var(--border-primary)"
     },
     "zIndex": {
-      "navbar":   { "value": "1000" },
+      "navbar": { "value": "1000" },
       "dropdown": { "value": "1500" },
-      "modal":    { "value": "2000" }
+      "modal": { "value": "2000" }
     }
   },
 
   "breakpoint": {
-    "mobile":  { "value": "768px",  "description": "< 768px: hamburger menu, stacked layout" },
-    "tablet":  { "value": "1024px", "description": "768–1024px: reduced nav, 2-col grids" },
+    "mobile": { "value": "768px", "description": "< 768px: hamburger menu, stacked layout" },
+    "tablet": { "value": "1024px", "description": "768–1024px: reduced nav, 2-col grids" },
     "desktop": { "value": "1024px", "description": "> 1024px: full navigation, multi-col grids" }
   },
 

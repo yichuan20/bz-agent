@@ -1,0 +1,14 @@
+{
+  "id": "prod-notion-engineering",
+  "name": "Engineering Wiki",
+  "description": "Technical documentation workspace — runbooks, architecture docs, incident post-mortems, and onboarding guides.",
+  "tags": ["engineering", "documentation", "productivity", "wiki"],
+  "text_replacements": [
+    { "from": "Getting Started", "to": "Runbooks" },
+    { "from": "Teamspaces", "to": "Teams" },
+    { "from": "Shared", "to": "Engineering Docs" },
+    { "from": "Private", "to": "Drafts" },
+    { "from": "Add a page", "to": "New Doc" },
+    { "from": "Notion AI", "to": "DocAI" }
+  ]
+}

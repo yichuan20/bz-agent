@@ -7,7 +7,8 @@ import InputBase from '@mui/material/InputBase';
 import Popper from '@mui/material/Popper';
 import React, { useEffect, useState } from 'react';
 
-const StyledPopper = ({children,...p}) => <Popper {...p}>{children}</Popper>;(({ theme }) => ({
+const StyledPopper = ({ children, ...p }) => <Popper {...p}>{children}</Popper>;
+({ theme }) => ({
   border: '1px solid var(--border-default)',
   boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
   borderRadius: 6,
@@ -16,9 +17,10 @@ const StyledPopper = ({children,...p}) => <Popper {...p}>{children}</Popper>;(({
   fontSize: 13,
   color: 'var(--text-primary)',
   backgroundColor: 'var(--bg-elevated)',
-}));
+});
 
-const StyledInput = ({...p}) => <InputBase {...p} />;(({ theme }) => ({
+const StyledInput = ({ ...p }) => <InputBase {...p} />;
+({ theme }) => ({
   padding: 10,
   width: '100%',
   borderBottom: '1px solid var(--border-default)',
@@ -38,9 +40,10 @@ const StyledInput = ({...p}) => <InputBase {...p} />;(({ theme }) => ({
       color: 'var(--text-tertiary)',
     },
   },
-}));
+});
 
-const LabelInputContainer = ({children,...p}) => <div {...p}>{children}</div>;({
+const LabelInputContainer = ({ children, ...p }) => <div {...p}>{children}</div>;
+({
   display: 'flex',
   alignItems: 'center',
   gap: 4,
@@ -48,14 +51,16 @@ const LabelInputContainer = ({children,...p}) => <div {...p}>{children}</div>;({
   borderLeft: '1px solid var(--border-default)',
 });
 
-const LabelInputLabel = ({children,...p}) => <span {...p}>{children}</span>;({
+const LabelInputLabel = ({ children, ...p }) => <span {...p}>{children}</span>;
+({
   fontSize: 13,
   fontWeight: 600,
   whiteSpace: 'nowrap',
   color: 'var(--text-secondary)',
 });
 
-const LabelInputWrapper = ({children,isOpen,...p}) => <div {...p}>{children}</div>;(({ isOpen }) => ({
+const LabelInputWrapper = ({ children, isOpen, ...p }) => <div {...p}>{children}</div>;
+({ isOpen }) => ({
   display: 'flex',
   alignItems: 'center',
   gap: 4,
@@ -73,16 +78,17 @@ const LabelInputWrapper = ({children,isOpen,...p}) => <div {...p}>{children}</di
   ...(isOpen && {
     boxShadow: '0px 0px 0px 3px rgba(20, 115, 223, 0.3)',
   }),
-}));
+});
 
-const LabelInputText = ({children,hasLabels,...p}) => <span {...p}>{children}</span>;(({ hasLabels }) => ({
+const LabelInputText = ({ children, hasLabels, ...p }) => <span {...p}>{children}</span>;
+({ hasLabels }) => ({
   fontSize: 13,
   color: hasLabels ? 'var(--text-primary)' : 'var(--text-tertiary)',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
   flex: 1,
-}));
+});
 
 export default function LabelPicker({
   labels = [],
@@ -99,6 +105,7 @@ export default function LabelPicker({
   );
 
   // Calculate pendingValue based on currentSelection and labels
+  // biome-ignore lint/correctness/useExhaustiveDependencies: allLabelNames derived from labels
   useEffect(() => {
     if (currentSelection.length === 0) {
       setPendingValue([]);

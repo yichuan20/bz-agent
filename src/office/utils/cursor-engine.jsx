@@ -8,9 +8,9 @@
  *   drawY          — ys[i] - scrollY  (position on the visible canvas)
  */
 
-const LINE_SNAP_PX = 4;   // px tolerance for grouping chars on the same line
-const CURSOR_WIDTH = 3;   // px line width for the cursor
-const CURSOR_EXTRA = 6;   // px the cursor extends below the baseline
+const LINE_SNAP_PX = 4; // px tolerance for grouping chars on the same line
+const CURSOR_WIDTH = 3; // px line width for the cursor
+const CURSOR_EXTRA = 6; // px the cursor extends below the baseline
 
 /**
  * findCursorIndex
@@ -28,36 +28,38 @@ export function findCursorIndex(clickX, clickY, xs, ys) {
 
   // ── Step 1: find the Y of the nearest line ──────────────────────────────
   let nearestLineY = null;
-  let minYDist     = Infinity;
+  let minYDist = Infinity;
 
   for (let i = 0; i < ys.length; i++) {
     const y = ys[i];
     if (y == null) continue;
     const d = Math.abs(y - clickY);
-    if (d < minYDist) { minYDist = d; nearestLineY = y; }
+    if (d < minYDist) {
+      minYDist = d;
+      nearestLineY = y;
+    }
   }
 
   if (nearestLineY === null) return 0;
 
   // ── Step 2: among chars on that line, find nearest X ───────────────────
   let bestIndex = 0;
-  let minXDist  = Infinity;
+  let minXDist = Infinity;
 
   for (let i = 0; i < xs.length; i++) {
     if (ys[i] == null || Math.abs(ys[i] - nearestLineY) > LINE_SNAP_PX) continue;
     const d = Math.abs(xs[i] - clickX);
-    if (d < minXDist) { minXDist = d; bestIndex = i; }
+    if (d < minXDist) {
+      minXDist = d;
+      bestIndex = i;
+    }
   }
 
   // ── Step 3: if click is to the right of the char, advance one ──────────
   const charX = xs[bestIndex];
   if (charX != null && clickX > charX) {
     const next = bestIndex + 1;
-    if (
-      next < ys.length &&
-      ys[next] != null &&
-      Math.abs(ys[next] - nearestLineY) <= LINE_SNAP_PX
-    ) {
+    if (next < ys.length && ys[next] != null && Math.abs(ys[next] - nearestLineY) <= LINE_SNAP_PX) {
       bestIndex = next;
     }
   }
@@ -85,15 +87,15 @@ export function paintCursor(ctx, xs, ys, selStart, scrollY, lineHeight) {
   if (absX == null || absY == null) return;
 
   const drawX = absX;
-  const drawY = absY - scrollY;  // convert absolute → visible canvas
+  const drawY = absY - scrollY; // convert absolute → visible canvas
 
   const prevStroke = ctx.strokeStyle;
-  const prevWidth  = ctx.lineWidth;
-  const prevCap    = ctx.lineCap;
+  const prevWidth = ctx.lineWidth;
+  const prevCap = ctx.lineCap;
 
   ctx.strokeStyle = '#111111';
-  ctx.lineWidth   = CURSOR_WIDTH;
-  ctx.lineCap     = 'round';
+  ctx.lineWidth = CURSOR_WIDTH;
+  ctx.lineCap = 'round';
 
   ctx.beginPath();
   ctx.moveTo(drawX, drawY - lineHeight + CURSOR_EXTRA);
@@ -101,6 +103,6 @@ export function paintCursor(ctx, xs, ys, selStart, scrollY, lineHeight) {
   ctx.stroke();
 
   ctx.strokeStyle = prevStroke;
-  ctx.lineWidth   = prevWidth;
-  ctx.lineCap     = prevCap;
+  ctx.lineWidth = prevWidth;
+  ctx.lineCap = prevCap;
 }

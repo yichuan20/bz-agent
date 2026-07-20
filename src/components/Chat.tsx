@@ -1,7 +1,7 @@
 import type { UseChatReturn } from '@boltzbit/chat';
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
 import { ChatCircleDotsIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const defaultSuggestions = [
   { text: 'Summarize a document' },
@@ -24,13 +24,9 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, []);
 
-  useLayoutEffect(() => {
-    adjustHeight();
-  }, [value]);
-
-  function adjustHeight() {
+  const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = '1px';
@@ -39,7 +35,11 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
     const next = Math.max(Math.min(el.scrollHeight, maxHeight), lineHeight);
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight >= maxHeight ? 'auto' : 'hidden';
-  }
+  }, []);
+
+  useLayoutEffect(() => {
+    adjustHeight();
+  }, [adjustHeight]);
 
   function handleSubmit() {
     const text = value.trim();
@@ -111,7 +111,13 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
                     const isLast = status === 'streaming' && i === messages.length - 1;
                     return (
                       <details key={j} className="chat-thinking">
-                        <summary className={isLast ? 'chat-thinking-label chat-thinking-label--streaming' : 'chat-thinking-label'}>
+                        <summary
+                          className={
+                            isLast
+                              ? 'chat-thinking-label chat-thinking-label--streaming'
+                              : 'chat-thinking-label'
+                          }
+                        >
                           Thinking…
                         </summary>
                         <div

@@ -1,23 +1,17 @@
 import { cloneDeep, isEmpty, isNil } from 'lodash';
+import { C_START, R_START, T_END, TABLE_CHARS } from './word-constants';
 import {
-  TABLE_CHARS,
-  T_START,
-  T_END,
-  R_START,
-  C_START,
-} from './word-constants';
-import {
-  isIndentedParagraph,
-  isNumberedStyle,
-  getPrevNewlineIndexFromPosition,
-} from './word-text-analysis';
-import {
+  countTableRows,
+  findTableEnd,
+  findTableStart,
   getRowBoundaries,
   isAtRowFirstCellStart,
-  countTableRows,
-  findTableStart,
-  findTableEnd,
 } from './word-table-utils';
+import {
+  getPrevNewlineIndexFromPosition,
+  isIndentedParagraph,
+  isNumberedStyle,
+} from './word-text-analysis';
 
 /**
  * Scans and renumbers a numbered list block with the same indentation level
@@ -213,7 +207,13 @@ export const insertText = ({ doc = {}, textToInsert = '' }) => {
 
   // if press Enter in AI style (but NOT in numbered/bulleted list)
   // Don't override styles if we're in a list, as we need to preserve the list formatting
-  if (textToInsert === '\n' && styleAtStart?.queryId && selSmaller === selBigger && !wasInNumberedList && !indentedStyle?.prefix) {
+  if (
+    textToInsert === '\n' &&
+    styleAtStart?.queryId &&
+    selSmaller === selBigger &&
+    !wasInNumberedList &&
+    !indentedStyle?.prefix
+  ) {
     const nextChar = doc?.text?.[selBigger + 1];
     let nextCharStyle = { ...doc?.styles?.[selBigger] };
     if (nextChar === '\n' || TABLE_CHARS?.includes(nextChar)) {
@@ -290,7 +290,10 @@ export const deleteText = ({ doc = {} }) => {
           const tEndIndex = findTableEnd(newDoc.text, newDoc.selStart);
           if (tStartIndex >= 0 && tEndIndex >= 0) {
             newDoc.text = newDoc.text.slice(0, tStartIndex) + newDoc.text.slice(tEndIndex + 1);
-            newDoc.styles = [...newDoc.styles.slice(0, tStartIndex), ...newDoc.styles.slice(tEndIndex + 1)];
+            newDoc.styles = [
+              ...newDoc.styles.slice(0, tStartIndex),
+              ...newDoc.styles.slice(tEndIndex + 1),
+            ];
             newDoc.selStart = tStartIndex;
             newDoc.selEnd = tStartIndex;
             newDoc.xs = [];
@@ -332,7 +335,7 @@ export const deleteText = ({ doc = {} }) => {
   // Check if we're deleting a newline that's part of a numbered list
   // We need to check if the line after the deleted content has a numbered prefix
   let needsRenumber = false;
-  let renumberStartIndex = selSmaller;
+  const renumberStartIndex = selSmaller;
 
   // Check if deleting a newline character that has a numbered style
   for (let i = selSmaller; i < selBigger; i++) {
@@ -364,7 +367,10 @@ export const deleteText = ({ doc = {} }) => {
     const prevNewlineIdx = getPrevNewlineIndexFromPosition(newDoc.text, renumberStartIndex);
     if (isNumberedStyle(newDoc.styles[prevNewlineIdx])) {
       scanAndRenumber(newDoc, prevNewlineIdx);
-    } else if (renumberStartIndex < newDoc.text.length && isNumberedStyle(newDoc.styles[renumberStartIndex])) {
+    } else if (
+      renumberStartIndex < newDoc.text.length &&
+      isNumberedStyle(newDoc.styles[renumberStartIndex])
+    ) {
       scanAndRenumber(newDoc, renumberStartIndex);
     }
   }

@@ -1,0 +1,14 @@
+{
+  "id": "mkt-amazon-b2b",
+  "name": "B2B Product Catalog",
+  "description": "B2B product catalog and ordering portal — bulk pricing, product specs, and RFQ workflow.",
+  "tags": ["b2b", "catalog", "marketing", "wholesale"],
+  "text_replacements": [
+    { "from": "Amazon", "to": "Catalog" },
+    { "from": "Prime", "to": "Business" },
+    { "from": "Add to Cart", "to": "Request Quote" },
+    { "from": "Buy Now", "to": "Order Now" },
+    { "from": "Customer reviews", "to": "Partner reviews" },
+    { "from": "Wish List", "to": "Favorites" }
+  ]
+}

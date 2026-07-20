@@ -2,8 +2,8 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { isLoggedIn, useIsLoggedIn } from '#/auth-store';
 import { BoltzbitLogo } from '#/components/BoltzbitLogo';
-import ThemeToggle from '#/components/ThemeToggle';
 import { CubeGridBackground } from '#/components/CubeGridBackground';
+import ThemeToggle from '#/components/ThemeToggle';
 
 export const Route = createFileRoute('/login')({
   beforeLoad: () => {
@@ -13,15 +13,15 @@ export const Route = createFileRoute('/login')({
 });
 
 const AGENT_HTTP =
-  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 function Login() {
   const navigate = useNavigate();
   const loggedIn = useIsLoggedIn();
 
-  const [apiKey,  setApiKey]  = useState('');
-  const [error,   setError]   = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -34,9 +34,9 @@ function Login() {
     setLoading(true);
     try {
       const res = await fetch(`${AGENT_HTTP}/agent-key`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: 'BZ_API_KEY', value: apiKey.trim() }),
+        body: JSON.stringify({ name: 'BZ_API_KEY', value: apiKey.trim() }),
       });
       if (!res.ok) {
         setError('Failed to save API key. Please try again.');
@@ -68,10 +68,21 @@ function Login() {
           <h1 className="auth-title">Sign in</h1>
         </div>
 
-        <p style={{ margin: '0 0 4px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <p
+          style={{
+            margin: '0 0 4px',
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+            lineHeight: 1.5,
+          }}
+        >
           Enter your API key to continue.{' '}
-          <a href="https://boltzhub.com/settings/api" target="_blank" rel="noreferrer"
-            style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>
+          <a
+            href="https://boltzhub.com/settings/api"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}
+          >
             Create one at BoltzHub →
           </a>
         </p>
@@ -88,7 +99,6 @@ function Login() {
             onChange={e => setApiKey(e.target.value)}
             required
             disabled={loading}
-            autoFocus
           />
           <button type="submit" className="auth-submit-btn" disabled={loading || !apiKey.trim()}>
             {loading ? 'Saving…' : 'Continue'}

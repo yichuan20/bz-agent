@@ -1,33 +1,78 @@
 import { useRef, useState } from 'react';
 import useClickOutside from '../hooks/useClickOutside';
 
-const TablePickerContainer = ({children, ...p}) => <div style={{position:'relative',display:'inline-block'}} {...p}>{children}</div>;
+const TablePickerContainer = ({ children, ...p }) => (
+  <div style={{ position: 'relative', display: 'inline-block' }} {...p}>
+    {children}
+  </div>
+);
 
-const TablePickerTip = ({children, isVisible, ...p}) => <div style={{
-  position:'absolute', top:'calc(100% + 4px)', right:0,
-  background:'var(--bg-elevated,var(--bg-primary))',
-  border:'1px solid var(--border-default,var(--border-primary))',
-  borderRadius:8, boxShadow:'0 8px 32px rgba(0,0,0,0.4)',
-  padding:8, zIndex:9999,
-}} {...p}>{children}</div>;
+const TablePickerTip = ({ children, isVisible, ...p }) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: 'calc(100% + 4px)',
+      right: 0,
+      background: 'var(--bg-elevated,var(--bg-primary))',
+      border: '1px solid var(--border-default,var(--border-primary))',
+      borderRadius: 8,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      padding: 8,
+      zIndex: 9999,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TableGridContainer = ({children, ...p}) => <div style={{
-  display:'grid', gridTemplateColumns:'repeat(10,16px)', gap:2,
-}} {...p}>{children}</div>;
+const TableGridContainer = ({ children, ...p }) => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(10,16px)',
+      gap: 2,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TableGridCell = ({children, isSelected, isHovered, style={}, ...p}) => <div style={{
-  width:16, height:16, borderRadius:2, cursor:'pointer',
-  border:`1px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-default,var(--border-primary))'}`,
-  background: isSelected ? 'color-mix(in srgb,var(--accent-blue) 20%,transparent)' : 'transparent',
-  ...style,
-}} {...p}>{children}</div>;
+const TableGridCell = ({ children, isSelected, isHovered, style = {}, ...p }) => (
+  <div
+    style={{
+      width: 16,
+      height: 16,
+      borderRadius: 2,
+      cursor: 'pointer',
+      border: `1px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-default,var(--border-primary))'}`,
+      background: isSelected
+        ? 'color-mix(in srgb,var(--accent-blue) 20%,transparent)'
+        : 'transparent',
+      ...style,
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TableSizeText = ({children, ...p}) => <div style={{
-  textAlign:'center', fontSize:11, marginTop:4,
-  color:'var(--text-secondary)',
-}} {...p}>{children}</div>;
+const TableSizeText = ({ children, ...p }) => (
+  <div
+    style={{
+      textAlign: 'center',
+      fontSize: 11,
+      marginTop: 4,
+      color: 'var(--text-secondary)',
+    }}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const TablePickerTooltip = ({ onTableSelect = () => { }, triggerIcon, disabled = false }) => {
+const TablePickerTooltip = ({ onTableSelect = () => {}, triggerIcon, disabled = false }) => {
   const tipRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredCell, setHoveredCell] = useState(null);

@@ -11,122 +11,119 @@
 */
 
 :root {
-
   /* ─── SEMANTIC COLORS: LIGHT MODE — warm sand (aligned with bz-token) ─── */
-  --bg-primary:     #FFFFFF;   /* Surfaces — cards, modals, prompt, navbar (pure white)    */
-  --bg-secondary:   #EDE8E0;   /* Page & zone backgrounds (warm sand)                      */
-  --bg-tertiary:    #E0DAD1;   /* Hover states, icon/table backgrounds                     */
+  --bg-primary: #ffffff; /* Surfaces — cards, modals, prompt, navbar (pure white)    */
+  --bg-secondary: #ede8e0; /* Page & zone backgrounds (warm sand)                      */
+  --bg-tertiary: #e0dad1; /* Hover states, icon/table backgrounds                     */
 
-  --text-primary:   #1C1917;   /* Main body text, headings (warm charcoal)                 */
-  --text-secondary: #6B6358;   /* Secondary text, meta info                                */
-  --text-tertiary:  #9E9488;   /* Disabled text, timestamps, placeholders                  */
+  --text-primary: #1c1917; /* Main body text, headings (warm charcoal)                 */
+  --text-secondary: #6b6358; /* Secondary text, meta info                                */
+  --text-tertiary: #9e9488; /* Disabled text, timestamps, placeholders                  */
 
-  --border-primary:   #E2DDD4; /* Standard borders (white surfaces need visible edges)     */
-  --border-secondary: #EDE8E0; /* Subtle borders                                           */
+  --border-primary: #e2ddd4; /* Standard borders (white surfaces need visible edges)     */
+  --border-secondary: #ede8e0; /* Subtle borders                                           */
   /* bz-office canvas compat aliases */
-  --border-default:   #D0CAC0;
-  --bg-elevated:      #FFFFFF;
-  --bg-hover:         #E0DAD1;
+  --border-default: #d0cac0;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e0dad1;
   --accent-blue-light: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 
   /* ─── ACCENT COLORS: LIGHT MODE ─── */
-  --accent-blue:    #1473DF;
-  --accent-green:   #2DB970;   /* Slightly richer green for warm bg                        */
-  --accent-orange:  #D97706;   /* Amber, warmer tone                                       */
-  --accent-red:     #E5352B;   /* Slightly deeper red for warm bg                          */
-  --accent-pink:    #EC4899;
-  --accent-cyan:    #06B6D4;
-  --accent-yellow:  #EAB308;
+  --accent-blue: #1473df;
+  --accent-green: #2db970; /* Slightly richer green for warm bg                        */
+  --accent-orange: #d97706; /* Amber, warmer tone                                       */
+  --accent-red: #e5352b; /* Slightly deeper red for warm bg                          */
+  --accent-pink: #ec4899;
+  --accent-cyan: #06b6d4;
+  --accent-yellow: #eab308;
 
   /* ─── OVERLAY ─── */
-  --overlay-modal:  rgba(0, 0, 0, 0.5);
+  --overlay-modal: rgba(0, 0, 0, 0.5);
 
   /* ─── SPACING (8pt Grid) ─── */
-  --spacing-xs:   8px;
-  --spacing-sm:  16px;
-  --spacing-md:  24px;
-  --spacing-lg:  32px;
-  --spacing-xl:  48px;
+  --spacing-xs: 8px;
+  --spacing-sm: 16px;
+  --spacing-md: 24px;
+  --spacing-lg: 32px;
+  --spacing-xl: 48px;
   --spacing-2xl: 64px;
 
   /* ─── BORDER RADIUS ─── */
-  --radius-sm:  8px;           /* Buttons, inputs, small cards, icon containers            */
-  --radius-md: 12px;           /* Standard cards, dropdowns                                */
-  --radius-lg: 16px;           /* Large cards, modals                                      */
+  --radius-sm: 8px; /* Buttons, inputs, small cards, icon containers            */
+  --radius-md: 12px; /* Standard cards, dropdowns                                */
+  --radius-lg: 16px; /* Large cards, modals                                      */
 
   /* ─── TYPOGRAPHY ─── */
-  --font-heading: 'Martian Mono', monospace;
-  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: "Martian Mono", monospace;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* ─── ON-ACCENT TEXT ─── */
-  --text-on-accent: #FFFFFF;   /* Text placed directly on accent/colored buttons    */
-  --text-on-dark:   #000000;   /* Text on light/success-green surfaces              */
+  --text-on-accent: #ffffff; /* Text placed directly on accent/colored buttons    */
+  --text-on-dark: #000000; /* Text on light/success-green surfaces              */
 
   /* ─── FONT SIZE SCALE ─── */
-  --font-size-2xs:  10px;      /* Labels, badges, tiny meta                        */
-  --font-size-xs:   11px;      /* Captions, timestamps, secondary meta              */
-  --font-size-sm:   12px;      /* Small body, code snippets                        */
-  --font-size-base: 13px;      /* Default body text                                */
-  --font-size-md:   14px;      /* Slightly larger body, nav links                  */
-  --font-size-lg:   16px;      /* Sub-headings, emphasis                           */
-  --font-size-xl:   18px;      /* Section headings                                 */
-  --font-size-2xl:  22px;      /* Page headings                                    */
-  --font-size-3xl:  28px;      /* Hero / display                                   */
+  --font-size-2xs: 10px; /* Labels, badges, tiny meta                        */
+  --font-size-xs: 11px; /* Captions, timestamps, secondary meta              */
+  --font-size-sm: 12px; /* Small body, code snippets                        */
+  --font-size-base: 13px; /* Default body text                                */
+  --font-size-md: 14px; /* Slightly larger body, nav links                  */
+  --font-size-lg: 16px; /* Sub-headings, emphasis                           */
+  --font-size-xl: 18px; /* Section headings                                 */
+  --font-size-2xl: 22px; /* Page headings                                    */
+  --font-size-3xl: 28px; /* Hero / display                                   */
 
   /* ─── SHADOWS ─── */
-  --shadow-none:     none;
-  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.08);   /* Subtle lift                     */
-  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.08);  /* Menus, tooltips                 */
-  --shadow-md:       0 4px 16px rgba(0, 0, 0, 0.10);  /* Floating panels                 */
-  --shadow-lg:       0 8px 32px rgba(0, 0, 0, 0.12);  /* Modals, dragged widgets         */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08); /* Subtle lift                     */
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.08); /* Menus, tooltips                 */
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1); /* Floating panels                 */
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12); /* Modals, dragged widgets         */
 
   /* ─── TRANSITIONS ─── */
   --transition-default: all 0.2s ease;
-  --transition-fast:    all 0.12s ease;
-  --transition-slow:    all 0.35s ease;
+  --transition-fast: all 0.12s ease;
+  --transition-slow: all 0.35s ease;
 
   /* ─── LAYOUT ─── */
   --max-width-container: 1400px;
-  --max-width-modal:      480px;
+  --max-width-modal: 480px;
 
   /* ─── Z-INDEX SCALE ─── */
-  --z-navbar:   1000;
+  --z-navbar: 1000;
   --z-dropdown: 1500;
-  --z-modal:    2000;
+  --z-modal: 2000;
 }
-
 
 /* ─── DARK MODE — aligned with bz-token [data-theme="dark"] ─── */
 [data-theme="dark"] {
-  --bg-primary:     #0A0A0A;   /* Cards, main areas                                        */
-  --bg-secondary:   #000000;   /* Page background                                          */
-  --bg-tertiary:    #1A1A1A;   /* Hover, surface, table headers                            */
+  --bg-primary: #0a0a0a; /* Cards, main areas                                        */
+  --bg-secondary: #000000; /* Page background                                          */
+  --bg-tertiary: #1a1a1a; /* Hover, surface, table headers                            */
 
-  --text-primary:   #FFFFFF;
-  --text-secondary: #A3A3A3;
-  --text-tertiary:  #737373;
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
 
-  --border-primary:   #262626;
-  --border-secondary: #1F1F1F;
+  --border-primary: #262626;
+  --border-secondary: #1f1f1f;
   /* bz-office canvas compat aliases */
-  --border-default:   #2E2E2E;
-  --bg-elevated:      #141414;
-  --bg-hover:         #222222;
+  --border-default: #2e2e2e;
+  --bg-elevated: #141414;
+  --bg-hover: #222222;
   --accent-blue-light: color-mix(in srgb, var(--accent-blue) 15%, transparent);
 
   /* Accent — brighter in dark for legibility (bz-token dark palette) */
-  --accent-blue:    #2E88FF;
-  --accent-green:   #3FDC7E;
-  --accent-orange:  #F59E0B;
-  --accent-red:     #FA4B42;
+  --accent-blue: #2e88ff;
+  --accent-green: #3fdc7e;
+  --accent-orange: #f59e0b;
+  --accent-red: #fa4b42;
 
   /* Shadows — heavier for dark bg */
-  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.30);
-  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.40);
-  --shadow-md:       0 4px 16px rgba(0, 0, 0, 0.40);
-  --shadow-lg:       0 8px 32px rgba(0, 0, 0, 0.50);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
-
 
 /* ============================================================
    COMPONENT TOKENS
@@ -168,7 +165,7 @@
 
 .btn-accent {
   background: var(--accent-blue);
-  color: #FFFFFF;
+  color: #ffffff;
   border: none;
   border-radius: var(--radius-sm);
   padding: 10px 20px;
@@ -217,7 +214,6 @@
   transform: none !important;
 }
 
-
 /* ─── Form Inputs ─── */
 .input {
   background: var(--bg-secondary);
@@ -244,7 +240,6 @@
   border-color: var(--accent-green);
 }
 
-
 /* ─── Cards ─── */
 .card {
   background: var(--bg-primary);
@@ -258,7 +253,6 @@
   transform: translateY(-2px);
   /* NO box-shadow — brutal minimalism */
 }
-
 
 /* ─── Modals ─── */
 .modal-overlay {
@@ -277,7 +271,6 @@
   width: 100%;
 }
 
-
 /* ─── Dropdowns ─── */
 .dropdown {
   background: var(--bg-primary);
@@ -286,7 +279,6 @@
   box-shadow: var(--shadow-dropdown);
   z-index: var(--z-dropdown);
 }
-
 
 /* ─── Tables ─── */
 .table-header {
@@ -299,7 +291,6 @@
 .table-row {
   border-bottom: 1px solid var(--border-primary);
 }
-
 
 /* ─── Navbar ─── */
 .navbar {
@@ -316,26 +307,38 @@
   margin: 0 auto;
 }
 
-
 /* ============================================================
    ANIMATIONS
    ============================================================ */
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pop {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
-
 
 /* ============================================================
    RESPONSIVE BREAKPOINTS
@@ -344,7 +347,6 @@
    Tablet:  768–1024px → Reduced navigation, 2-col grids
    Desktop: > 1024px   → Full navigation, multi-col grids
    ============================================================ */
-
 
 /* ============================================================
    THEME TOGGLE (JS Reference)

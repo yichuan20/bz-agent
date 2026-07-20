@@ -13,7 +13,15 @@ const SideBarFoldIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, .
       className={className}
       {...props}
     >
-      <rect x="0.75" y="1.75" width="14.5" height="12.5" rx="2.25" stroke="currentColor" strokeWidth="1.5" />
+      <rect
+        x="0.75"
+        y="1.75"
+        width="14.5"
+        height="12.5"
+        rx="2.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <rect x="3" y="4.25" width="1.5" height="7.5" rx="0.75" fill="currentColor" />
     </svg>
   );

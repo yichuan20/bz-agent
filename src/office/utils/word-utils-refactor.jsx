@@ -2,88 +2,74 @@ import { clamp } from 'lodash';
 
 // Import constants
 import {
-  VIEW_W,
-  VIEW_H,
-  SF,
+  ARROW_KEYS,
+  C_START,
+  EMPTY_DOC,
+  END_X,
   FONT_SIZE,
   LINE_HEIGHT,
+  PAD,
+  PAGE_CONTENT_HEIGHT,
+  PAGE_GAP,
+  PAGE_HEIGHT,
+  PAGE_MARGIN_TOP,
+  R_START,
+  SF,
   START_X,
   START_Y,
-  END_X,
-  PAD,
-  TABLE_CHARS,
-  T_START,
-  R_START,
-  C_START,
   T_END,
-  EMPTY_DOC,
-  ARROW_KEYS,
+  T_START,
+  TABLE_CHARS,
   TEXT_WITH_TABLE,
-  PAGE_HEIGHT,
-  PAGE_GAP,
-  PAGE_MARGIN_TOP,
-  PAGE_MARGIN_BOTTOM,
-  PAGE_CONTENT_HEIGHT,
+  VIEW_H,
+  VIEW_W,
 } from './word-constants';
 
 // Import image utilities
 import {
-  imageCache,
+  clearImageCache,
   failedImageUrls,
+  getImageLoadCallback,
+  imageCache,
   loadingImages,
   setImageLoadCallback,
-  clearImageCache,
-  getImageLoadCallback,
 } from './word-image-utils';
-
-// Import text analysis
-import {
-  isWordOverlappingEnd,
-  isListParagraph,
-  isIndentedParagraph,
-  getPrevNewlineIndex,
-  isNumberedStyle,
-  getPrevNewlineIndexFromPosition,
-} from './word-text-analysis';
-
-// Import table utilities
-import {
-  getTableCharPosition,
-  getStartI,
-  getNumberOfColumns,
-  getNumberOfRows,
-  drawTableLines,
-} from './word-table-utils';
-
+// Import mutation utilities
+import { deleteText, insertText, moveCaret, safeCaret, scanAndRenumber } from './word-mutation';
 // Import render utilities
 import {
-  drawCaret,
-  drawSelectionBox,
-  drawCharBox,
-  drawQueryBox,
   drawBgBox,
-  drawPageSetup,
+  drawCaret,
+  drawCharBox,
   drawLine,
+  drawPageSetup,
   drawPrefix,
-  getPageFromContentY,
-  contentYToCanvasY,
+  drawQueryBox,
+  drawSelectionBox,
 } from './word-render-utils';
-
-// Import mutation utilities
-import {
-  insertText,
-  deleteText,
-  moveCaret,
-  safeCaret,
-  scanAndRenumber,
-} from './word-mutation';
-
 // Import selection utilities
 import {
-  getNearestCharIndexFromEvent,
   addMultiClickSelection,
+  getNearestCharIndexFromEvent,
   getStartEnd,
 } from './word-selection';
+// Import table utilities
+import {
+  drawTableLines,
+  getNumberOfColumns,
+  getNumberOfRows,
+  getStartI,
+  getTableCharPosition,
+} from './word-table-utils';
+// Import text analysis
+import {
+  getPrevNewlineIndex,
+  getPrevNewlineIndexFromPosition,
+  isIndentedParagraph,
+  isListParagraph,
+  isNumberedStyle,
+  isWordOverlappingEnd,
+} from './word-text-analysis';
 
 // Re-export everything for backward compatibility
 export {
@@ -104,29 +90,24 @@ export {
   EMPTY_DOC,
   PAGE_HEIGHT,
   PAGE_GAP,
-
   // Image utilities
   setImageLoadCallback,
   clearImageCache,
-
   // Text analysis
   isListParagraph,
   isIndentedParagraph,
   getPrevNewlineIndex,
   isNumberedStyle,
   getPrevNewlineIndexFromPosition,
-
   // Table utilities
   getNumberOfColumns,
   getNumberOfRows,
-
   // Mutation
   insertText,
   deleteText,
   moveCaret,
   safeCaret,
   scanAndRenumber,
-
   // Selection
   getNearestCharIndexFromEvent,
   addMultiClickSelection,
@@ -135,13 +116,13 @@ export {
 
 // Re-export table utility functions from table-utils.jsx
 export {
-  parseTableTo2DArray,
-  getTableInfo,
-  deleteTableRow,
-  addTableRow,
   addTableColumn,
-  deleteTableColumn,
+  addTableRow,
   deleteTable,
+  deleteTableColumn,
+  deleteTableRow,
+  getTableInfo,
+  parseTableTo2DArray,
 } from './table-utils';
 
 /**
@@ -163,7 +144,7 @@ const contentYToDrawY = (contentY, topMargin) => {
 
   // New Y = page start + margin + position within page
   // Page start includes all previous pages plus their gaps
-  const pageStartY = topMargin + (pageNum * (PAGE_HEIGHT + PAGE_GAP));
+  const pageStartY = topMargin + pageNum * (PAGE_HEIGHT + PAGE_GAP);
   return pageStartY + PAGE_MARGIN_TOP + yWithinPage;
 };
 
@@ -172,7 +153,19 @@ const contentYToDrawY = (contentY, topMargin) => {
  * Note: Positions are stored in "content space" (continuous Y coordinates)
  * Page gaps are only added when drawing
  */
-const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], topMargin = 0, lineSpacing = 1, effectiveEndX = END_X, effectiveStartX = START_X }) => {
+const getNextPosition = ({
+  x,
+  y,
+  text,
+  i,
+  ctx,
+  tableState = null,
+  styles = [],
+  topMargin = 0,
+  lineSpacing = 1,
+  effectiveEndX = END_X,
+  effectiveStartX = START_X,
+}) => {
   const char = text[i];
   const style = styles[i];
   const charWidth = ctx.measureText(char).width;
@@ -227,7 +220,7 @@ const getNextPosition = ({ x, y, text, i, ctx, tableState = null, styles = [], t
  * Set ctx.font from a character style object
  */
 const setCtxFont = (ctx, style, defaultSize) => {
-  const fs = ((style?.fontSize || defaultSize) * SF);
+  const fs = (style?.fontSize || defaultSize) * SF;
   const ff = style?.fontFamily || 'Arial';
   const fw = style?.isBold ? 'bold' : 'normal';
   const fi = style?.isItalic ? 'italic' : 'normal';
@@ -256,7 +249,7 @@ const adjustForAlignment = (newXs, newYs, text, styles, ctx) => {
     // Find alignment stored on the preceding \n (or at index 0 for first paragraph)
     let nlIdx = firstI - 1;
     while (nlIdx > 0 && text[nlIdx] !== '\n') nlIdx--;
-    const paraStyle = nlIdx >= 0 ? (styles[nlIdx] || styles[0]) : styles[0];
+    const paraStyle = nlIdx >= 0 ? styles[nlIdx] || styles[0] : styles[0];
     const alignment = paraStyle?.alignment;
     if (!alignment || alignment === 'left') continue;
 
@@ -282,7 +275,19 @@ const adjustForAlignment = (newXs, newYs, text, styles, ctx) => {
  * Main document rendering function
  * Draws the document on a canvas context
  */
-export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hideCaretAtIndex = null, caretVisible = true, headerText = '', footerText = '', gapColor = '#e8e8e8' }) => {
+export const drawDoc = ({
+  doc,
+  ctx,
+  scrollY,
+  xs = [],
+  ys = [],
+  topMargin = 0,
+  hideCaretAtIndex = null,
+  caretVisible = true,
+  headerText = '',
+  footerText = '',
+  gapColor = '#e8e8e8',
+}) => {
   if (!ctx) {
     return [];
   }
@@ -304,14 +309,19 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   const occupiedZones = [];
   for (let si = 0; si < (styles?.length || 0); si++) {
     const s = styles?.[si];
-    if (s?.imageUrl && s?.imageWrap === 'square' && s.imagePlacedX != null && s.imagePlacedY != null) {
+    if (
+      s?.imageUrl &&
+      s?.imageWrap === 'square' &&
+      s.imagePlacedX != null &&
+      s.imagePlacedY != null
+    ) {
       // imagePlacedX/Y stored in CSS px; convert to canvas px for layout
       const px = s.imagePlacedX * SF;
       const py = s.imagePlacedY * SF;
       occupiedZones.push({
-        left:   px,
-        right:  px + (s.imageWidth  || 64) * SF,
-        top:    py - (s.imageHeight || 64) * SF,
+        left: px,
+        right: px + (s.imageWidth || 64) * SF,
+        top: py - (s.imageHeight || 64) * SF,
         bottom: py,
       });
     }
@@ -319,8 +329,9 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
 
   // For a line at content-space Y, return the effective [startX, endX] range after
   // accounting for any occupied zones that intersect the line.
-  const getLineRange = (lineY) => {
-    let lStartX = START_X, lEndX = END_X;
+  const getLineRange = lineY => {
+    let lStartX = START_X,
+      lEndX = END_X;
     const mid = (START_X + END_X) / 2;
     for (const z of occupiedZones) {
       if (lineY > z.top - LINE_HEIGHT && lineY <= z.bottom + LINE_HEIGHT) {
@@ -339,16 +350,21 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
   // step 1: only calculate the coordinates and line height, not drawing
   let i = clamp(startI, 0, text.length);
 
-  const isFloatImage = (s) => s?.imageUrl && (s?.imageWrap === 'square' || s?.imageWrap === 'behind');
+  const isFloatImage = s => s?.imageUrl && (s?.imageWrap === 'square' || s?.imageWrap === 'behind');
 
   // When startI is inside a float-image zone, text y depends on the paragraph above
   // the image — which may have scrolled off screen. Back up to before the image so
   // the layout re-derives the correct flow y from stored positions.
-  const startY = newYs[i] ?? (START_Y + topMargin);
-  const nearAnyZone = occupiedZones.some(z => startY > z.top - LINE_HEIGHT && startY <= z.bottom + LINE_HEIGHT);
+  const startY = newYs[i] ?? START_Y + topMargin;
+  const nearAnyZone = occupiedZones.some(
+    z => startY > z.top - LINE_HEIGHT && startY <= z.bottom + LINE_HEIGHT,
+  );
   if (nearAnyZone || isFloatImage(styles?.[i])) {
     for (let k = i - 1; k >= Math.max(0, i - 2000); k--) {
-      if (isFloatImage(styles?.[k])) { i = k; break; }
+      if (isFloatImage(styles?.[k])) {
+        i = k;
+        break;
+      }
     }
   }
 
@@ -360,7 +376,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     i--;
   }
 
-  let y = newYs[i] ?? (START_Y + topMargin);
+  let y = newYs[i] ?? START_Y + topMargin;
   const { startX: _initStartX } = getLineRange(y);
   let x = _initStartX;
   let tableState = null;
@@ -386,18 +402,19 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     }
 
     if (styles[i]?.imageUrl) {
-      const imgWidth  = (styles[i].imageWidth  || 64) * SF;
+      const imgWidth = (styles[i].imageWidth || 64) * SF;
       const imgHeight = (styles[i].imageHeight || 64) * SF;
-      const vPadding  = 8 * SF;
+      const vPadding = 8 * SF;
       const wrap = styles[i]?.imageWrap || 'inline';
 
       if (wrap === 'square') {
         // imagePlacedX/Y stored in CSS px; convert to canvas px for layout
         const rawPx = styles[i].imagePlacedX;
         const rawPy = styles[i].imagePlacedY;
-        newXs[i] = rawPx != null ? rawPx * SF : (END_X - imgWidth - spacePadding * 2);
+        newXs[i] = rawPx != null ? rawPx * SF : END_X - imgWidth - spacePadding * 2;
         newYs[i] = rawPy != null ? rawPy * SF : y;
-        i++; continue;  // x does NOT advance — zero width in text flow
+        i++;
+        continue; // x does NOT advance — zero width in text flow
       }
 
       if (wrap === 'behind') {
@@ -407,7 +424,8 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
         const rawPy = styles[i].imagePlacedY;
         newXs[i] = rawPx != null ? rawPx * SF : currentX + spacePadding;
         newYs[i] = rawPy != null ? rawPy * SF : y;
-        i++; continue;  // x does NOT advance
+        i++;
+        continue; // x does NOT advance
       }
 
       // 'inline' (default): expand line height to accommodate the image, advance x
@@ -427,7 +445,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
         lastY += diff;
       }
 
-      newXs[i] = currentX;  // store raw position; spacePadding applied at draw time only
+      newXs[i] = currentX; // store raw position; spacePadding applied at draw time only
       newYs[i] = y;
       x = currentX + imgWidth + spacePadding * 2;
       i++;
@@ -448,7 +466,7 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
       styles,
       topMargin,
       lineSpacing: currentLineSpacing,
-      effectiveEndX:   effEndX,
+      effectiveEndX: effEndX,
       effectiveStartX: effStartX,
     });
 
@@ -517,10 +535,10 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
 
             if (rowStartY !== null && isFinite(rowMaxY)) {
               const relStart = rowStartY - firstContentY;
-              const relMax   = rowMaxY   - firstContentY;
+              const relMax = rowMaxY - firstContentY;
               if (relStart >= 0 && relMax >= 0) {
                 const startPage = Math.floor(relStart / PAGE_CONTENT_HEIGHT);
-                const endPage   = Math.floor(relMax   / PAGE_CONTENT_HEIGHT);
+                const endPage = Math.floor(relMax / PAGE_CONTENT_HEIGHT);
                 if (endPage > startPage) {
                   // Row crosses a page boundary — push it (and everything after) to next page
                   const nextPageStartY = firstContentY + endPage * PAGE_CONTENT_HEIGHT;
@@ -556,18 +574,27 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
 
   // Pre-draw: "behind text" images are drawn before text so text renders on top
   for (let bi = startI; bi < text.length && bi < newXs.length; bi++) {
-    if (styles[bi]?.imageUrl && styles[bi]?.imageWrap === 'behind' && newXs[bi] != null && newYs[bi] != null) {
+    if (
+      styles[bi]?.imageUrl &&
+      styles[bi]?.imageWrap === 'behind' &&
+      newXs[bi] != null &&
+      newYs[bi] != null
+    ) {
       const bx = newXs[bi];
       const by = newYs[bi];
       const bDrawY = contentYToDrawY(by, topMargin) - scrollY;
-      const bImgW = (styles[bi].imageWidth  || 64) * SF;
+      const bImgW = (styles[bi].imageWidth || 64) * SF;
       const bImgH = (styles[bi].imageHeight || 64) * SF;
-      const bUrl  = styles[bi].imageUrl;
+      const bUrl = styles[bi].imageUrl;
       if (!failedImageUrls.has(bUrl)) {
         if (imageCache.has(bUrl)) {
           const img = imageCache.get(bUrl);
           if (img.complete && img.naturalHeight !== 0) {
-            try { ctx.drawImage(img, bx, bDrawY - bImgH, bImgW, bImgH); } catch (_) { /* ignore */ }
+            try {
+              ctx.drawImage(img, bx, bDrawY - bImgH, bImgW, bImgH);
+            } catch (_) {
+              /* ignore */
+            }
           }
         }
         // (loading initiated in the main draw pass below)
@@ -583,7 +610,6 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     y = newYs[i];
     // Convert content Y to canvas Y (with page gaps) for drawing
     const drawY = contentYToDrawY(y, topMargin) - scrollY;
-
 
     setCtxFont(ctx, styles?.[i], FONT_SIZE);
     ctx.fillStyle = 'black';
@@ -602,7 +628,8 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
     } else if (text?.[i - 1] === '\n' && styles?.[i - 1]?.prefix) {
       drawPrefix({ x: x - 50, y: drawY, ctx, style: styles[i - 1] });
     }
-    if (styles?.[i]?.queryId) drawQueryBox({ x, y: drawY, ctx, char: text[i], queryId: styles[i].queryId });
+    if (styles?.[i]?.queryId)
+      drawQueryBox({ x, y: drawY, ctx, char: text[i], queryId: styles[i].queryId });
 
     if (styles[i]?.imageUrl) {
       const imageUrl = styles[i].imageUrl;
@@ -610,7 +637,10 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
       const imgHeight = (styles[i].imageHeight || 64) * SF;
 
       // "behind" images were already painted in the pre-draw pass; skip here
-      if (styles[i]?.imageWrap === 'behind') { i++; continue; }
+      if (styles[i]?.imageWrap === 'behind') {
+        i++;
+        continue;
+      }
 
       // Square-wrap images use their explicit placed coordinates for drawing
       if (styles[i]?.imageWrap === 'square') {
@@ -624,20 +654,36 @@ export const drawDoc = ({ doc, ctx, scrollY, xs = [], ys = [], topMargin = 0, hi
           if (!failedImageUrls.has(imageUrl) && imageCache.has(imageUrl)) {
             const img = imageCache.get(imageUrl);
             if (img.complete && img.naturalHeight !== 0) {
-              try { ctx.drawImage(img, px, placedDrawY - imgHeight, imgWidth, imgHeight); }
-              catch (e) { failedImageUrls.add(imageUrl); }
+              try {
+                ctx.drawImage(img, px, placedDrawY - imgHeight, imgWidth, imgHeight);
+              } catch (e) {
+                failedImageUrls.add(imageUrl);
+              }
             }
-          } else if (!failedImageUrls.has(imageUrl) && !loadingImages.has(imageUrl) && !imageCache.has(imageUrl)) {
+          } else if (
+            !failedImageUrls.has(imageUrl) &&
+            !loadingImages.has(imageUrl) &&
+            !imageCache.has(imageUrl)
+          ) {
             // kick off load (will re-render via callback)
             const img = new Image();
             img.crossOrigin = 'anonymous';
             loadingImages.set(imageUrl, img);
             const cb = getImageLoadCallback();
-            img.onload = () => { imageCache.set(imageUrl, img); loadingImages.delete(imageUrl); cb?.(); };
-            img.onerror = () => { failedImageUrls.add(imageUrl); loadingImages.delete(imageUrl); cb?.(); };
+            img.onload = () => {
+              imageCache.set(imageUrl, img);
+              loadingImages.delete(imageUrl);
+              cb?.();
+            };
+            img.onerror = () => {
+              failedImageUrls.add(imageUrl);
+              loadingImages.delete(imageUrl);
+              cb?.();
+            };
             img.src = imageUrl;
           }
-          i++; continue;
+          i++;
+          continue;
         }
       }
 

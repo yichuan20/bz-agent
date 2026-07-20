@@ -5,36 +5,55 @@
  */
 
 export type WidgetKind =
-  | 'clock'      | 'editor'      | 'table'
-  | 'bar'        | 'pie'         | 'kpi'
-  | 'news'       | 'search'      | 'calendar'
-  | 'video'      | 'email'       | 'map'
-  | 'chat'       | 'videocall'
+  | 'clock'
+  | 'editor'
+  | 'table'
+  | 'bar'
+  | 'pie'
+  | 'kpi'
+  | 'news'
+  | 'search'
+  | 'calendar'
+  | 'video'
+  | 'email'
+  | 'map'
+  | 'chat'
+  | 'videocall'
   // New widgets
-  | 'llm-chat'   | 'terminal'    | 'line-chart'
-  | 'markdown'   | 'json'        | 'files'
-  | 'timer'      | 'weather'     | 'github'
-  | 'stock'      | 'kanban'      | 'sticky'
-  | 'web-preview'| 'sql'         | 'whiteboard'
+  | 'llm-chat'
+  | 'terminal'
+  | 'line-chart'
+  | 'markdown'
+  | 'json'
+  | 'files'
+  | 'timer'
+  | 'weather'
+  | 'github'
+  | 'stock'
+  | 'kanban'
+  | 'sticky'
+  | 'web-preview'
+  | 'sql'
+  | 'whiteboard'
   | 'translator'
   | 'custom';
 
 export type WidgetMeta = {
-  author:   string;
-  version:  string;
+  author: string;
+  version: string;
   category: string;
 };
 
 export type WidgetDef = {
-  kind:        WidgetKind;
-  label:       string;
-  emoji:       string;
-  defaultW:    number;
-  defaultH:    number;
-  code:        string;
-  keywords:    string[];
+  kind: WidgetKind;
+  label: string;
+  emoji: string;
+  defaultW: number;
+  defaultH: number;
+  code: string;
+  keywords: string[];
   description: string;
-  meta:        WidgetMeta;
+  meta: WidgetMeta;
 };
 
 // ─── Widget code strings ──────────────────────────────────────────────────────
@@ -1330,16 +1349,16 @@ function parseMarkdown(md) {
     .replace(/^#{3} (.+)$/gm,'<h3>$1</h3>')
     .replace(/^#{2} (.+)$/gm,'<h2>$1</h2>')
     .replace(/^# (.+)$/gm,'<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/**(.+?)**/g,'<strong>$1</strong>')
     .replace(/_(.+?)_/g,'<em>$1</em>')
-    .replace(/\`\`\`[\s\S]+?\`\`\`/g, m=>'<pre><code>'+m.slice(3,-3).replace(/^[a-z]+\n/,'')+'</code></pre>')
+    .replace(/\`\`\`[sS]+?\`\`\`/g, m=>'<pre><code>'+m.slice(3,-3).replace(/^[a-z]+\n/,'')+'</code></pre>')
     .replace(/\`([^\`]+)\`/g,'<code>$1</code>')
     .replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>')
     .replace(/^---$/gm,'<hr>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/[([^]]+)](([^)]+))/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/^[-*] (.+)$/gm,'<li>$1</li>')
-    .replace(/<\/li>\n<li>/g,'</li><li>')
-    .replace(/(<li>.*<\/li>)/gs,'<ul>$1</ul>')
+    .replace(/</li>\n<li>/g,'</li><li>')
+    .replace(/(<li>.*</li>)/gs,'<ul>$1</ul>')
     .replace(/\n\n/g,'</p><p>')
     .replace(/^(?!<[hupboali])/gm,'')
     ;
@@ -2376,192 +2395,353 @@ const TRANSLATOR_CODE = `
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
   {
-    kind:'clock', label:'Clock', emoji:'⏰', defaultW:240, defaultH:130, code:CLOCK_CODE,
-    keywords:    ['time','clock','date','timer','live','analog'],
+    kind: 'clock',
+    label: 'Clock',
+    emoji: '⏰',
+    defaultW: 240,
+    defaultH: 130,
+    code: CLOCK_CODE,
+    keywords: ['time', 'clock', 'date', 'timer', 'live', 'analog'],
     description: 'Displays the current time and date, updating every second.',
     meta: B('utility'),
   },
   {
-    kind:'bar', label:'Bar Chart', emoji:'📊', defaultW:380, defaultH:280, code:BAR_CODE,
-    keywords:    ['bar chart','chart','visualization','graph','data','chart.js'],
+    kind: 'bar',
+    label: 'Bar Chart',
+    emoji: '📊',
+    defaultW: 380,
+    defaultH: 280,
+    code: BAR_CODE,
+    keywords: ['bar chart', 'chart', 'visualization', 'graph', 'data', 'chart.js'],
     description: 'Interactive bar chart with hover tooltips powered by Chart.js. Editable data.',
     meta: B('visualization'),
   },
   {
-    kind:'pie', label:'Pie Chart', emoji:'🥧', defaultW:320, defaultH:280, code:PIE_CODE,
-    keywords:    ['pie chart','donut','chart','visualization','proportion','chart.js'],
+    kind: 'pie',
+    label: 'Pie Chart',
+    emoji: '🥧',
+    defaultW: 320,
+    defaultH: 280,
+    code: PIE_CODE,
+    keywords: ['pie chart', 'donut', 'chart', 'visualization', 'proportion', 'chart.js'],
     description: 'Donut-style pie chart with legend and hover tooltips. Editable slices.',
     meta: B('visualization'),
   },
   {
-    kind:'kpi', label:'Key Figures', emoji:'📈', defaultW:380, defaultH:200, code:KPI_CODE,
-    keywords:    ['kpi','metrics','dashboard','stats','key figures','numbers'],
-    description: 'A 2×2 grid of editable KPI cards with label, value, change indicator and trend arrow.',
+    kind: 'kpi',
+    label: 'Key Figures',
+    emoji: '📈',
+    defaultW: 380,
+    defaultH: 200,
+    code: KPI_CODE,
+    keywords: ['kpi', 'metrics', 'dashboard', 'stats', 'key figures', 'numbers'],
+    description:
+      'A 2×2 grid of editable KPI cards with label, value, change indicator and trend arrow.',
     meta: B('dashboard'),
   },
   {
-    kind:'news', label:'News', emoji:'📰', defaultW:320, defaultH:300, code:NEWS_CODE,
-    keywords:    ['news','headlines','feed','articles','stories'],
+    kind: 'news',
+    label: 'News',
+    emoji: '📰',
+    defaultW: 320,
+    defaultH: 300,
+    code: NEWS_CODE,
+    keywords: ['news', 'headlines', 'feed', 'articles', 'stories'],
     description: 'Scrollable news headline list. Add custom stories via the built-in form.',
     meta: B('information'),
   },
   {
-    kind:'search', label:'Search', emoji:'🔍', defaultW:380, defaultH:420, code:SEARCH_CODE,
-    keywords:    ['search','google','serpapi','web','results','query'],
+    kind: 'search',
+    label: 'Search',
+    emoji: '🔍',
+    defaultW: 380,
+    defaultH: 420,
+    code: SEARCH_CODE,
+    keywords: ['search', 'google', 'serpapi', 'web', 'results', 'query'],
     description: 'Google search powered by SerpAPI. Enter your API key to see inline results.',
     meta: B('productivity'),
   },
   {
-    kind:'editor', label:'Editor', emoji:'📝', defaultW:340, defaultH:260, code:EDITOR_CODE,
-    keywords:    ['text','editor','notes','write','plain text','scratchpad'],
+    kind: 'editor',
+    label: 'Editor',
+    emoji: '📝',
+    defaultW: 340,
+    defaultH: 260,
+    code: EDITOR_CODE,
+    keywords: ['text', 'editor', 'notes', 'write', 'plain text', 'scratchpad'],
     description: 'Plain-text scratchpad. Type freely; content is held in widget memory.',
     meta: B('productivity'),
   },
   {
-    kind:'table', label:'Table', emoji:'🗂', defaultW:400, defaultH:220, code:TABLE_CODE,
-    keywords:    ['table','spreadsheet','grid','cells','data','rows','columns'],
+    kind: 'table',
+    label: 'Table',
+    emoji: '🗂',
+    defaultW: 400,
+    defaultH: 220,
+    code: TABLE_CODE,
+    keywords: ['table', 'spreadsheet', 'grid', 'cells', 'data', 'rows', 'columns'],
     description: 'Editable spreadsheet-style table. Add rows and columns dynamically.',
     meta: B('productivity'),
   },
   {
-    kind:'calendar', label:'Calendar', emoji:'📅', defaultW:280, defaultH:290, code:CALENDAR_CODE,
-    keywords:    ['calendar','date','month','schedule','planner','day'],
+    kind: 'calendar',
+    label: 'Calendar',
+    emoji: '📅',
+    defaultW: 280,
+    defaultH: 290,
+    code: CALENDAR_CODE,
+    keywords: ['calendar', 'date', 'month', 'schedule', 'planner', 'day'],
     description: 'Month-view calendar with day selection. Navigate months with arrow buttons.',
     meta: B('utility'),
   },
   {
-    kind:'video', label:'Video', emoji:'▶️', defaultW:400, defaultH:280, code:VIDEO_CODE,
-    keywords:    ['video','youtube','vimeo','player','embed','media','stream'],
+    kind: 'video',
+    label: 'Video',
+    emoji: '▶️',
+    defaultW: 400,
+    defaultH: 280,
+    code: VIDEO_CODE,
+    keywords: ['video', 'youtube', 'vimeo', 'player', 'embed', 'media', 'stream'],
     description: 'Embed a YouTube or Vimeo video by pasting its URL.',
     meta: B('media'),
   },
   {
-    kind:'email', label:'Email', emoji:'📮', defaultW:340, defaultH:360, code:EMAIL_CODE,
-    keywords:    ['email','gmail','outlook','yahoo','protonmail','compose','mail'],
+    kind: 'email',
+    label: 'Email',
+    emoji: '📮',
+    defaultW: 340,
+    defaultH: 360,
+    code: EMAIL_CODE,
+    keywords: ['email', 'gmail', 'outlook', 'yahoo', 'protonmail', 'compose', 'mail'],
     description: 'Compose and open emails in Gmail, Outlook, Yahoo or ProtonMail.',
     meta: B('communication'),
   },
   {
-    kind:'map', label:'Map', emoji:'🗺️', defaultW:400, defaultH:340, code:MAP_CODE,
-    keywords:    ['map','google maps','location','places','geography','search'],
+    kind: 'map',
+    label: 'Map',
+    emoji: '🗺️',
+    defaultW: 400,
+    defaultH: 340,
+    code: MAP_CODE,
+    keywords: ['map', 'google maps', 'location', 'places', 'geography', 'search'],
     description: 'Google Maps search widget. Optionally add an API key for the official embed.',
     meta: B('information'),
   },
   {
-    kind:'chat', label:'Chat', emoji:'💬', defaultW:300, defaultH:360, code:CHAT_CODE,
-    keywords:    ['chat','messages','conversation','notes','bubble','talk'],
+    kind: 'chat',
+    label: 'Chat',
+    emoji: '💬',
+    defaultW: 300,
+    defaultH: 360,
+    code: CHAT_CODE,
+    keywords: ['chat', 'messages', 'conversation', 'notes', 'bubble', 'talk'],
     description: 'Local chat-bubble notepad. Messages are held in widget memory.',
     meta: B('communication'),
   },
   {
-    kind:'videocall', label:'Video Call', emoji:'📹', defaultW:480, defaultH:360, code:VIDEOCALL_CODE,
-    keywords:    ['video call','jitsi','meeting','conference','voice','video'],
-    description: 'Start or join a free encrypted video call via Jitsi Meet. Share the room name to invite others.',
+    kind: 'videocall',
+    label: 'Video Call',
+    emoji: '📹',
+    defaultW: 480,
+    defaultH: 360,
+    code: VIDEOCALL_CODE,
+    keywords: ['video call', 'jitsi', 'meeting', 'conference', 'voice', 'video'],
+    description:
+      'Start or join a free encrypted video call via Jitsi Meet. Share the room name to invite others.',
     meta: B('communication'),
   },
   {
-    kind:'custom', label:'Custom', emoji:'⚡', defaultW:340, defaultH:280, code:CUSTOM_CODE,
-    keywords:    ['custom','code','javascript','widget','script'],
+    kind: 'custom',
+    label: 'Custom',
+    emoji: '⚡',
+    defaultW: 340,
+    defaultH: 280,
+    code: CUSTOM_CODE,
+    keywords: ['custom', 'code', 'javascript', 'widget', 'script'],
     description: 'User-defined widget. Write any JavaScript and run it in a sandboxed iframe.',
     meta: { author: 'user', version: '1.0.0', category: 'custom' },
   },
   // ── 15 new widgets ───────────────────────────────────────────────────────────
   {
-    kind:'llm-chat', label:'LLM Chat', emoji:'🤖', defaultW:380, defaultH:420, code:LLM_CHAT_CODE,
-    keywords:    ['llm','ai','chatgpt','claude','openai','anthropic','chat','gpt'],
-    description: 'Chat with OpenAI or Anthropic LLMs via the credential proxy. Needs OPENAI_API_KEY or ANTHROPIC_API_KEY.',
+    kind: 'llm-chat',
+    label: 'LLM Chat',
+    emoji: '🤖',
+    defaultW: 380,
+    defaultH: 420,
+    code: LLM_CHAT_CODE,
+    keywords: ['llm', 'ai', 'chatgpt', 'claude', 'openai', 'anthropic', 'chat', 'gpt'],
+    description:
+      'Chat with OpenAI or Anthropic LLMs via the credential proxy. Needs OPENAI_API_KEY or ANTHROPIC_API_KEY.',
     meta: B('ai'),
   },
   {
-    kind:'terminal', label:'Terminal', emoji:'🖥️', defaultW:440, defaultH:340, code:TERMINAL_CODE,
-    keywords:    ['terminal','shell','bash','cli','command','run','execute'],
+    kind: 'terminal',
+    label: 'Terminal',
+    emoji: '🖥️',
+    defaultW: 440,
+    defaultH: 340,
+    code: TERMINAL_CODE,
+    keywords: ['terminal', 'shell', 'bash', 'cli', 'command', 'run', 'execute'],
     description: 'Run shell commands on the Python server and see live output.',
     meta: B('dev'),
   },
   {
-    kind:'line-chart', label:'Line Chart', emoji:'📉', defaultW:380, defaultH:280, code:LINE_CHART_CODE,
-    keywords:    ['line chart','area','trend','time series','graph','chart.js'],
+    kind: 'line-chart',
+    label: 'Line Chart',
+    emoji: '📉',
+    defaultW: 380,
+    defaultH: 280,
+    code: LINE_CHART_CODE,
+    keywords: ['line chart', 'area', 'trend', 'time series', 'graph', 'chart.js'],
     description: 'Line/area chart with hover tooltips powered by Chart.js. Editable data.',
     meta: B('visualization'),
   },
   {
-    kind:'markdown', label:'Markdown', emoji:'📄', defaultW:380, defaultH:340, code:MARKDOWN_CODE,
-    keywords:    ['markdown','md','readme','document','viewer','render'],
+    kind: 'markdown',
+    label: 'Markdown',
+    emoji: '📄',
+    defaultW: 380,
+    defaultH: 340,
+    code: MARKDOWN_CODE,
+    keywords: ['markdown', 'md', 'readme', 'document', 'viewer', 'render'],
     description: 'Render any local file path or URL as formatted Markdown.',
     meta: B('information'),
   },
   {
-    kind:'json', label:'JSON Explorer', emoji:'🔬', defaultW:360, defaultH:340, code:JSON_EXPLORER_CODE,
-    keywords:    ['json','yaml','tree','explorer','data','inspect','parse'],
+    kind: 'json',
+    label: 'JSON Explorer',
+    emoji: '🔬',
+    defaultW: 360,
+    defaultH: 340,
+    code: JSON_EXPLORER_CODE,
+    keywords: ['json', 'yaml', 'tree', 'explorer', 'data', 'inspect', 'parse'],
     description: 'Paste JSON to get a collapsible tree viewer with syntax colouring.',
     meta: B('dev'),
   },
   {
-    kind:'files', label:'File Browser', emoji:'🗂️', defaultW:320, defaultH:360, code:FILE_BROWSER_CODE,
-    keywords:    ['files','browser','directory','folder','tree','navigate'],
+    kind: 'files',
+    label: 'File Browser',
+    emoji: '🗂️',
+    defaultW: 320,
+    defaultH: 360,
+    code: FILE_BROWSER_CODE,
+    keywords: ['files', 'browser', 'directory', 'folder', 'tree', 'navigate'],
     description: 'Browse the server filesystem starting from the working directory.',
     meta: B('dev'),
   },
   {
-    kind:'timer', label:'Timer', emoji:'⏱️', defaultW:280, defaultH:260, code:TIMER_CODE,
-    keywords:    ['timer','pomodoro','countdown','focus','break','clock'],
+    kind: 'timer',
+    label: 'Timer',
+    emoji: '⏱️',
+    defaultW: 280,
+    defaultH: 260,
+    code: TIMER_CODE,
+    keywords: ['timer', 'pomodoro', 'countdown', 'focus', 'break', 'clock'],
     description: 'Pomodoro timer with short/long break presets and a progress bar.',
     meta: B('productivity'),
   },
   {
-    kind:'weather', label:'Weather', emoji:'🌤️', defaultW:300, defaultH:320, code:WEATHER_CODE,
-    keywords:    ['weather','temperature','forecast','openweathermap','climate'],
+    kind: 'weather',
+    label: 'Weather',
+    emoji: '🌤️',
+    defaultW: 300,
+    defaultH: 320,
+    code: WEATHER_CODE,
+    keywords: ['weather', 'temperature', 'forecast', 'openweathermap', 'climate'],
     description: 'Live weather for any city via OpenWeatherMap. Needs OPENWEATHERMAP_API_KEY.',
     meta: B('information'),
   },
   {
-    kind:'github', label:'GitHub', emoji:'🐙', defaultW:360, defaultH:360, code:GITHUB_CODE,
-    keywords:    ['github','gitlab','prs','issues','commits','ci','git'],
+    kind: 'github',
+    label: 'GitHub',
+    emoji: '🐙',
+    defaultW: 360,
+    defaultH: 360,
+    code: GITHUB_CODE,
+    keywords: ['github', 'gitlab', 'prs', 'issues', 'commits', 'ci', 'git'],
     description: 'Browse PRs, issues and commits for any GitHub repo. Needs GITHUB_TOKEN.',
     meta: B('dev'),
   },
   {
-    kind:'stock', label:'Crypto / Stock', emoji:'📊', defaultW:380, defaultH:320, code:STOCK_CODE,
-    keywords:    ['crypto','bitcoin','stock','price','coingecko','ticker','market'],
+    kind: 'stock',
+    label: 'Crypto / Stock',
+    emoji: '📊',
+    defaultW: 380,
+    defaultH: 320,
+    code: STOCK_CODE,
+    keywords: ['crypto', 'bitcoin', 'stock', 'price', 'coingecko', 'ticker', 'market'],
     description: 'Live cryptocurrency prices via CoinGecko (free, no API key needed).',
     meta: B('information'),
   },
   {
-    kind:'kanban', label:'Kanban', emoji:'🗃️', defaultW:480, defaultH:360, code:KANBAN_CODE,
-    keywords:    ['kanban','board','tasks','todo','project','drag','cards'],
+    kind: 'kanban',
+    label: 'Kanban',
+    emoji: '🗃️',
+    defaultW: 480,
+    defaultH: 360,
+    code: KANBAN_CODE,
+    keywords: ['kanban', 'board', 'tasks', 'todo', 'project', 'drag', 'cards'],
     description: 'Drag-and-drop Kanban board with three columns. Persisted to localStorage.',
     meta: B('productivity'),
   },
   {
-    kind:'sticky', label:'Sticky Notes', emoji:'📌', defaultW:360, defaultH:320, code:STICKY_CODE,
-    keywords:    ['sticky','notes','memo','post-it','colour','reminder'],
+    kind: 'sticky',
+    label: 'Sticky Notes',
+    emoji: '📌',
+    defaultW: 360,
+    defaultH: 320,
+    code: STICKY_CODE,
+    keywords: ['sticky', 'notes', 'memo', 'post-it', 'colour', 'reminder'],
     description: 'Colour-coded sticky notes, persisted to localStorage.',
     meta: B('productivity'),
   },
   {
-    kind:'web-preview', label:'Web Preview', emoji:'🌐', defaultW:420, defaultH:360, code:WEB_PREVIEW_CODE,
-    keywords:    ['web','browser','url','preview','reader','scraper','fetch'],
+    kind: 'web-preview',
+    label: 'Web Preview',
+    emoji: '🌐',
+    defaultW: 420,
+    defaultH: 360,
+    code: WEB_PREVIEW_CODE,
+    keywords: ['web', 'browser', 'url', 'preview', 'reader', 'scraper', 'fetch'],
     description: 'Load any URL in reader mode via the server-side proxy (bypasses CORS).',
     meta: B('information'),
   },
   {
-    kind:'sql', label:'SQL Runner', emoji:'🛢️', defaultW:440, defaultH:380, code:SQL_CODE,
-    keywords:    ['sql','database','postgres','mysql','query','db','table'],
+    kind: 'sql',
+    label: 'SQL Runner',
+    emoji: '🛢️',
+    defaultW: 440,
+    defaultH: 380,
+    code: SQL_CODE,
+    keywords: ['sql', 'database', 'postgres', 'mysql', 'query', 'db', 'table'],
     description: 'Run SQL queries against a database. Needs DB_URL credential.',
     meta: B('dev'),
   },
   {
-    kind:'whiteboard', label:'Whiteboard', emoji:'🎨', defaultW:440, defaultH:360, code:WHITEBOARD_CODE,
-    keywords:    ['whiteboard','draw','sketch','canvas','paint','diagram','freehand'],
+    kind: 'whiteboard',
+    label: 'Whiteboard',
+    emoji: '🎨',
+    defaultW: 440,
+    defaultH: 360,
+    code: WHITEBOARD_CODE,
+    keywords: ['whiteboard', 'draw', 'sketch', 'canvas', 'paint', 'diagram', 'freehand'],
     description: 'Freehand drawing canvas with pen, eraser, shapes and undo.',
     meta: B('productivity'),
   },
   {
-    kind:'translator', label:'Translator', emoji:'🌐', defaultW:380, defaultH:320, code:TRANSLATOR_CODE,
-    keywords:    ['translator','translate','language','multilingual','text','localization'],
+    kind: 'translator',
+    label: 'Translator',
+    emoji: '🌐',
+    defaultW: 380,
+    defaultH: 320,
+    code: TRANSLATOR_CODE,
+    keywords: ['translator', 'translate', 'language', 'multilingual', 'text', 'localization'],
     description: 'Translate text between 12 languages. Press Ctrl+Enter to translate, ⇄ to swap.',
     meta: B('utility'),
   },
 ];
 
-export const REGISTRY_MAP = Object.fromEntries(WIDGET_REGISTRY.map(w => [w.kind, w])) as Record<WidgetKind, WidgetDef>;
+export const REGISTRY_MAP = Object.fromEntries(WIDGET_REGISTRY.map(w => [w.kind, w])) as Record<
+  WidgetKind,
+  WidgetDef
+>;

@@ -1,0 +1,17 @@
+{
+  "id": "mgmt-linear-marketing",
+  "name": "Marketing Ops Tracker",
+  "description": "Campaign and task tracker for marketing operations — manage campaigns, briefs, and deliverables.",
+  "tags": ["marketing", "project-management", "campaigns", "management"],
+  "text_replacements": [
+    { "from": "Issues", "to": "Campaigns" },
+    { "from": "Issue", "to": "Campaign" },
+    { "from": "Projects", "to": "Initiatives" },
+    { "from": "Project", "to": "Initiative" },
+    { "from": "Sprint", "to": "Quarter" },
+    { "from": "Engineering", "to": "Marketing" },
+    { "from": "Bug", "to": "Blocker" },
+    { "from": "Feature", "to": "Deliverable" },
+    { "from": "Release", "to": "Launch" }
+  ]
+}

@@ -1841,7 +1841,7 @@ function compRow(token, value, preview, desc) {
   return `<tr onclick="copyToken('${token}')"><td><span class="token-name">${token}</span></td><td><span class="token-value">${value}</span></td><td class="token-preview">${preview||''}</td><td class="token-desc">${desc||''}</td></tr>`;
 }
 function tableHead() {
-  return `<thead><tr><th>Token</th><th>Value</th><th>Preview</th><th>Description</th></tr></thead><tbody>`;
+  return '<thead><tr><th>Token</th><th>Value</th><th>Preview</th><th>Description</th></tr></thead><tbody>';
 }
 
 // ── BUILD GRIDS ───────────────────────────────────────────────────

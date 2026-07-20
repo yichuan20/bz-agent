@@ -1,13 +1,29 @@
-import { FormulaIcon } from './Icons';
 import ExcelTextInputWithFormulaDropdownBorderLeft from './ExcelTextInputWithFormulaDropdown';
+import { FormulaIcon } from './Icons';
 
-const FormulaBarContainer = ({children, style={}, ...p}) => <div style={{...style}} {...p}>{children}</div>;
+const FormulaBarContainer = ({ children, style = {}, ...p }) => (
+  <div style={{ ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const CellReference = ({children, style={}, ...p}) => <div style={{...style}} {...p}>{children}</div>;
+const CellReference = ({ children, style = {}, ...p }) => (
+  <div style={{ ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const FunctionIcon = ({children, style={}, ...p}) => <div style={{...style}} {...p}>{children}</div>;
+const FunctionIcon = ({ children, style = {}, ...p }) => (
+  <div style={{ ...style }} {...p}>
+    {children}
+  </div>
+);
 
-const FormulaInput = ({children, style={}, ...p}) => <div style={{...style}} {...p}>{children}</div>;
+const FormulaInput = ({ children, style = {}, ...p }) => (
+  <div style={{ ...style }} {...p}>
+    {children}
+  </div>
+);
 
 const MSExcelFormulaBar = ({
   selectedCellLocation = '',

@@ -385,7 +385,8 @@ export const getResizedRowGrid = ({ grid, rowResizeIndex, rowResizeAmount }) => 
     newGrid.rowIndexToHeight = {};
   }
 
-  let newHeight = (newGrid.rowIndexToHeight[rowResizeIndex] || DEFAULT_CELL_HEIGHT) + rowResizeAmount;
+  let newHeight =
+    (newGrid.rowIndexToHeight[rowResizeIndex] || DEFAULT_CELL_HEIGHT) + rowResizeAmount;
   newHeight = Math.max(newHeight, MIN_ROW_HEIGHT);
 
   newGrid.rowIndexToHeight[rowResizeIndex] = round(newHeight);

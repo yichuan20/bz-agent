@@ -1,4 +1,4 @@
-import type { UseChatReturn, Message, ContentBlock } from '@boltzbit/chat';
+import type { ContentBlock, Message, UseChatReturn } from '@boltzbit/chat';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ── bzcode protocol types ────────────────────────────────────────────────────
@@ -10,12 +10,38 @@ type BzcodeContentBlock =
   | { type: 'toolResult'; toolUseId: string; content: string; isError?: boolean };
 
 type BzcodeServerMessage =
-  | { type: 'session'; sessionId: string; messages?: Array<{ role: 'user' | 'assistant'; content: string | BzcodeContentBlock[] }> }
+  | {
+      type: 'session';
+      sessionId: string;
+      messages?: Array<{ role: 'user' | 'assistant'; content: string | BzcodeContentBlock[] }>;
+    }
   | { type: 'status'; status: 'idle' | 'running' }
   | { type: 'delta'; blockIndex: number; blockType: string; field: string; content: string }
   | { type: 'assistant'; content: BzcodeContentBlock[] }
-  | { type: 'tool'; toolUseId: string; name: string; status: 'running' | 'done' | 'error'; input?: unknown; content?: string; isError?: boolean; message?: string }
-  | { type: 'prompt'; requestId: string; subtype: 'permission' | 'input'; tool?: string; input?: unknown; message?: string; questions?: Array<{ question: string; header: string; options: Array<{ label: string; description: string }>; multi_select?: boolean }> }
+  | {
+      type: 'tool';
+      toolUseId: string;
+      name: string;
+      status: 'running' | 'done' | 'error';
+      input?: unknown;
+      content?: string;
+      isError?: boolean;
+      message?: string;
+    }
+  | {
+      type: 'prompt';
+      requestId: string;
+      subtype: 'permission' | 'input';
+      tool?: string;
+      input?: unknown;
+      message?: string;
+      questions?: Array<{
+        question: string;
+        header: string;
+        options: Array<{ label: string; description: string }>;
+        multi_select?: boolean;
+      }>;
+    }
   | { type: 'result'; status: 'success' | 'error' | 'aborted'; output?: string; error?: string };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +77,8 @@ function streamingBlocksToContentBlocks(
 
 // ── hook ─────────────────────────────────────────────────────────────────────
 
-const DEFAULT_WS = (import.meta.env.VITE_AGENT_WS_URL as string | undefined) ?? 'ws://localhost:18789/ws';
+const DEFAULT_WS =
+  (import.meta.env.VITE_AGENT_WS_URL as string | undefined) ?? 'ws://localhost:18789/ws';
 
 export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
   const [finalMessages, setFinalMessages] = useState<Message[]>([]);
@@ -62,7 +89,10 @@ export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
   // Accumulated delta blocks for the current streaming turn
   const streamingBlocksRef = useRef<Map<number, { type: string; content: string }>>(new Map());
   // Pending input prompt waiting for a user response
-  const pendingInputRef = useRef<{ requestId: string; questions: Array<{ question: string }> } | null>(null);
+  const pendingInputRef = useRef<{
+    requestId: string;
+    questions: Array<{ question: string }>;
+  } | null>(null);
 
   const send = useCallback((msg: object) => {
     const ws = wsRef.current;
@@ -141,7 +171,12 @@ export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
             setFinalMessages(prev => {
               // Replace streaming placeholder if present, else append
               const last = prev[prev.length - 1];
-              if (last?.role === 'assistant' && (last.content as ContentBlock[]).some(b => b.type === 'text' || b.type === 'thinking')) {
+              if (
+                last?.role === 'assistant' &&
+                (last.content as ContentBlock[]).some(
+                  b => b.type === 'text' || b.type === 'thinking',
+                )
+              ) {
                 return [...prev.slice(0, -1), { role: 'assistant', content: blocks }];
               }
               return [...prev, { role: 'assistant', content: blocks }];
@@ -153,13 +188,22 @@ export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
         case 'prompt': {
           if (msg.subtype === 'permission') {
             // Auto-allow tool permissions
-            send({ type: 'user', subtype: 'permission', requestId: msg.requestId, behavior: 'allow' });
+            send({
+              type: 'user',
+              subtype: 'permission',
+              requestId: msg.requestId,
+              behavior: 'allow',
+            });
           } else if (msg.subtype === 'input') {
             const questions = msg.questions ?? [];
             pendingInputRef.current = { requestId: msg.requestId, questions };
             // Show the prompt as an assistant message so the user can reply
-            const text = msg.message ?? questions.map(q => q.question).join('\n') ?? 'Please provide input.';
-            setFinalMessages(prev => [...prev, { role: 'assistant', content: [{ type: 'text', text }] }]);
+            const text =
+              msg.message ?? questions.map(q => q.question).join('\n') ?? 'Please provide input.';
+            setFinalMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: [{ type: 'text', text }] },
+            ]);
           }
           break;
         }
@@ -174,6 +218,9 @@ export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
           }
           break;
         }
+
+        default:
+          break;
       }
     };
 

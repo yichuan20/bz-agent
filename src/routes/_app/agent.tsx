@@ -1,8 +1,4 @@
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
-import { BoltzbitLogo } from '#/components/BoltzbitLogo';
-import { BoltzAgentMark } from '#/components/BoltzAgentMark';
-import { IframeWidget } from '#/components/IframeWidget';
-import { WIDGET_REGISTRY, REGISTRY_MAP, type WidgetKind } from '#/lib/widgetRegistry';
 import {
   ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
@@ -11,40 +7,58 @@ import {
   CaretDownIcon,
   ChartBarIcon,
   ChatCircleDotsIcon,
-  CopyIcon,
-  FolderIcon,
-  MagnifyingGlassIcon,
   CheckCircleIcon,
   CloudArrowDownIcon,
   CloudArrowUpIcon,
+  CopyIcon,
+  FolderIcon,
   LightningIcon,
   ListChecksIcon,
+  MagnifyingGlassIcon,
   PaperclipIcon,
   PlusIcon,
   SparkleIcon,
-  SquaresFourIcon,
   SpinnerIcon,
   SquareIcon,
-  TrashIcon,
+  SquaresFourIcon,
   TerminalIcon,
+  TrashIcon,
   WarningCircleIcon,
   XCircleIcon,
   XIcon,
 } from '@phosphor-icons/react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from 'react';
-import { AGENT_MODES, MODE_FALLBACK, modeLSKey, type AgentMode } from '#/lib/agentModes';
-import { ModeBadge }    from '#/components/ModeBadge';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { BoltzAgentMark } from '#/components/BoltzAgentMark';
+import { BoltzbitLogo } from '#/components/BoltzbitLogo';
+import { EditorPanel } from '#/components/EditorPanel';
+import { IframeWidget } from '#/components/IframeWidget';
+import { ModeBadge } from '#/components/ModeBadge';
+import { MODE_COLORS, ModeIconSvg } from '#/components/ModeIconSvg';
 import { ModeSelector } from '#/components/ModeSelector';
-import { ModeIconSvg, MODE_COLORS } from '#/components/ModeIconSvg';
-import { EditorPanel }  from '#/components/EditorPanel';
+import { AGENT_MODES, type AgentMode, modeLSKey } from '#/lib/agentModes';
+import { REGISTRY_MAP, WIDGET_REGISTRY, type WidgetKind } from '#/lib/widgetRegistry';
 
 export const Route = createFileRoute('/_app/agent')({
-  validateSearch: (search: Record<string, unknown>): { cwd?: string; sessionId?: string; mode?: AgentMode; isNew?: boolean } => ({
-    ...(typeof search['cwd']       === 'string' && search['cwd']       ? { cwd:       search['cwd'] as string }       : {}),
-    ...(typeof search['sessionId'] === 'string' && search['sessionId'] ? { sessionId: search['sessionId'] as string } : {}),
-    ...(typeof search['mode']      === 'string' && AGENT_MODES.includes(search['mode'] as AgentMode) ? { mode: search['mode'] as AgentMode } : {}),
-    ...(search['new'] === '1' ? { isNew: true } : {}),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { cwd?: string; sessionId?: string; mode?: AgentMode; isNew?: boolean } => ({
+    ...(typeof search.cwd === 'string' && search.cwd ? { cwd: search.cwd as string } : {}),
+    ...(typeof search.sessionId === 'string' && search.sessionId
+      ? { sessionId: search.sessionId as string }
+      : {}),
+    ...(typeof search.mode === 'string' && AGENT_MODES.includes(search.mode as AgentMode)
+      ? { mode: search.mode as AgentMode }
+      : {}),
+    ...(search.new === '1' ? { isNew: true } : {}),
   }),
   component: AgentPage,
 });
@@ -53,13 +67,26 @@ export const Route = createFileRoute('/_app/agent')({
 
 type SessionMode = 'default' | 'plan' | 'yolo';
 type AssistantBlock = { type: 'text' | 'thinking'; text: string };
-type Attachment   = { name: string; mediaType: string; data: string };
-type DocAttachment = { kind: 'doc'; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean; loading?: boolean };
+type Attachment = { name: string; mediaType: string; data: string };
+type DocAttachment = {
+  kind: 'doc';
+  name: string;
+  docType: string;
+  pages: number;
+  wordCount: number;
+  content: string;
+  truncated: boolean;
+  loading?: boolean;
+};
 type AnyAttachment = Attachment | DocAttachment;
 
 const DOC_EXTS = new Set(['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']);
-function isDocFile(name: string) { return DOC_EXTS.has(name.slice(name.lastIndexOf('.')).toLowerCase()); }
-function isDocAttachment(a: AnyAttachment): a is DocAttachment { return (a as DocAttachment).kind === 'doc'; }
+function isDocFile(name: string) {
+  return DOC_EXTS.has(name.slice(name.lastIndexOf('.')).toLowerCase());
+}
+function isDocAttachment(a: AnyAttachment): a is DocAttachment {
+  return (a as DocAttachment).kind === 'doc';
+}
 
 type PushStep = 'build' | 'archive' | 'upload' | 'deploy' | 'publish' | 'done' | 'error';
 type SyncStep = 'download' | 'extract' | 'install' | 'done' | 'error';
@@ -67,17 +94,43 @@ type SyncStep = 'download' | 'extract' | 'install' | 'done' | 'error';
 type DisplayItem =
   | { id: string; kind: 'user'; text: string; attachments?: AnyAttachment[] }
   | { id: string; kind: 'assistant'; blocks: AssistantBlock[] }
-  | { id: string; kind: 'tool'; toolUseId: string; name: string; status: 'running' | 'done' | 'error'; input: unknown; output?: string; isError?: boolean }
-  | { id: string; kind: 'push-progress'; step: PushStep; message: string; serviceUrl?: string; appId?: string }
+  | {
+      id: string;
+      kind: 'tool';
+      toolUseId: string;
+      name: string;
+      status: 'running' | 'done' | 'error';
+      input: unknown;
+      output?: string;
+      isError?: boolean;
+    }
+  | {
+      id: string;
+      kind: 'push-progress';
+      step: PushStep;
+      message: string;
+      serviceUrl?: string;
+      appId?: string;
+    }
   | { id: string; kind: 'sync-progress'; step: SyncStep; message: string }
   | { id: string; kind: 'compact-summary'; text: string }
-  | { id: string; kind: 'system'; message: string };
+  | { id: string; kind: 'system'; message: string; isError?: boolean };
 
 type BzHubModal =
   | { type: 'create-app'; cwd: string }
   | { type: 'release-notes'; cwd: string; appId: string; appName: string }
   | { type: 'sync'; cwd: string }
-  | { type: 'token-usage'; period: string; summary?: { inputTokens: number; outputTokens: number; totalTokensConsumed: number; totalCost: number }; trends?: { date: string; tokensConsumed: number }[] };
+  | {
+      type: 'token-usage';
+      period: string;
+      summary?: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokensConsumed: number;
+        totalCost: number;
+      };
+      trends?: { date: string; tokensConsumed: number }[];
+    };
 
 type PermissionPrompt = {
   requestId: string;
@@ -117,14 +170,14 @@ type StreamingBlocks = Map<number, { type: string; content: string }>;
 type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
 // In production (dist served by Python on port 18789), derive URLs from current origin.
-const HTTP_BASE = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined)
-  || (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
-
+const HTTP_BASE =
+  (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
 const MODE_META: Record<SessionMode, { label: string; description: string; color: string }> = {
   default: { label: 'Default', description: 'Normal operation', color: 'var(--accent-blue)' },
-  plan:    { label: 'Plan',    description: 'Read-only planning mode', color: '#e67e22' },
-  yolo:    { label: 'YOLO',   description: 'Auto-allow all tools', color: '#e74c3c' },
+  plan: { label: 'Plan', description: 'Read-only planning mode', color: '#e67e22' },
+  yolo: { label: 'YOLO', description: 'Auto-allow all tools', color: '#e74c3c' },
 };
 
 // ── SVG icons (matching bzcode VSCode plugin) ─────────────────────────────────
@@ -134,9 +187,9 @@ function BlockDot({ size = 10 }: { size?: number }) {
   const cell = Math.floor((size - gap) / 2);
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
-      <rect x={0}          y={0}          width={cell} height={cell} rx={1} fill="currentColor" />
-      <rect x={cell + gap} y={0}          width={cell} height={cell} rx={1} fill="currentColor" />
-      <rect x={0}          y={cell + gap} width={cell} height={cell} rx={1} fill="currentColor" />
+      <rect x={0} y={0} width={cell} height={cell} rx={1} fill="currentColor" />
+      <rect x={cell + gap} y={0} width={cell} height={cell} rx={1} fill="currentColor" />
+      <rect x={0} y={cell + gap} width={cell} height={cell} rx={1} fill="currentColor" />
       <rect x={cell + gap} y={cell + gap} width={cell} height={cell} rx={1} fill="currentColor" />
     </svg>
   );
@@ -156,7 +209,16 @@ function TriangleCubes({ className }: { className?: string }) {
 
 function LlBrainIcon({ size = 14 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      stroke="currentColor"
+      strokeWidth="1.75"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
       <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
       <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
@@ -165,16 +227,16 @@ function LlBrainIcon({ size = 14 }: { size?: number }) {
 }
 
 const LL_METRICS = [
-  { label: 'accuracy',    value: (g: { accuracy: number; quality: number }) => `+${g.accuracy}%` },
-  { label: 'quality',     value: (g: { accuracy: number; quality: number }) => `${g.quality}%` },
-  { label: 'efficiency',  value: (_g: { accuracy: number; quality: number }) => '+18.2%' },
-  { label: 'adaptation',  value: (_g: { accuracy: number; quality: number }) => '+11.5%' },
-  { label: 'latency',     value: (_g: { accuracy: number; quality: number }) => '−0.3s' },
+  { label: 'accuracy', value: (g: { accuracy: number; quality: number }) => `+${g.accuracy}%` },
+  { label: 'quality', value: (g: { accuracy: number; quality: number }) => `${g.quality}%` },
+  { label: 'efficiency', value: (_g: { accuracy: number; quality: number }) => '+18.2%' },
+  { label: 'adaptation', value: (_g: { accuracy: number; quality: number }) => '+11.5%' },
+  { label: 'latency', value: (_g: { accuracy: number; quality: number }) => '−0.3s' },
 ];
 
 function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) {
-  const [idx,     setIdx]     = useState(0);
-  const [open,    setOpen]    = useState(false);
+  const [idx, setIdx] = useState(0);
+  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // Rotate metric every 2.5s
@@ -186,7 +248,9 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
   // Close on outside click
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
@@ -202,9 +266,19 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
         title="Live Learning results"
       >
         <LlBrainIcon size={11} />
-        <span key={idx} className="ll-eval-metric-val">{metric.value(gain)}</span>
+        <span key={idx} className="ll-eval-metric-val">
+          {metric.value(gain)}
+        </span>
         <span className="ll-eval-badge-sep">{metric.label}</span>
-        <svg viewBox="0 0 24 24" width="9" height="9" stroke="currentColor" strokeWidth="2.5" fill="none" style={{ opacity: 0.6 }}>
+        <svg
+          viewBox="0 0 24 24"
+          width="9"
+          height="9"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          fill="none"
+          style={{ opacity: 0.6 }}
+        >
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
@@ -213,7 +287,12 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
         <div className="ll-eval-dropdown">
           <div className="ll-eval-dropdown-header">Live Learning · latest job</div>
           {LL_METRICS.map((m, i) => (
-            <a key={i} href="/learning" className="ll-eval-dropdown-item" onClick={() => setOpen(false)}>
+            <a
+              key={i}
+              href="/learning"
+              className="ll-eval-dropdown-item"
+              onClick={() => setOpen(false)}
+            >
               <span className="ll-eval-dropdown-label">{m.label}</span>
               <span className="ll-eval-dropdown-val">{m.value(gain)}</span>
             </a>
@@ -226,7 +305,7 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
 
 const LL_TRAINING_SAMPLES = [
   { role: 'user', text: 'Refactor this Python function to use async/await' },
-  { role: 'agent', text: 'Here\'s the refactored version with aiohttp and proper error handling…' },
+  { role: 'agent', text: "Here's the refactored version with aiohttp and proper error handling…" },
   { role: 'user', text: 'Create a bar chart widget showing monthly revenue' },
   { role: 'agent', text: 'Widget created at canvas position (200, 120) with Chart.js…' },
 ];
@@ -249,9 +328,11 @@ function LiveLearningNotification({
 
   const barWidth = stage === 'collecting' ? '35%' : stage === 'training' ? '75%' : '100%';
   const statusText =
-    stage === 'collecting' ? 'Collecting training data…' :
-    stage === 'training'   ? 'Fine-tuning · est. 1–2 min…' :
-                             'Job complete ✓';
+    stage === 'collecting'
+      ? 'Collecting training data…'
+      : stage === 'training'
+        ? 'Fine-tuning · est. 1–2 min…'
+        : 'Job complete ✓';
 
   return (
     <div className={`ll-notif${expanded ? '' : ' ll-notif--mini'}`}>
@@ -260,13 +341,37 @@ function LiveLearningNotification({
         <LlBrainIcon size={12} />
         <span className="ll-notif-title">{statusText}</span>
         <div className="ll-notif-bar-wrap ll-notif-bar-wrap--inline">
-          <div className={`ll-notif-bar${stage === 'done' ? ' ll-notif-bar--done' : ''}`} style={{ width: barWidth }} />
+          <div
+            className={`ll-notif-bar${stage === 'done' ? ' ll-notif-bar--done' : ''}`}
+            style={{ width: barWidth }}
+          />
         </div>
-        <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" strokeWidth="2.5" fill="none"
-          style={{ flexShrink: 0, opacity: 0.5, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+        <svg
+          viewBox="0 0 24 24"
+          width="10"
+          height="10"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          fill="none"
+          style={{
+            flexShrink: 0,
+            opacity: 0.5,
+            transform: expanded ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.2s',
+          }}
+        >
           <polyline points="6 9 12 15 18 9" />
         </svg>
-        <button type="button" className="ll-notif-close" onClick={e => { e.stopPropagation(); onDismiss(); }}>✕</button>
+        <button
+          type="button"
+          className="ll-notif-close"
+          onClick={e => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+        >
+          ✕
+        </button>
       </div>
 
       {/* Expanded detail */}
@@ -274,7 +379,9 @@ function LiveLearningNotification({
         <div className="ll-notif-detail">
           {stage === 'collecting' && (
             <>
-              <p className="ll-notif-caption">Saving the last 10 conversation rounds as training data…</p>
+              <p className="ll-notif-caption">
+                Saving the last 10 conversation rounds as training data…
+              </p>
               <div className="ll-notif-samples">
                 {LL_TRAINING_SAMPLES.map((s, i) => (
                   <div key={i} className={`ll-notif-sample ll-notif-sample--${s.role}`}>
@@ -288,9 +395,13 @@ function LiveLearningNotification({
 
           {stage === 'training' && (
             <>
-              <p className="ll-notif-caption">Fine-tuning on {LL_EVAL.rounds} rounds · estimating 1–2 min…</p>
+              <p className="ll-notif-caption">
+                Fine-tuning on {LL_EVAL.rounds} rounds · estimating 1–2 min…
+              </p>
               <div className="ll-notif-training-stats">
-                <span>Baseline accuracy <strong>{LL_EVAL.baseline}%</strong></span>
+                <span>
+                  Baseline accuracy <strong>{LL_EVAL.baseline}%</strong>
+                </span>
                 <span className="ll-notif-pulse">⟳ adjusting weights…</span>
               </div>
             </>
@@ -320,17 +431,24 @@ function LiveLearningNotification({
 function SlashIcon({ type, color }: { type: SlashCommand['iconType']; color: string }) {
   const props = { size: 15, color } as const;
   switch (type) {
-    case 'sparkle':   return <SparkleIcon       {...props} weight="fill" />;
-    case 'cloud-up':  return <CloudArrowUpIcon   {...props} />;
-    case 'cloud-down':return <CloudArrowDownIcon {...props} />;
-    case 'chart':     return <ChartBarIcon       {...props} />;
-    case 'terminal':  return <TerminalIcon       {...props} />;
+    case 'sparkle':
+      return <SparkleIcon {...props} weight="fill" />;
+    case 'cloud-up':
+      return <CloudArrowUpIcon {...props} />;
+    case 'cloud-down':
+      return <CloudArrowDownIcon {...props} />;
+    case 'chart':
+      return <ChartBarIcon {...props} />;
+    case 'terminal':
+      return <TerminalIcon {...props} />;
   }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function uid() { return Math.random().toString(36).slice(2); }
+function uid() {
+  return Math.random().toString(36).slice(2);
+}
 
 function streamingToBlocks(map: StreamingBlocks): AssistantBlock[] {
   const result: AssistantBlock[] = [];
@@ -346,7 +464,8 @@ function bzBlocksToAssistantBlocks(content: unknown[]): AssistantBlock[] {
   const result: AssistantBlock[] = [];
   for (const b of content as Array<{ type: string; text?: string; thinking?: string }>) {
     if (b.type === 'text' && b.text) result.push({ type: 'text', text: b.text });
-    else if (b.type === 'thinking' && b.thinking) result.push({ type: 'thinking', text: b.thinking });
+    else if (b.type === 'thinking' && b.thinking)
+      result.push({ type: 'thinking', text: b.thinking });
   }
   return result;
 }
@@ -366,7 +485,7 @@ function parseCommandListOutput(text: string): CommandListResult | null {
   // Match header: "Available commands:" or "Available skills:"
   const headerMatch = trimmed.match(/^Available ([\w\s]+):\s*\n/i);
   if (!headerMatch) return null;
-  const kind = headerMatch[1]!.toLowerCase(); // "commands" | "skills"
+  const kind = headerMatch[1]?.toLowerCase() ?? ''; // "commands" | "skills"
   const rest = trimmed.slice(headerMatch[0].length);
   const entries: CommandEntry[] = [];
 
@@ -376,7 +495,7 @@ function parseCommandListOutput(text: string): CommandListResult | null {
     if (!m) continue;
     const name = m[1]!;
     const aliasRaw = m[2];
-    let description = m[3]!.trim();
+    let description = m[3]?.trim() ?? '';
 
     // Strip trailing "(/some/path)" from skills
     description = description.replace(/\s*\([^)]*\/[^)]*\)\s*$/, '').trim();
@@ -395,16 +514,24 @@ function parseCommandListOutput(text: string): CommandListResult | null {
 function CompactSummaryCard({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   // Strip the outer <context-summary> tags if present
-  const inner = text.replace(/^\s*<context-summary>\s*/i, '').replace(/\s*<\/context-summary>\s*$/i, '').trim();
+  const inner = text
+    .replace(/^\s*<context-summary>\s*/i, '')
+    .replace(/\s*<\/context-summary>\s*$/i, '')
+    .trim();
   return (
     <div className="compact-summary-card">
       <div className="compact-summary-header" onClick={() => setExpanded(v => !v)}>
         <BoltzbitLogo size={11} />
         <span className="compact-summary-label">Conversation compacted</span>
-        <span className="compact-summary-toggle">{expanded ? '▲ Hide summary' : '▼ Show summary'}</span>
+        <span className="compact-summary-toggle">
+          {expanded ? '▲ Hide summary' : '▼ Show summary'}
+        </span>
       </div>
       {expanded && (
-        <div className="compact-summary-body" dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(inner) }} />
+        <div
+          className="compact-summary-body"
+          dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(inner) }}
+        />
       )}
     </div>
   );
@@ -414,49 +541,71 @@ function CompactSummaryCard({ text }: { text: string }) {
 
 // Push progress — Boltzbit cube-grid style
 const PUSH_CUBE_STEPS = [
-  { id: 'build'   as PushStep, label: 'Build',   color: '#60a5fa' },
+  { id: 'build' as PushStep, label: 'Build', color: '#60a5fa' },
   { id: 'archive' as PushStep, label: 'Archive', color: '#818cf8' },
-  { id: 'upload'  as PushStep, label: 'Upload',  color: '#a78bfa' },
-  { id: 'deploy'  as PushStep, label: 'Deploy',  color: '#f59e0b' },
+  { id: 'upload' as PushStep, label: 'Upload', color: '#a78bfa' },
+  { id: 'deploy' as PushStep, label: 'Deploy', color: '#f59e0b' },
   { id: 'publish' as PushStep, label: 'Publish', color: '#34d399' },
 ] as const;
 
 // Render enough cubes to always overflow — CSS auto-fill + overflow:hidden trims to exactly 2 rows
 const CUBE_POOL = 40;
 
-function PushCubeGrid({ color, state }: { color: string; state: 'pending' | 'active' | 'done' | 'error' }) {
+function PushCubeGrid({
+  color,
+  state,
+}: {
+  color: string;
+  state: 'pending' | 'active' | 'done' | 'error';
+}) {
   const fill = state === 'error' ? 'var(--accent-red)' : state !== 'pending' ? color : undefined;
   return (
     <div className="bzhub-cube-grid">
       {Array.from({ length: CUBE_POOL }).map((_, i) => (
-        <div key={i} className={`bzhub-cube${state === 'active' ? ' bzhub-cube--active' : ''}`}
-          style={fill ? { background: fill } : undefined} />
+        <div
+          key={i}
+          className={`bzhub-cube${state === 'active' ? ' bzhub-cube--active' : ''}`}
+          style={fill ? { background: fill } : undefined}
+        />
       ))}
     </div>
   );
 }
 
 function PushProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'push-progress' }> }) {
-  const isDone  = item.step === 'done';
+  const isDone = item.step === 'done';
   const isError = item.step === 'error';
   const currentIdx = PUSH_CUBE_STEPS.findIndex(s => s.id === item.step);
-  const label = isError ? `Push failed — ${item.message}` : isDone ? 'Push: Published' : `Push: ${item.message}`;
+  const label = isError
+    ? `Push failed — ${item.message}`
+    : isDone
+      ? 'Push: Published'
+      : `Push: ${item.message}`;
 
   return (
     <div className="agent-msg-row">
-      <span className="agent-block-icon"><BoltzbitLogo size={10} /></span>
+      <span className="agent-block-icon">
+        <BoltzbitLogo size={10} />
+      </span>
       <div className="bzhub-progress-card">
         <div className="bzhub-progress-label">{label}</div>
         <div className="bzhub-cube-steps">
           {PUSH_CUBE_STEPS.map((step, i) => {
-            const state = isError && i === currentIdx ? 'error'
-                        : isDone || i < currentIdx    ? 'done'
-                        : !isDone && i === currentIdx ? 'active'
-                        : 'pending';
+            const state =
+              isError && i === currentIdx
+                ? 'error'
+                : isDone || i < currentIdx
+                  ? 'done'
+                  : !isDone && i === currentIdx
+                    ? 'active'
+                    : 'pending';
             return (
               <div key={step.id} className="bzhub-cube-step">
                 <PushCubeGrid color={step.color} state={state} />
-                <span className="bzhub-cube-label" style={state !== 'pending' ? { color: step.color } : undefined}>
+                <span
+                  className="bzhub-cube-label"
+                  style={state !== 'pending' ? { color: step.color } : undefined}
+                >
                   {step.label}
                 </span>
               </div>
@@ -465,18 +614,27 @@ function PushProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'push-p
         </div>
         {isDone && item.serviceUrl && (
           <div className="bzhub-done-row">
-            <a className="bzhub-done-btn" href={item.serviceUrl} target="_blank" rel="noopener noreferrer">
+            <a
+              className="bzhub-done-btn"
+              href={item.serviceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <ArrowSquareOutIcon size={13} />
               Review app
             </a>
             {item.appId && (
-              <button type="button" className="bzhub-done-btn bzhub-done-btn--publish"
+              <button
+                type="button"
+                className="bzhub-done-btn bzhub-done-btn--publish"
                 onClick={() => {
                   fetch(`${AGENT_HTTP_BASE}/boltzhub/publish`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ appId: item.appId }),
                   }).catch(() => null);
-                }}>
+                }}
+              >
                 <CloudArrowUpIcon size={13} />
                 Publish app
               </button>
@@ -491,34 +649,50 @@ function PushProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'push-p
 const SYNC_STEPS_ORDERED: SyncStep[] = ['download', 'extract', 'install'];
 
 function SyncProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'sync-progress' }> }) {
-  const isDone  = item.step === 'done';
+  const isDone = item.step === 'done';
   const isError = item.step === 'error';
-  const currentIdx = SYNC_STEPS_ORDERED.indexOf(item.step as typeof SYNC_STEPS_ORDERED[number]);
-  const barColor = isDone ? 'var(--accent-green)' : isError ? 'var(--accent-red)' : 'var(--accent-blue)';
-  const label = isError ? `Sync: Failed — ${item.message}` : isDone ? item.message : `Sync: ${item.message}`;
+  const currentIdx = SYNC_STEPS_ORDERED.indexOf(item.step as (typeof SYNC_STEPS_ORDERED)[number]);
+  const barColor = isDone
+    ? 'var(--accent-green)'
+    : isError
+      ? 'var(--accent-red)'
+      : 'var(--accent-blue)';
+  const label = isError
+    ? `Sync: Failed — ${item.message}`
+    : isDone
+      ? item.message
+      : `Sync: ${item.message}`;
 
   return (
     <div className="agent-msg-row">
-      <span className="agent-block-icon"><BoltzbitLogo size={10} /></span>
+      <span className="agent-block-icon">
+        <BoltzbitLogo size={10} />
+      </span>
       <div className="bzhub-progress-card">
         <div className="bzhub-progress-label">{label}</div>
         <div className="bzhub-progress-bar">
           {SYNC_STEPS_ORDERED.map((s, j) => {
-            const done    = isDone ? true : j < currentIdx;
+            const done = isDone ? true : j < currentIdx;
             const current = !isDone && !isError && j === currentIdx;
             return (
-              <div key={s} className={`bzhub-progress-seg${done ? ' bzhub-progress-seg--done' : current ? ' bzhub-progress-seg--cur' : ''}`}
-                style={done || current ? { background: barColor } : undefined} />
+              <div
+                key={s}
+                className={`bzhub-progress-seg${done ? ' bzhub-progress-seg--done' : current ? ' bzhub-progress-seg--cur' : ''}`}
+                style={done || current ? { background: barColor } : undefined}
+              />
             );
           })}
         </div>
         <div className="bzhub-progress-steps">
           {SYNC_STEPS_ORDERED.map((s, j) => {
-            const done    = isDone ? true : j < currentIdx;
+            const done = isDone ? true : j < currentIdx;
             const current = !isDone && !isError && j === currentIdx;
             return (
-              <span key={s} className={`bzhub-progress-step-label${done ? ' bzhub-progress-step-label--done' : current ? ' bzhub-progress-step-label--cur' : ''}`}
-                style={done || current ? { color: barColor } : undefined}>
+              <span
+                key={s}
+                className={`bzhub-progress-step-label${done ? ' bzhub-progress-step-label--done' : current ? ' bzhub-progress-step-label--cur' : ''}`}
+                style={done || current ? { color: barColor } : undefined}
+              >
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </span>
             );
@@ -531,31 +705,56 @@ function SyncProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'sync-p
 
 // ── BoltzHub modals ───────────────────────────────────────────────────────────
 
-function CreateAppModal({ cwd, agentHttp, onClose, onCreated }: {
-  cwd: string; agentHttp: string;
+function CreateAppModal({
+  cwd,
+  agentHttp,
+  onClose,
+  onCreated,
+}: {
+  cwd: string;
+  agentHttp: string;
   onClose: () => void;
   onCreated: (cfg: { id: string; name: string }) => void;
 }) {
-  const [name,       setName]       = useState('My App');
-  const [desc,       setDesc]       = useState('');
+  const [name, setName] = useState('My App');
+  const [desc, setDesc] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
-  const [buildCmd,   setBuildCmd]   = useState('');
-  const [showAdv,    setShowAdv]    = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [error,      setError]      = useState('');
+  const [buildCmd, setBuildCmd] = useState('');
+  const [showAdv, setShowAdv] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleSubmit() {
     if (!name.trim()) return;
-    setSaving(true); setError('');
+    setSaving(true);
+    setError('');
     try {
       const r = await fetch(`${agentHttp}/boltzhub/create-app`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd, name: name.trim(), description: desc.trim() || undefined, visibility, buildCommand: buildCmd.trim() || undefined }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cwd,
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          visibility,
+          buildCommand: buildCmd.trim() || undefined,
+        }),
       });
-      const d = await r.json() as { ok?: boolean; appConfig?: { id: string; name: string }; error?: string };
-      if (!r.ok || !d.ok) { setError(d.error ?? 'Failed to create app'); setSaving(false); return; }
+      const d = (await r.json()) as {
+        ok?: boolean;
+        appConfig?: { id: string; name: string };
+        error?: string;
+      };
+      if (!r.ok || !d.ok) {
+        setError(d.error ?? 'Failed to create app');
+        setSaving(false);
+        return;
+      }
       onCreated(d.appConfig!);
-    } catch (e) { setError(String(e)); setSaving(false); }
+    } catch (e) {
+      setError(String(e));
+      setSaving(false);
+    }
   }
 
   return (
@@ -564,22 +763,53 @@ function CreateAppModal({ cwd, agentHttp, onClose, onCreated }: {
         <div className="bzhub-modal-header">
           <BoltzbitLogo size={16} />
           <span className="bzhub-modal-title">Create App</span>
-          <button type="button" className="canvas-widget-close" onClick={onClose}><XIcon size={13} /></button>
+          <button type="button" className="canvas-widget-close" onClick={onClose}>
+            <XIcon size={13} />
+          </button>
         </div>
-        <p className="bzhub-modal-hint">No .bzhub config found. Set up your app to push to BoltzHub.</p>
+        <p className="bzhub-modal-hint">
+          No .bzhub config found. Set up your app to push to BoltzHub.
+        </p>
 
-        <label className="bzhub-form-label">Name *
-          <input className="bzhub-form-input" value={name} onChange={e => setName(e.target.value)} placeholder="My App" autoFocus />
+        <label className="bzhub-form-label">
+          Name *
+          <input
+            className="bzhub-form-input"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="My App"
+          />
         </label>
-        <label className="bzhub-form-label">Description
-          <textarea className="bzhub-form-textarea" value={desc} onChange={e => setDesc(e.target.value)} placeholder="What does your app do?" rows={3} />
+        <label className="bzhub-form-label">
+          Description
+          <textarea
+            className="bzhub-form-textarea"
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            placeholder="What does your app do?"
+            rows={3}
+          />
         </label>
 
         <div className="bzhub-visibility-row">
-          <span className="bzhub-form-label" style={{ marginBottom: 0 }}>Visibility</span>
+          <span className="bzhub-form-label" style={{ marginBottom: 0 }}>
+            Visibility
+          </span>
           <div className="bzhub-visibility-toggle">
-            <button type="button" className={`bzhub-vis-btn${visibility === 'private' ? ' bzhub-vis-btn--active' : ''}`} onClick={() => setVisibility('private')}>Private</button>
-            <button type="button" className={`bzhub-vis-btn${visibility === 'public' ? ' bzhub-vis-btn--active' : ''}`} onClick={() => setVisibility('public')}>Public</button>
+            <button
+              type="button"
+              className={`bzhub-vis-btn${visibility === 'private' ? ' bzhub-vis-btn--active' : ''}`}
+              onClick={() => setVisibility('private')}
+            >
+              Private
+            </button>
+            <button
+              type="button"
+              className={`bzhub-vis-btn${visibility === 'public' ? ' bzhub-vis-btn--active' : ''}`}
+              onClick={() => setVisibility('public')}
+            >
+              Public
+            </button>
           </div>
         </div>
 
@@ -587,18 +817,31 @@ function CreateAppModal({ cwd, agentHttp, onClose, onCreated }: {
           ▶ Advanced options {showAdv ? '▲' : '▼'}
         </button>
         {showAdv && (
-          <label className="bzhub-form-label">Build command
-            <input className="bzhub-form-input" value={buildCmd} onChange={e => setBuildCmd(e.target.value)} placeholder="pnpm build" />
+          <label className="bzhub-form-label">
+            Build command
+            <input
+              className="bzhub-form-input"
+              value={buildCmd}
+              onChange={e => setBuildCmd(e.target.value)}
+              placeholder="pnpm build"
+            />
           </label>
         )}
 
         {error && <p className="bzhub-modal-error">{error}</p>}
 
         <div className="bzhub-modal-actions">
-          <button type="button" className="bzhub-btn bzhub-btn--primary" onClick={() => void handleSubmit()} disabled={saving || !name.trim()}>
+          <button
+            type="button"
+            className="bzhub-btn bzhub-btn--primary"
+            onClick={() => void handleSubmit()}
+            disabled={saving || !name.trim()}
+          >
             {saving ? 'Creating…' : 'Create & Push'}
           </button>
-          <button type="button" className="bzhub-btn" onClick={onClose}>Cancel</button>
+          <button type="button" className="bzhub-btn" onClick={onClose}>
+            Cancel
+          </button>
         </div>
         <p className="bzhub-modal-esc">Esc to cancel</p>
       </div>
@@ -606,17 +849,22 @@ function CreateAppModal({ cwd, agentHttp, onClose, onCreated }: {
   );
 }
 
-function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
+function ReleaseNotesModal({
+  appId,
+  onClose,
+  onPush,
+}: {
   appName: string;
   appId: string;
   onClose: () => void;
   onPush: (notes?: string, version?: string) => void;
 }) {
-  const [stage,     setStage]     = useState<'choice' | 'write'>('choice');
-  const [notes,     setNotes]     = useState('');
-  const [version,   setVersion]   = useState('');
-  const [versions,  setVersions]  = useState<{ versionNumber: string }[]>([]);
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+  const [stage, setStage] = useState<'choice' | 'write'>('choice');
+  const [notes, setNotes] = useState('');
+  const [version, setVersion] = useState('');
+  const [versions, setVersions] = useState<{ versionNumber: string }[]>([]);
+  const agentHttp =
+    (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   useEffect(() => {
     fetch(`${agentHttp}/boltzhub/versions?appId=${encodeURIComponent(appId)}`)
@@ -626,7 +874,7 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
         if (d.suggestedNext) setVersion(d.suggestedNext);
       })
       .catch(() => {});
-  }, [appId, agentHttp]);
+  }, [appId]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -646,7 +894,9 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
         <div className="bzhub-modal-header">
           <CloudArrowUpIcon size={16} color="var(--accent-blue)" />
           <span className="bzhub-modal-title">Push to BoltzHub</span>
-          <button type="button" className="canvas-widget-close" onClick={onClose}><XIcon size={13} /></button>
+          <button type="button" className="canvas-widget-close" onClick={onClose}>
+            <XIcon size={13} />
+          </button>
         </div>
         <p className="bzhub-modal-hint">Would you like to add release notes to this version?</p>
 
@@ -654,10 +904,12 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
           <>
             <div className="bzhub-choice-list">
               <button type="button" className="bzhub-choice-item" onClick={() => setStage('write')}>
-                <span className="bzhub-choice-num">1</span><span>Write my own</span>
+                <span className="bzhub-choice-num">1</span>
+                <span>Write my own</span>
               </button>
               <button type="button" className="bzhub-choice-item" onClick={() => onPush()}>
-                <span className="bzhub-choice-num">2</span><span>Skip and push</span>
+                <span className="bzhub-choice-num">2</span>
+                <span>Skip and push</span>
               </button>
             </div>
 
@@ -665,26 +917,49 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
               <div className="bzhub-version-history">
                 <div className="bzhub-version-history-label">Previous Releases</div>
                 {versions.map(v => (
-                  <div key={v.versionNumber} className="bzhub-version-tag">{v.versionNumber}</div>
+                  <div key={v.versionNumber} className="bzhub-version-tag">
+                    {v.versionNumber}
+                  </div>
                 ))}
               </div>
             )}
           </>
         ) : (
           <>
-            <label className="bzhub-form-label">Release notes
-              <textarea className="bzhub-form-textarea" value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="What changed in this version?" rows={4} autoFocus />
+            <label className="bzhub-form-label">
+              Release notes
+              <textarea
+                className="bzhub-form-textarea"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="What changed in this version?"
+                rows={4}
+              />
             </label>
-            <label className="bzhub-form-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <label
+              className="bzhub-form-label"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            >
               Version
-              <input className="bzhub-form-input" style={{ flex: 1 }} value={version}
-                onChange={e => setVersion(e.target.value)} placeholder="1.0.0" />
+              <input
+                className="bzhub-form-input"
+                style={{ flex: 1 }}
+                value={version}
+                onChange={e => setVersion(e.target.value)}
+                placeholder="1.0.0"
+              />
             </label>
             <div className="bzhub-modal-actions">
-              <button type="button" className="bzhub-btn bzhub-btn--primary"
-                onClick={() => onPush(notes || undefined, version || undefined)}>Push</button>
-              <button type="button" className="bzhub-btn" onClick={() => setStage('choice')}>Back</button>
+              <button
+                type="button"
+                className="bzhub-btn bzhub-btn--primary"
+                onClick={() => onPush(notes || undefined, version || undefined)}
+              >
+                Push
+              </button>
+              <button type="button" className="bzhub-btn" onClick={() => setStage('choice')}>
+                Back
+              </button>
             </div>
           </>
         )}
@@ -695,31 +970,45 @@ function ReleaseNotesModal({ appName, appId, onClose, onPush }: {
   );
 }
 
-function SyncModal({ agentHttp, onClose, onSync }: {
+function SyncModal({
+  agentHttp,
+  onClose,
+  onSync,
+}: {
   agentHttp: string;
   onClose: () => void;
   onSync: (appId?: string) => void;
 }) {
-  const [stage,   setStage]   = useState<'choice' | 'enter-id' | 'fetching' | 'select'>('choice');
-  const [appId,   setAppId]   = useState('');
-  const [apps,    setApps]    = useState<{ id: string; name: string }[]>([]);
-  const [error,   setError]   = useState('');
+  const [stage, setStage] = useState<'choice' | 'enter-id' | 'fetching' | 'select'>('choice');
+  const [appId, setAppId] = useState('');
+  const [apps, setApps] = useState<{ id: string; name: string }[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
   async function fetchApps() {
-    setStage('fetching'); setError('');
+    setStage('fetching');
+    setError('');
     try {
       const r = await fetch(`${agentHttp}/boltzhub/apps`);
-      const d = await r.json() as { apps?: { id: string; name: string }[]; error?: string } | { id: string; name: string }[];
-      const list = Array.isArray(d) ? d : (d as { apps?: { id: string; name: string }[] }).apps ?? [];
+      const d = (await r.json()) as
+        | { apps?: { id: string; name: string }[]; error?: string }
+        | { id: string; name: string }[];
+      const list = Array.isArray(d)
+        ? d
+        : ((d as { apps?: { id: string; name: string }[] }).apps ?? []);
       setApps(list);
       setStage('select');
-    } catch (e) { setError(String(e)); setStage('choice'); }
+    } catch (e) {
+      setError(String(e));
+      setStage('choice');
+    }
   }
 
   return (
@@ -728,32 +1017,56 @@ function SyncModal({ agentHttp, onClose, onSync }: {
         <div className="bzhub-modal-header">
           <CloudArrowDownIcon size={16} color="var(--accent-blue)" />
           <span className="bzhub-modal-title">Sync project</span>
-          <button type="button" className="canvas-widget-close" onClick={onClose}><XIcon size={13} /></button>
+          <button type="button" className="canvas-widget-close" onClick={onClose}>
+            <XIcon size={13} />
+          </button>
         </div>
 
         {stage === 'choice' && (
           <div className="bzhub-choice-list">
             <button type="button" className="bzhub-choice-item" onClick={() => onSync()}>
-              <span className="bzhub-choice-num">1</span><span>Sync current app</span>
+              <span className="bzhub-choice-num">1</span>
+              <span>Sync current app</span>
             </button>
-            <button type="button" className="bzhub-choice-item" onClick={() => setStage('enter-id')}>
-              <span className="bzhub-choice-num">2</span><span>Enter app ID</span>
+            <button
+              type="button"
+              className="bzhub-choice-item"
+              onClick={() => setStage('enter-id')}
+            >
+              <span className="bzhub-choice-num">2</span>
+              <span>Enter app ID</span>
             </button>
             <button type="button" className="bzhub-choice-item" onClick={() => void fetchApps()}>
-              <span className="bzhub-choice-num">3</span><span>Fetch my apps from BoltzHub</span>
+              <span className="bzhub-choice-num">3</span>
+              <span>Fetch my apps from BoltzHub</span>
             </button>
           </div>
         )}
 
         {stage === 'enter-id' && (
           <>
-            <label className="bzhub-form-label">App ID
-              <input className="bzhub-form-input" value={appId} onChange={e => setAppId(e.target.value)}
-                placeholder="app_xxxxxxxx" autoFocus onKeyDown={e => e.key === 'Enter' && appId.trim() && onSync(appId.trim())} />
+            <label className="bzhub-form-label">
+              App ID
+              <input
+                className="bzhub-form-input"
+                value={appId}
+                onChange={e => setAppId(e.target.value)}
+                placeholder="app_xxxxxxxx"
+                onKeyDown={e => e.key === 'Enter' && appId.trim() && onSync(appId.trim())}
+              />
             </label>
             <div className="bzhub-modal-actions">
-              <button type="button" className="bzhub-btn bzhub-btn--primary" onClick={() => onSync(appId.trim())} disabled={!appId.trim()}>Sync</button>
-              <button type="button" className="bzhub-btn" onClick={() => setStage('choice')}>Back</button>
+              <button
+                type="button"
+                className="bzhub-btn bzhub-btn--primary"
+                onClick={() => onSync(appId.trim())}
+                disabled={!appId.trim()}
+              >
+                Sync
+              </button>
+              <button type="button" className="bzhub-btn" onClick={() => setStage('choice')}>
+                Back
+              </button>
             </div>
           </>
         )}
@@ -764,9 +1077,16 @@ function SyncModal({ agentHttp, onClose, onSync }: {
           <div className="bzhub-choice-list">
             {apps.length === 0 && <p className="bzhub-modal-hint">No apps found.</p>}
             {apps.map(app => (
-              <button key={app.id} type="button" className="bzhub-choice-item" onClick={() => onSync(app.id)}>
+              <button
+                key={app.id}
+                type="button"
+                className="bzhub-choice-item"
+                onClick={() => onSync(app.id)}
+              >
                 <span className="bzhub-choice-num bzhub-choice-num--dot" />
-                <span>{app.name} <span style={{ opacity: 0.5, fontSize: 11 }}>{app.id}</span></span>
+                <span>
+                  {app.name} <span style={{ opacity: 0.5, fontSize: 11 }}>{app.id}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -779,36 +1099,62 @@ function SyncModal({ agentHttp, onClose, onSync }: {
   );
 }
 
-function TokenUsageModal({ data, onClose }: {
+function TokenUsageModal({
+  data,
+  onClose,
+}: {
   data: Extract<BzHubModal, { type: 'token-usage' }>;
   onClose: () => void;
 }) {
-  const PERIODS = [{ id: '7d', label: '7 days' }, { id: '30d', label: '30 days' }, { id: '90d', label: '90 days' }, { id: '1y', label: '1 year' }];
+  const PERIODS = [
+    { id: '7d', label: '7 days' },
+    { id: '30d', label: '30 days' },
+    { id: '90d', label: '90 days' },
+    { id: '1y', label: '1 year' },
+  ];
   const [period, setPeriod] = useState(data.period);
   const [loading, setLoading] = useState(!data.summary);
   const [summary, setSummary] = useState(data.summary);
-  const [trends,  setTrends]  = useState(data.trends ?? []);
-  const [error,   setError]   = useState('');
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+  const [trends, setTrends] = useState(data.trends ?? []);
+  const [error, setError] = useState('');
+  const agentHttp =
+    (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   async function fetchUsage(p: string) {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
       const r = await fetch(`${agentHttp}/boltzhub/token-usage?period=${p}`);
-      const d = await r.json() as { summary?: typeof summary; trends?: typeof trends; error?: string };
-      if (!r.ok) { setError(d.error ?? 'Failed to fetch'); return; }
-      setSummary(d.summary); setTrends(d.trends ?? []);
-    } catch (e) { setError(String(e)); }
-    finally { setLoading(false); }
+      const d = (await r.json()) as {
+        summary?: typeof summary;
+        trends?: typeof trends;
+        error?: string;
+      };
+      if (!r.ok) {
+        setError(d.error ?? 'Failed to fetch');
+        return;
+      }
+      setSummary(d.summary);
+      setTrends(d.trends ?? []);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { void fetchUsage(period); }, [period]);
+  useEffect(() => {
+    void fetchUsage(period);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: fetchUsage stable
+  }, [period, fetchUsage]);
 
   const recentTrends = trends.slice(-7);
   const maxTokens = Math.max(...recentTrends.map(t => t.tokensConsumed), 1);
 
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
@@ -819,36 +1165,65 @@ function TokenUsageModal({ data, onClose }: {
         <div className="bzhub-modal-header">
           <ChartBarIcon size={16} color="#a78bfa" />
           <span className="bzhub-modal-title">Token Usage</span>
-          <button type="button" className="canvas-widget-close" onClick={onClose}><XIcon size={13} /></button>
+          <button type="button" className="canvas-widget-close" onClick={onClose}>
+            <XIcon size={13} />
+          </button>
         </div>
 
         <div className="bzhub-period-row">
           {PERIODS.map(p => (
-            <button key={p.id} type="button"
+            <button
+              key={p.id}
+              type="button"
               className={`bzhub-period-btn${period === p.id ? ' bzhub-period-btn--active' : ''}`}
-              onClick={() => setPeriod(p.id)}>{p.label}</button>
+              onClick={() => setPeriod(p.id)}
+            >
+              {p.label}
+            </button>
           ))}
         </div>
 
         {loading && <p className="bzhub-modal-hint">Loading…</p>}
-        {error   && <p className="bzhub-modal-error">{error}</p>}
+        {error && <p className="bzhub-modal-error">{error}</p>}
         {!loading && summary && (
           <>
             <div className="bzhub-usage-grid">
-              <div><span className="bzhub-usage-key">Total</span><span className="bzhub-usage-val">{summary.totalTokensConsumed.toLocaleString()}</span></div>
-              <div><span className="bzhub-usage-key">Input</span><span className="bzhub-usage-val">{summary.inputTokens.toLocaleString()}</span></div>
-              <div><span className="bzhub-usage-key">Output</span><span className="bzhub-usage-val">{summary.outputTokens.toLocaleString()}</span></div>
+              <div>
+                <span className="bzhub-usage-key">Total</span>
+                <span className="bzhub-usage-val">
+                  {summary.totalTokensConsumed.toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span className="bzhub-usage-key">Input</span>
+                <span className="bzhub-usage-val">{summary.inputTokens.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="bzhub-usage-key">Output</span>
+                <span className="bzhub-usage-val">{summary.outputTokens.toLocaleString()}</span>
+              </div>
             </div>
             {summary.totalCost > 0 && (
-              <p className="bzhub-usage-cost">Estimated cost: <strong>${summary.totalCost.toFixed(4)}</strong></p>
+              <p className="bzhub-usage-cost">
+                Estimated cost: <strong>${summary.totalCost.toFixed(4)}</strong>
+              </p>
             )}
             {recentTrends.length > 0 && (
               <div className="bzhub-trend">
                 <div className="bzhub-trend-label">Daily (last {recentTrends.length} days)</div>
                 <div className="bzhub-trend-bars">
                   {recentTrends.map(t => (
-                    <div key={t.date} className="bzhub-trend-bar-col" title={`${t.date}: ${t.tokensConsumed.toLocaleString()}`}>
-                      <div className="bzhub-trend-bar" style={{ height: `${Math.max(2, Math.round((t.tokensConsumed / maxTokens) * 48))}px` }} />
+                    <div
+                      key={t.date}
+                      className="bzhub-trend-bar-col"
+                      title={`${t.date}: ${t.tokensConsumed.toLocaleString()}`}
+                    >
+                      <div
+                        className="bzhub-trend-bar"
+                        style={{
+                          height: `${Math.max(2, Math.round((t.tokensConsumed / maxTokens) * 48))}px`,
+                        }}
+                      />
                     </div>
                   ))}
                 </div>
@@ -862,7 +1237,9 @@ function TokenUsageModal({ data, onClose }: {
         )}
 
         <div className="bzhub-modal-actions">
-          <button type="button" className="bzhub-btn" onClick={onClose}>Close</button>
+          <button type="button" className="bzhub-btn" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -875,14 +1252,18 @@ function CommandListDisplay({ result }: { result: CommandListResult }) {
   const label = result.kind === 'skills' ? 'Available Skills' : 'Available Commands';
   return (
     <div className="skills-result">
-      <div className="skills-result-header">{label} {result.entries.length}</div>
+      <div className="skills-result-header">
+        {label} {result.entries.length}
+      </div>
       <div className="skills-result-list">
         {result.entries.map(e => (
           <div key={e.name} className="skills-card">
             <div className="skills-card-name" style={e.isSkill ? { color: '#a78bfa' } : undefined}>
               /{e.name}
               {e.aliases?.map(a => (
-                <span key={a} className="skills-card-alias">{a}</span>
+                <span key={a} className="skills-card-alias">
+                  {a}
+                </span>
               ))}
             </div>
             <div className="skills-card-desc">{e.description}</div>
@@ -907,11 +1288,7 @@ function CollapsibleOutput({ text, isError }: { text: string; isError?: boolean 
         {!expanded && hidden > 0 && <span className="agent-inout-ellipsis">…</span>}
       </pre>
       {hidden > 0 && (
-        <button
-          type="button"
-          className="agent-inout-toggle"
-          onClick={() => setExpanded(e => !e)}
-        >
+        <button type="button" className="agent-inout-toggle" onClick={() => setExpanded(e => !e)}>
           {expanded ? '▲ Show less' : `▼ Show ${hidden} more line${hidden === 1 ? '' : 's'}`}
         </button>
       )}
@@ -922,26 +1299,34 @@ function CollapsibleOutput({ text, isError }: { text: string; isError?: boolean 
 function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
   const [open, setOpen] = useState(true);
 
-  const inputStr = item.input == null
-    ? ''
-    : typeof item.input === 'object'
-    ? Object.entries(item.input as Record<string, string>)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join('\n')
-    : String(item.input);
+  const inputStr =
+    item.input == null
+      ? ''
+      : typeof item.input === 'object'
+        ? Object.entries(item.input as Record<string, unknown>)
+            .map(
+              ([k, v]) =>
+                `${k}: ${typeof v === 'object' && v !== null ? JSON.stringify(v, null, 2) : String(v)}`,
+            )
+            .join('\n')
+        : String(item.input);
 
   const statusIcon = {
     running: <SpinnerIcon size={11} className="agent-tool-spin" />,
-    done:    item.isError
-               ? <XCircleIcon size={11} weight="fill" color="var(--accent-red)" />
-               : <CheckCircleIcon size={11} weight="fill" color="var(--accent-green)" />,
-    error:   <WarningCircleIcon size={11} weight="fill" color="var(--accent-red)" />,
+    done: item.isError ? (
+      <XCircleIcon size={11} weight="fill" color="var(--accent-red)" />
+    ) : (
+      <CheckCircleIcon size={11} weight="fill" color="var(--accent-green)" />
+    ),
+    error: <WarningCircleIcon size={11} weight="fill" color="var(--accent-red)" />,
   }[item.status];
 
   return (
     <div className="agent-msg-row">
       {/* Left column: BlockDot icon */}
-      <span className="agent-block-icon agent-block-icon--tool"><BlockDot size={10} /></span>
+      <span className="agent-block-icon agent-block-icon--tool">
+        <BlockDot size={10} />
+      </span>
 
       {/* Right column: header + IN/OUT card */}
       <div className="agent-tool-content">
@@ -949,7 +1334,10 @@ function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
           <TerminalIcon size={11} weight="bold" />
           <span className="agent-tool-name">{item.name}</span>
           <span className="agent-tool-status-icon">{statusIcon}</span>
-          <CaretDownIcon size={10} className={`agent-tool-caret${open ? ' agent-tool-caret--open' : ''}`} />
+          <CaretDownIcon
+            size={10}
+            className={`agent-tool-caret${open ? ' agent-tool-caret--open' : ''}`}
+          />
         </button>
 
         {open && (
@@ -964,10 +1352,11 @@ function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
             {(item.output !== undefined || item.status === 'running') && (
               <div className="agent-inout-row agent-inout-row--out">
                 <span className="agent-inout-badge agent-inout-badge--out">OUT</span>
-                {item.status === 'running'
-                  ? <span className="agent-inout-running">running…</span>
-                  : <CollapsibleOutput text={item.output ?? ''} isError={item.isError} />
-                }
+                {item.status === 'running' ? (
+                  <span className="agent-inout-running">running…</span>
+                ) : (
+                  <CollapsibleOutput text={item.output ?? ''} isError={item.isError} />
+                )}
               </div>
             )}
           </div>
@@ -978,12 +1367,13 @@ function ToolCard({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
 }
 
 // Extract document file paths from agent message text
-const DOC_PATH_RE = /(?:^|[\s`"'(])((\/[^\s`"'()]+|[a-zA-Z0-9._\-]+)\.(?:docx?|xlsx?|pptx?|pdf))(?:[\s`"'().,]|$)/gm;
+const DOC_PATH_RE =
+  /(?:^|[\s`"'(])((\/[^\s`"'()]+|[a-zA-Z0-9._-]+)\.(?:docx?|xlsx?|pptx?|pdf))(?:[\s`"'().,]|$)/gm;
 function extractDocPaths(text: string): string[] {
   const found = new Set<string>();
   let m: RegExpExecArray | null;
   DOC_PATH_RE.lastIndex = 0;
-  while ((m = DOC_PATH_RE.exec(text)) !== null) found.add(m[1]);
+  while ((m = DOC_PATH_RE.exec(text)) !== null) found.add(m[1]!);
   return Array.from(found);
 }
 
@@ -993,7 +1383,7 @@ function extractWidgetIds(text: string): string[] {
   const found = new Set<string>();
   let m: RegExpExecArray | null;
   WIDGET_ID_RE.lastIndex = 0;
-  while ((m = WIDGET_ID_RE.exec(text)) !== null) found.add(m[1].toLowerCase());
+  while ((m = WIDGET_ID_RE.exec(text)) !== null) found.add(m[1]?.toLowerCase() ?? '');
   return Array.from(found);
 }
 
@@ -1039,16 +1429,21 @@ function CopyPathInline({ path }: { path: string }) {
 }
 
 function WidgetSkillBadge({ item }: { item: Extract<DisplayItem, { kind: 'tool' }> }) {
-  const skillName = (item.input as Record<string, unknown>)?.['skill'] as string | undefined;
+  const skillName = (item.input as Record<string, unknown>)?.skill as string | undefined;
   const label = skillName ? `/${skillName}` : item.name;
-  const statusIcon = item.status === 'running'
-    ? <SpinnerIcon size={10} className="agent-tool-spin" />
-    : item.isError
-      ? <XCircleIcon size={10} weight="fill" color="var(--accent-red)" />
-      : <CheckCircleIcon size={10} weight="fill" color="var(--accent-green)" />;
+  const statusIcon =
+    item.status === 'running' ? (
+      <SpinnerIcon size={10} className="agent-tool-spin" />
+    ) : item.isError ? (
+      <XCircleIcon size={10} weight="fill" color="var(--accent-red)" />
+    ) : (
+      <CheckCircleIcon size={10} weight="fill" color="var(--accent-green)" />
+    );
   return (
     <div className="agent-msg-row">
-      <span className="agent-block-icon agent-block-icon--tool"><BlockDot size={10} /></span>
+      <span className="agent-block-icon agent-block-icon--tool">
+        <BlockDot size={10} />
+      </span>
       <div className="widget-skill-badge">
         <TerminalIcon size={10} weight="bold" />
         <span className="widget-skill-badge-name">{label}</span>
@@ -1069,34 +1464,56 @@ function PermissionCard({
   onRespond: (requestId: string, behavior: 'allow' | 'deny' | 'always') => void;
   onDismiss: () => void;
 }) {
-  const inputStr = prompt.input == null
-    ? ''
-    : typeof prompt.input === 'object'
-    ? Object.values(prompt.input as Record<string, string>).join(' ')
-    : String(prompt.input);
+  const inputStr =
+    prompt.input == null
+      ? ''
+      : typeof prompt.input === 'object'
+        ? Object.values(prompt.input as Record<string, unknown>)
+            .map(v => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)))
+            .join(' ')
+        : String(prompt.input);
 
   return (
-    <div className="agent-prompt-card animate-slide-in" style={{ '--mode-color': MODE_META[mode].color } as React.CSSProperties}>
+    <div
+      className="agent-prompt-card animate-slide-in"
+      style={{ '--mode-color': MODE_META[mode].color } as React.CSSProperties}
+    >
       <div className="agent-prompt-card-header">
         <TerminalIcon size={13} weight="bold" />
-        <span>Allow <strong>{prompt.tool}</strong> to run?</span>
-        <button type="button" className="agent-prompt-dismiss" onClick={onDismiss} aria-label="Dismiss">
+        <span>
+          Allow <strong>{prompt.tool}</strong> to run?
+        </span>
+        <button
+          type="button"
+          className="agent-prompt-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+        >
           <XIcon size={12} />
         </button>
       </div>
       {inputStr && <pre className="agent-prompt-pre">{inputStr}</pre>}
       <div className="agent-prompt-actions">
-        <button type="button" className="agent-prompt-btn agent-prompt-btn--allow"
+        <button
+          type="button"
+          className="agent-prompt-btn agent-prompt-btn--allow"
           style={{ background: MODE_META[mode].color }}
-          onClick={() => onRespond(prompt.requestId, 'allow')}>
+          onClick={() => onRespond(prompt.requestId, 'allow')}
+        >
           Allow once
         </button>
-        <button type="button" className="agent-prompt-btn agent-prompt-btn--always"
-          onClick={() => onRespond(prompt.requestId, 'always')}>
+        <button
+          type="button"
+          className="agent-prompt-btn agent-prompt-btn--always"
+          onClick={() => onRespond(prompt.requestId, 'always')}
+        >
           Always allow
         </button>
-        <button type="button" className="agent-prompt-btn agent-prompt-btn--deny"
-          onClick={() => onRespond(prompt.requestId, 'deny')}>
+        <button
+          type="button"
+          className="agent-prompt-btn agent-prompt-btn--deny"
+          onClick={() => onRespond(prompt.requestId, 'deny')}
+        >
           Deny
         </button>
       </div>
@@ -1135,13 +1552,23 @@ function InputPromptCard({
   if (!q) return null;
 
   return (
-    <div className="agent-prompt-card animate-slide-in" style={{ '--mode-color': MODE_META[mode].color } as React.CSSProperties}>
+    <div
+      className="agent-prompt-card animate-slide-in"
+      style={{ '--mode-color': MODE_META[mode].color } as React.CSSProperties}
+    >
       <div className="agent-prompt-card-header">
         <span>{q.question}</span>
         {prompt.questions.length > 1 && (
-          <span className="agent-prompt-step">{step + 1} / {prompt.questions.length}</span>
+          <span className="agent-prompt-step">
+            {step + 1} / {prompt.questions.length}
+          </span>
         )}
-        <button type="button" className="agent-prompt-dismiss" onClick={onDismiss} aria-label="Dismiss">
+        <button
+          type="button"
+          className="agent-prompt-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+        >
           <XIcon size={12} />
         </button>
       </div>
@@ -1151,7 +1578,11 @@ function InputPromptCard({
             key={opt.label}
             type="button"
             className={`agent-prompt-option${selected === opt.label ? ' agent-prompt-option--selected' : ''}`}
-            style={selected === opt.label ? { borderColor: MODE_META[mode].color } as React.CSSProperties : undefined}
+            style={
+              selected === opt.label
+                ? ({ borderColor: MODE_META[mode].color } as React.CSSProperties)
+                : undefined
+            }
             onClick={() => {
               setSelected(opt.label);
               if (isLast) {
@@ -1164,7 +1595,9 @@ function InputPromptCard({
             <span className="agent-prompt-option-key">{i + 1}</span>
             <span>
               <span className="agent-prompt-option-label">{opt.label}</span>
-              {opt.description && <span className="agent-prompt-option-desc"> — {opt.description}</span>}
+              {opt.description && (
+                <span className="agent-prompt-option-desc"> — {opt.description}</span>
+              )}
             </span>
           </button>
         ))}
@@ -1211,7 +1644,10 @@ function ModeDropdown({
           key={m}
           type="button"
           className={`agent-mode-option${m === mode ? ' agent-mode-option--active' : ''}`}
-          onClick={() => { onSelect(m); onClose(); }}
+          onClick={() => {
+            onSelect(m);
+            onClose();
+          }}
         >
           <span className="agent-mode-dot" style={{ background: MODE_META[m].color }} />
           <span>
@@ -1237,18 +1673,28 @@ function StickyLastPrompt({ text, attachments }: { text: string; attachments?: A
         <div className="agent-attach-chips">
           {attachments.map((att, i) => (
             <span key={i} className="agent-attach-chip">
-              <img src={`data:${att.mediaType};base64,${att.data}`} alt={att.name} className="agent-attach-thumb" />
+              <img
+                src={`data:${att.mediaType};base64,${att.data}`}
+                alt={att.name}
+                className="agent-attach-thumb"
+              />
               <span className="agent-attach-name">{att.name}</span>
             </span>
           ))}
         </div>
       )}
       <div className="agent-sticky-body">
-        <div className={`agent-sticky-text${!expanded && needsTruncate ? ' agent-sticky-text--clamped' : ''}`}>
+        <div
+          className={`agent-sticky-text${!expanded && needsTruncate ? ' agent-sticky-text--clamped' : ''}`}
+        >
           {text}
         </div>
         {needsTruncate && (
-          <button type="button" className="agent-sticky-toggle" onClick={() => setExpanded(v => !v)}>
+          <button
+            type="button"
+            className="agent-sticky-toggle"
+            onClick={() => setExpanded(v => !v)}
+          >
             {expanded ? 'Show less' : 'Show more'}
           </button>
         )}
@@ -1260,16 +1706,27 @@ function StickyLastPrompt({ text, attachments }: { text: string; attachments?: A
 // ── Canvas widget system ──────────────────────────────────────────────────────
 
 // WidgetKind imported from registry; code field optional (used for 'custom' widgets)
-type WidgetData = { id: string; kind: WidgetKind; title: string; x: number; y: number; w: number; h: number; code?: string };
+type WidgetData = {
+  id: string;
+  kind: WidgetKind;
+  title: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  code?: string;
+};
 
 // ── Overlap resolver ─────────────────────────────────────────────────────────
 
-const GAP = 6;        // gap between widgets (small — less jumping during auto-adjust)
-const SNAP = 16;      // drag/resize grid snap
+const GAP = 6; // gap between widgets (small — less jumping during auto-adjust)
+const SNAP = 16; // drag/resize grid snap
 const CANVAS_PAD = 24; // padding from canvas edge
 
 // Snap a value to the nearest grid point
-function snapVal(v: number): number { return Math.round(v / SNAP) * SNAP; }
+function snapVal(v: number): number {
+  return Math.round(v / SNAP) * SNAP;
+}
 
 // ── Gravity ───────────────────────────────────────────────────────────────────
 // Pull all widgets upward to fill gaps, like vertical compaction.
@@ -1304,15 +1761,23 @@ function applyGravity(widgets: WidgetData[], fixedId?: string): WidgetData[] {
 
 // ── First-fit spawn placement ─────────────────────────────────────────────────
 // Finds the first available top-left position for a new widget (not diagonal cascade).
-function findSpawnPos(existing: WidgetData[], newW: number, newH: number, canvasW = 1400): { x: number; y: number } {
+function findSpawnPos(
+  existing: WidgetData[],
+  newW: number,
+  newH: number,
+  canvasW = 1400,
+): { x: number; y: number } {
   const step = SNAP;
-  const maxX  = Math.max(CANVAS_PAD, canvasW - newW - CANVAS_PAD);
+  const maxX = Math.max(CANVAS_PAD, canvasW - newW - CANVAS_PAD);
 
   for (let y = CANVAS_PAD; y < 4000; y += step) {
     for (let x = CANVAS_PAD; x <= maxX; x += step) {
-      const fits = existing.every(w =>
-        x + newW + GAP <= w.x || w.x + w.w + GAP <= x ||
-        y + newH + GAP <= w.y || w.y + w.h + GAP <= y,
+      const fits = existing.every(
+        w =>
+          x + newW + GAP <= w.x ||
+          w.x + w.w + GAP <= x ||
+          y + newH + GAP <= w.y ||
+          w.y + w.h + GAP <= y,
       );
       if (fits) return { x, y };
     }
@@ -1326,7 +1791,7 @@ function findSpawnPos(existing: WidgetData[], newW: number, newH: number, canvas
 function autoArrange(widgets: WidgetData[], canvasW = 1400): WidgetData[] {
   if (widgets.length === 0) return widgets;
   // Sort by current position so we respect the user's intended order
-  const sorted = [...widgets].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+  const sorted = [...widgets].sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x));
   const result: WidgetData[] = [];
   let rowX = CANVAS_PAD;
   let rowY = CANVAS_PAD;
@@ -1335,13 +1800,13 @@ function autoArrange(widgets: WidgetData[], canvasW = 1400): WidgetData[] {
   for (const w of sorted) {
     // Wrap to next row if widget doesn't fit
     if (rowX + w.w > canvasW - CANVAS_PAD && rowX > CANVAS_PAD) {
-      rowX  = CANVAS_PAD;
+      rowX = CANVAS_PAD;
       rowY += rowH + GAP;
-      rowH  = 0;
+      rowH = 0;
     }
     result.push({ ...w, x: rowX, y: rowY });
     rowX += w.w + GAP;
-    rowH  = Math.max(rowH, w.h);
+    rowH = Math.max(rowH, w.h);
   }
   // Restore original array order
   const byId = Object.fromEntries(result.map(w => [w.id, w]));
@@ -1356,29 +1821,36 @@ function resolveOverlaps(widgets: WidgetData[], fixedId?: string): WidgetData[] 
     let anyOverlap = false;
     for (let i = 0; i < result.length; i++) {
       for (let j = i + 1; j < result.length; j++) {
-        const a = result[i]!; const b = result[j]!;
-        if (a.x + a.w + PAD <= b.x || b.x + b.w + PAD <= a.x ||
-            a.y + a.h + PAD <= b.y || b.y + b.h + PAD <= a.y) continue;
+        const a = result[i]!;
+        const b = result[j]!;
+        if (
+          a.x + a.w + PAD <= b.x ||
+          b.x + b.w + PAD <= a.x ||
+          a.y + a.h + PAD <= b.y ||
+          b.y + b.h + PAD <= a.y
+        )
+          continue;
         anyOverlap = true;
-        const aFixed = a.id === fixedId; const bFixed = b.id === fixedId;
+        const aFixed = a.id === fixedId;
+        const bFixed = b.id === fixedId;
         if (aFixed && bFixed) continue;
-        const pushRight = (a.x + a.w + PAD) - b.x;
-        const pushLeft  = (b.x + b.w + PAD) - a.x;
-        const pushDown  = (a.y + a.h + PAD) - b.y;
-        const pushUp    = (b.y + b.h + PAD) - a.y;
+        const pushRight = a.x + a.w + PAD - b.x;
+        const pushLeft = b.x + b.w + PAD - a.x;
+        const pushDown = a.y + a.h + PAD - b.y;
+        const pushUp = b.y + b.h + PAD - a.y;
         const min = Math.min(pushRight, pushLeft, pushDown, pushUp);
         if (min === pushRight) {
-          if (!bFixed) result[j] = { ...result[j]!, x: result[j]!.x + min };
-          else         result[i] = { ...result[i]!, x: Math.max(0, result[i]!.x - min) };
+          if (!bFixed) result[j] = { ...result[j]!, x: (result[j]?.x ?? 0) + min };
+          else result[i] = { ...result[i]!, x: Math.max(0, (result[i]?.x ?? 0) - min) };
         } else if (min === pushLeft) {
-          if (!aFixed) result[i] = { ...result[i]!, x: result[i]!.x + min };
-          else         result[j] = { ...result[j]!, x: Math.max(0, result[j]!.x - min) };
+          if (!aFixed) result[i] = { ...result[i]!, x: (result[i]?.x ?? 0) + min };
+          else result[j] = { ...result[j]!, x: Math.max(0, (result[j]?.x ?? 0) - min) };
         } else if (min === pushDown) {
-          if (!bFixed) result[j] = { ...result[j]!, y: result[j]!.y + min };
-          else         result[i] = { ...result[i]!, y: Math.max(0, result[i]!.y - min) };
+          if (!bFixed) result[j] = { ...result[j]!, y: (result[j]?.y ?? 0) + min };
+          else result[i] = { ...result[i]!, y: Math.max(0, (result[i]?.y ?? 0) - min) };
         } else {
-          if (!aFixed) result[i] = { ...result[i]!, y: result[i]!.y + min };
-          else         result[j] = { ...result[j]!, y: Math.max(0, result[j]!.y - min) };
+          if (!aFixed) result[i] = { ...result[i]!, y: (result[i]?.y ?? 0) + min };
+          else result[j] = { ...result[j]!, y: Math.max(0, (result[j]?.y ?? 0) - min) };
         }
       }
     }
@@ -1428,18 +1900,21 @@ function CanvasWidget({
     // Formula: clientX - canvasRect.left + scrollLeft = canvas-local mouseX
     //          canvas-local mouseX - data.x            = offset from widget edge
     const grabX = e.clientX - canvasRect.left + (canvasEl?.scrollLeft ?? 0) - data.x;
-    const grabY = e.clientY - canvasRect.top  + (canvasEl?.scrollTop  ?? 0) - data.y;
+    const grabY = e.clientY - canvasRect.top + (canvasEl?.scrollTop ?? 0) - data.y;
 
     function toCanvas(ev: MouseEvent) {
       // canvas-local position = viewport pos - canvas origin + scroll - grab offset
       const nx = Math.max(0, ev.clientX - canvasRect.left + (canvasEl?.scrollLeft ?? 0) - grabX);
-      const ny = Math.max(0, ev.clientY - canvasRect.top  + (canvasEl?.scrollTop  ?? 0) - grabY);
+      const ny = Math.max(0, ev.clientY - canvasRect.top + (canvasEl?.scrollTop ?? 0) - grabY);
       return { nx, ny };
     }
 
     function onMouseMove(ev: MouseEvent) {
       const { nx, ny } = toCanvas(ev);
-      if (elRef.current) { elRef.current.style.left = `${nx}px`; elRef.current.style.top = `${ny}px`; }
+      if (elRef.current) {
+        elRef.current.style.left = `${nx}px`;
+        elRef.current.style.top = `${ny}px`;
+      }
     }
     function onMouseUp(ev: MouseEvent) {
       document.body.classList.remove('canvas-dragging');
@@ -1455,8 +1930,8 @@ function CanvasWidget({
   // ── Resize ────────────────────────────────────────────────────────────────
   function handleResizeMouseDown(e: React.MouseEvent, handle: ResizeHandle) {
     e.preventDefault();
-    e.stopPropagation();   // don't trigger drag
-    onDragStart(data.id);  // show the grid while resizing too
+    e.stopPropagation(); // don't trigger drag
+    onDragStart(data.id); // show the grid while resizing too
     document.body.classList.add('canvas-dragging');
 
     const startMouseX = e.clientX;
@@ -1466,21 +1941,34 @@ function CanvasWidget({
     function calc(ev: MouseEvent) {
       const dx = ev.clientX - startMouseX;
       const dy = ev.clientY - startMouseY;
-      let nx = sx, ny = sy, nw = sw, nh = sh;
+      let nx = sx,
+        ny = sy,
+        nw = sw,
+        nh = sh;
 
-      if (handle.includes('e')) { nw = Math.max(MIN_W, sw + dx); }
-      if (handle.includes('s')) { nh = Math.max(MIN_H, sh + dy); }
-      if (handle.includes('w')) { nw = Math.max(MIN_W, sw - dx); nx = Math.max(0, sx + sw - nw); }
-      if (handle.includes('n')) { nh = Math.max(MIN_H, sh - dy); ny = Math.max(0, sy + sh - nh); }
+      if (handle.includes('e')) {
+        nw = Math.max(MIN_W, sw + dx);
+      }
+      if (handle.includes('s')) {
+        nh = Math.max(MIN_H, sh + dy);
+      }
+      if (handle.includes('w')) {
+        nw = Math.max(MIN_W, sw - dx);
+        nx = Math.max(0, sx + sw - nw);
+      }
+      if (handle.includes('n')) {
+        nh = Math.max(MIN_H, sh - dy);
+        ny = Math.max(0, sy + sh - nh);
+      }
       return { nx, ny, nw, nh };
     }
 
     function onMouseMove(ev: MouseEvent) {
       const { nx, ny, nw, nh } = calc(ev);
       if (elRef.current) {
-        elRef.current.style.left   = `${nx}px`;
-        elRef.current.style.top    = `${ny}px`;
-        elRef.current.style.width  = `${nw}px`;
+        elRef.current.style.left = `${nx}px`;
+        elRef.current.style.top = `${ny}px`;
+        elRef.current.style.width = `${nw}px`;
         elRef.current.style.height = `${nh}px`;
       }
     }
@@ -1498,19 +1986,36 @@ function CanvasWidget({
   // Resolve the JS code: custom widgets carry their own code, builtins come from the registry.
   // For custom-kind widgets (deployed by the agent), data.code is loaded async — hold off
   // rendering the iframe until the code arrives to avoid flashing the CUSTOM_CODE clock placeholder.
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+  const agentHttp =
+    (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
   const isCustomKind = data.kind === 'custom';
-  const code = data.code ?? (isCustomKind ? null : REGISTRY_MAP[data.kind]?.code ?? '');
-  const content = code == null
-    ? <div className="canvas-widget-loading" />
-    : <IframeWidget code={code} agentHttpBase={agentHttp} canvasId={data.id} sessionId={sessionId} refreshKey={data.id} />;
+  const code = data.code ?? (isCustomKind ? null : (REGISTRY_MAP[data.kind]?.code ?? ''));
+  const content =
+    code == null ? (
+      <div className="canvas-widget-loading" />
+    ) : (
+      <IframeWidget
+        code={code}
+        agentHttpBase={agentHttp}
+        canvasId={data.id}
+        sessionId={sessionId}
+        refreshKey={data.id}
+      />
+    );
 
   return (
-    <div ref={elRef} className="canvas-widget" style={{ left: data.x, top: data.y, width: data.w, height: data.h }}>
+    <div
+      ref={elRef}
+      className="canvas-widget"
+      style={{ left: data.x, top: data.y, width: data.w, height: data.h }}
+    >
       {/* Resize handles */}
       {RESIZE_HANDLES.map(h => (
-        <div key={h} className={`canvas-resize-handle canvas-resize-handle--${h}`}
-          onMouseDown={e => handleResizeMouseDown(e, h)} />
+        <div
+          key={h}
+          className={`canvas-resize-handle canvas-resize-handle--${h}`}
+          onMouseDown={e => handleResizeMouseDown(e, h)}
+        />
       ))}
 
       <div className="canvas-widget-header" onMouseDown={handleDragMouseDown}>
@@ -1524,17 +2029,33 @@ function CanvasWidget({
             const el = e.currentTarget as HTMLElement;
             const prev = el.textContent;
             el.textContent = 'copied!';
-            setTimeout(() => { el.textContent = prev; }, 1200);
+            setTimeout(() => {
+              el.textContent = prev;
+            }, 1200);
           }}
-        >{data.id}</span>
+        >
+          {data.id}
+        </span>
 
-        <button type="button" className="canvas-widget-code-btn"
-          onClick={e => { e.stopPropagation(); onShowCode(data.title, code); }}
-          title="View source code" aria-label="View source code">
+        <button
+          type="button"
+          className="canvas-widget-code-btn"
+          onClick={e => {
+            e.stopPropagation();
+            onShowCode(data.title, code ?? '');
+          }}
+          title="View source code"
+          aria-label="View source code"
+        >
           {'</>'}
         </button>
 
-        <button type="button" className="canvas-widget-close" onClick={() => onClose(data.id)} aria-label="Close">
+        <button
+          type="button"
+          className="canvas-widget-close"
+          onClick={() => onClose(data.id)}
+          aria-label="Close"
+        >
           <XIcon size={11} />
         </button>
       </div>
@@ -1547,20 +2068,20 @@ function CanvasWidget({
 // ── Widget API client ─────────────────────────────────────────────────────────
 
 type WidgetRecord = {
-  id:          string;
-  kind:        string;
-  label:       string;
-  emoji:       string;
-  defaultW:    number;
-  defaultH:    number;
-  code:        string;
-  keywords?:   string[];
+  id: string;
+  kind: string;
+  label: string;
+  emoji: string;
+  defaultW: number;
+  defaultH: number;
+  code: string;
+  keywords?: string[];
   description?: string;
-  meta?:       Record<string, string>;
-  isBuiltin:   boolean;
-  archived:    boolean;
-  createdAt:   string;
-  updatedAt:   string;
+  meta?: Record<string, string>;
+  isBuiltin: boolean;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const AGENT_HTTP_BASE =
@@ -1568,26 +2089,31 @@ const AGENT_HTTP_BASE =
 
 // Canvas persistence — one .bzcanvas.json per working directory
 type CanvasEntry = {
-  canvasId: string;   // unique ID on this canvas instance
-  widgetId: string;   // ID in the widget registry (kind for built-ins, canvasId for custom)
-  kind:     string;
-  title:    string;
-  x: number; y: number; w: number; h: number;
+  canvasId: string; // unique ID on this canvas instance
+  widgetId: string; // ID in the widget registry (kind for built-ins, canvasId for custom)
+  kind: string;
+  title: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 };
 
 const canvasApi = {
   load: (cwd: string, sessionId?: string | null) => {
     const params = new URLSearchParams({ cwd });
     if (sessionId) params.set('sessionId', sessionId);
-    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`)
-      .then(r => r.json()) as Promise<{ widgets: CanvasEntry[] }>;
+    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`).then(r => r.json()) as Promise<{
+      widgets: CanvasEntry[];
+    }>;
   },
 
   save: (cwd: string, widgets: CanvasEntry[], sessionId?: string | null) => {
     const params = new URLSearchParams({ cwd });
     if (sessionId) params.set('sessionId', sessionId);
     return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: 1, widgets }),
     }).then(r => r.json());
   },
@@ -1598,7 +2124,7 @@ const customWidgetApi = {
   load: (canvasId: string, sessionId?: string | null): Promise<string | null> => {
     const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
     return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`)
-      .then(r => r.ok ? r.json() as Promise<{ code: string }> : null)
+      .then(r => (r.ok ? (r.json() as Promise<{ code: string }>) : null))
       .then(d => d?.code ?? null)
       .catch(() => null);
   },
@@ -1606,38 +2132,46 @@ const customWidgetApi = {
   save: (canvasId: string, code: string, sessionId?: string | null): Promise<void> => {
     const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
     return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
-    }).then(() => undefined).catch(() => undefined);
+    })
+      .then(() => undefined)
+      .catch(() => undefined);
   },
 
   remove: (canvasId: string, sessionId?: string | null): Promise<void> => {
     const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
     return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
       method: 'DELETE',
-    }).then(() => undefined).catch(() => undefined);
+    })
+      .then(() => undefined)
+      .catch(() => undefined);
   },
 };
 
 const widgetApi = {
-  list:   () =>
+  list: () =>
     fetch(`${AGENT_HTTP_BASE}/widgets`).then(r => r.json()) as Promise<{ widgets: WidgetRecord[] }>,
 
   upsert: (w: Omit<WidgetRecord, 'archived' | 'createdAt' | 'updatedAt'>) =>
     fetch(`${AGENT_HTTP_BASE}/widgets`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(w),
     }).then(r => r.json()) as Promise<WidgetRecord>,
 
   seed: (widgets: Omit<WidgetRecord, 'archived' | 'createdAt' | 'updatedAt'>[]) =>
     fetch(`${AGENT_HTTP_BASE}/widgets/seed`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ widgets }),
     }).then(r => r.json()) as Promise<{ seeded: number }>,
 
   archive: (id: string) =>
-    fetch(`${AGENT_HTTP_BASE}/widgets/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      .then(r => r.json()) as Promise<{ ok: boolean }>,
+    fetch(`${AGENT_HTTP_BASE}/widgets/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(r =>
+      r.json(),
+    ) as Promise<{ ok: boolean }>,
 };
 
 // ── Code drawer ───────────────────────────────────────────────────────────────
@@ -1650,13 +2184,13 @@ function CodeDrawer({
   onApply,
   onClose: onCloseDrawer,
 }: {
-  title:       string;
+  title: string;
   initialCode: string;
-  onApply:     (code: string) => void;
-  onClose:     () => void;
+  onApply: (code: string) => void;
+  onClose: () => void;
 }) {
-  const [code,    setCode]    = useState(initialCode);
-  const [copied,  setCopied]  = useState(false);
+  const [code, setCode] = useState(initialCode);
+  const [copied, setCopied] = useState(false);
   const [applied, setApplied] = useState(false);
 
   // Mirror the app theme into Monaco's theme
@@ -1685,12 +2219,19 @@ function CodeDrawer({
           <button type="button" className="canvas-code-copy-btn" onClick={handleCopy}>
             {copied ? '✓ Copied' : 'Copy'}
           </button>
-          <button type="button"
+          <button
+            type="button"
             className={`code-drawer-apply-btn${applied ? ' code-drawer-apply-btn--done' : ''}`}
-            onClick={handleApply}>
+            onClick={handleApply}
+          >
             {applied ? '✓ Applied' : '▶ Apply'}
           </button>
-          <button type="button" className="canvas-widget-close" onClick={onCloseDrawer} aria-label="Close">
+          <button
+            type="button"
+            className="canvas-widget-close"
+            onClick={onCloseDrawer}
+            aria-label="Close"
+          >
             <XIcon size={13} />
           </button>
         </div>
@@ -1702,16 +2243,16 @@ function CodeDrawer({
             value={code}
             onChange={v => setCode(v ?? '')}
             options={{
-              fontSize:           13,
-              fontFamily:         "'Martian Mono', 'Cascadia Code', 'Fira Code', monospace",
-              lineHeight:         22,
-              minimap:            { enabled: false },
+              fontSize: 13,
+              fontFamily: "'Martian Mono', 'Cascadia Code', 'Fira Code', monospace",
+              lineHeight: 22,
+              minimap: { enabled: false },
               scrollBeyondLastLine: false,
-              wordWrap:           'on',
-              tabSize:            2,
-              padding:            { top: 12, bottom: 12 },
-              scrollbar:          { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-              renderLineHighlight:'gutter',
+              wordWrap: 'on',
+              tabSize: 2,
+              padding: { top: 12, bottom: 12 },
+              scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+              renderLineHighlight: 'gutter',
               bracketPairColorization: { enabled: true },
             }}
           />
@@ -1724,12 +2265,12 @@ function CodeDrawer({
 // ── Custom widget editor ──────────────────────────────────────────────────────
 
 type CustomWidgetDef = {
-  id:          string;
-  name:        string;
-  code:        string;
-  keywords:    string;   // comma-separated string in the UI
+  id: string;
+  name: string;
+  code: string;
+  keywords: string; // comma-separated string in the UI
   description: string;
-  meta:        string;   // free-form JSON or plain text
+  meta: string; // free-form JSON or plain text
 };
 
 function CustomWidgetEditor({
@@ -1741,14 +2282,15 @@ function CustomWidgetEditor({
   onSave: (def: CustomWidgetDef) => void;
   onCancel: () => void;
 }) {
-  const [name,        setName]        = useState(initial?.name        ?? 'My Widget');
-  const [keywords,    setKeywords]    = useState(initial?.keywords    ?? '');
+  const [name, setName] = useState(initial?.name ?? 'My Widget');
+  const [keywords, setKeywords] = useState(initial?.keywords ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [meta,        setMeta]        = useState(initial?.meta        ?? '');
-  const [code,        setCode]        = useState(initial?.code        ?? REGISTRY_MAP['custom']?.code ?? '');
-  const [refreshKey,  setRefreshKey]  = useState(0);
+  const [meta, setMeta] = useState(initial?.meta ?? '');
+  const [code, setCode] = useState(initial?.code ?? REGISTRY_MAP.custom?.code ?? '');
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const agentHttp = (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
+  const agentHttp =
+    (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ?? 'http://localhost:18789';
 
   function handleSave() {
     onSave({ id: initial?.id ?? uid(), name, keywords, description, meta, code });
@@ -1758,21 +2300,58 @@ function CustomWidgetEditor({
     <div className="cwe-overlay">
       <div className="cwe-panel animate-slide-in">
         <div className="cwe-header">
-          <input className="cwe-name-input" value={name} onChange={e => setName(e.target.value)} placeholder="Widget name *" />
-          <button type="button" className="cwe-run-btn" onClick={() => setRefreshKey(k => k + 1)}>▶ Run</button>
-          <button type="button" className="cwe-save-btn" onClick={handleSave} disabled={!name.trim() || !code.trim()}>Save</button>
-          <button type="button" className="cwe-cancel-btn" onClick={onCancel}><XIcon size={14} /></button>
+          <input
+            className="cwe-name-input"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Widget name *"
+          />
+          <button type="button" className="cwe-run-btn" onClick={() => setRefreshKey(k => k + 1)}>
+            ▶ Run
+          </button>
+          <button
+            type="button"
+            className="cwe-save-btn"
+            onClick={handleSave}
+            disabled={!name.trim() || !code.trim()}
+          >
+            Save
+          </button>
+          <button type="button" className="cwe-cancel-btn" onClick={onCancel}>
+            <XIcon size={14} />
+          </button>
         </div>
 
         {/* Metadata row */}
         <div className="cwe-meta-row">
-          <input className="cwe-meta-input" value={keywords}    onChange={e => setKeywords(e.target.value)}    placeholder="Keywords (comma-separated)" />
-          <input className="cwe-meta-input cwe-meta-input--wide" value={description} onChange={e => setDescription(e.target.value)} placeholder="Short description" />
-          <input className="cwe-meta-input" value={meta}        onChange={e => setMeta(e.target.value)}        placeholder='Meta (e.g. {"category":"utility"})' />
+          <input
+            className="cwe-meta-input"
+            value={keywords}
+            onChange={e => setKeywords(e.target.value)}
+            placeholder="Keywords (comma-separated)"
+          />
+          <input
+            className="cwe-meta-input cwe-meta-input--wide"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Short description"
+          />
+          <input
+            className="cwe-meta-input"
+            value={meta}
+            onChange={e => setMeta(e.target.value)}
+            placeholder='Meta (e.g. {"category":"utility"})'
+          />
         </div>
 
         <div className="cwe-body">
-          <textarea className="cwe-editor" value={code} onChange={e => setCode(e.target.value)} spellCheck={false} placeholder="// JavaScript code…" />
+          <textarea
+            className="cwe-editor"
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            spellCheck={false}
+            placeholder="// JavaScript code…"
+          />
           <div className="cwe-preview">
             <IframeWidget code={code} agentHttpBase={agentHttp} refreshKey={refreshKey} />
           </div>
@@ -1785,11 +2364,11 @@ function CustomWidgetEditor({
 // ── Credential Manager ────────────────────────────────────────────────────────
 
 function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose: () => void }) {
-  const [keys,    setKeys]    = useState<string[]>([]);
-  const [newKey,  setNewKey]  = useState('');
-  const [newVal,  setNewVal]  = useState('');
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState('');
+  const [keys, setKeys] = useState<string[]>([]);
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   function refresh() {
     fetch(`${agentHttp}/credentials`)
@@ -1798,25 +2377,34 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
       .catch(() => setError('Cannot reach server'));
   }
 
-  useEffect(() => { refresh(); }, [agentHttp]);
+  useEffect(() => {
+    refresh();
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refresh stable
+  }, [refresh]);
 
   async function handleAdd() {
     if (!newKey.trim() || !newVal.trim()) return;
     setSaving(true);
     try {
       await fetch(`${agentHttp}/credentials`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: newKey.trim(), value: newVal.trim() }),
       });
-      setNewKey(''); setNewVal('');
+      setNewKey('');
+      setNewVal('');
       refresh();
-    } catch { setError('Save failed'); }
-    finally { setSaving(false); }
+    } catch {
+      setError('Save failed');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete(key: string) {
-    await fetch(`${agentHttp}/credentials/${encodeURIComponent(key)}`, { method: 'DELETE' })
-      .catch(() => {});
+    await fetch(`${agentHttp}/credentials/${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(
+      () => {},
+    );
     refresh();
   }
 
@@ -1825,12 +2413,14 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
       <div className="cred-panel animate-slide-in">
         <div className="cred-header">
           <span className="cred-title">🔑 Credentials</span>
-          <button type="button" className="cwe-cancel-btn" onClick={onClose}><XIcon size={14} /></button>
+          <button type="button" className="cwe-cancel-btn" onClick={onClose}>
+            <XIcon size={14} />
+          </button>
         </div>
         <p className="cred-hint">
-          Stored in <code>server_data/credentials.json</code>.
-          Credentials are <strong>never sent to widgets</strong> — use
-          the proxy with <code>{'{{KEY}}'}</code> placeholders instead:
+          Stored in <code>server_data/credentials.json</code>. Credentials are{' '}
+          <strong>never sent to widgets</strong> — use the proxy with <code>{'{{KEY}}'}</code>{' '}
+          placeholders instead:
         </p>
         <pre className="cred-example">{`fetch(window.__agentHttpBase__ + '/proxy', {
   method: 'POST',
@@ -1850,19 +2440,34 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
             <div key={k} className="cred-row">
               <code className="cred-key">{k}</code>
               <span className="cred-masked">••••••••</span>
-              <button type="button" className="cred-delete" onClick={() => void handleDelete(k)}>Delete</button>
+              <button type="button" className="cred-delete" onClick={() => void handleDelete(k)}>
+                Delete
+              </button>
             </div>
           ))}
         </div>
 
         <div className="cred-add-row">
-          <input className="cred-input" placeholder="KEY_NAME" value={newKey}
-            onChange={e => setNewKey(e.target.value)} />
-          <input className="cred-input cred-input--val" placeholder="value" type="password"
-            value={newVal} onChange={e => setNewVal(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && void handleAdd()} />
-          <button type="button" className="code-drawer-apply-btn" onClick={() => void handleAdd()}
-            disabled={saving || !newKey.trim() || !newVal.trim()}>
+          <input
+            className="cred-input"
+            placeholder="KEY_NAME"
+            value={newKey}
+            onChange={e => setNewKey(e.target.value)}
+          />
+          <input
+            className="cred-input cred-input--val"
+            placeholder="value"
+            type="password"
+            value={newVal}
+            onChange={e => setNewVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && void handleAdd()}
+          />
+          <button
+            type="button"
+            className="code-drawer-apply-btn"
+            onClick={() => void handleAdd()}
+            disabled={saving || !newKey.trim() || !newVal.trim()}
+          >
             {saving ? '…' : 'Add'}
           </button>
         </div>
@@ -1875,343 +2480,491 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
 
 type CanvasPanelHandle = { reload: () => void };
 const CanvasPanel = forwardRef<CanvasPanelHandle, { cwd?: string; sessionId?: string | null }>(
-function CanvasPanel({ cwd, sessionId }, ref) {
-  const [canvasWidgets, setCanvasWidgets] = useState<WidgetData[]>([]);
-  const [dragging,      setDragging]      = useState(false);
-  const draggingRef = useRef(false);
-  const [apiWidgets,    setApiWidgets]    = useState<WidgetRecord[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [editingDef,    setEditingDef]    = useState<CustomWidgetDef | null>(null);
-  const [showNewEditor,    setShowNewEditor]    = useState(false);
-  const [showCredManager,  setShowCredManager]  = useState(false);
-  const [widgetSearch,     setWidgetSearch]     = useState('');
-  // saveTimerRef removed — canvas is saved only on explicit user drag/resize, not on every poll update
-  const canvasAreaRef  = useRef<HTMLDivElement>(null);
-  const [codeDrawer,    setCodeDrawer]    = useState<{ id: string; title: string; code: string } | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const loadCanvasRef = useRef<() => void>(() => {});
+  function CanvasPanel({ cwd, sessionId }, ref) {
+    const [canvasWidgets, setCanvasWidgets] = useState<WidgetData[]>([]);
+    const [dragging, setDragging] = useState(false);
+    const draggingRef = useRef(false);
+    const [apiWidgets, setApiWidgets] = useState<WidgetRecord[]>([]);
+    const [_loading, setLoading] = useState(true);
+    const [editingDef, setEditingDef] = useState<CustomWidgetDef | null>(null);
+    const [showNewEditor, setShowNewEditor] = useState(false);
+    const [showCredManager, setShowCredManager] = useState(false);
+    const [widgetSearch, setWidgetSearch] = useState('');
+    // saveTimerRef removed — canvas is saved only on explicit user drag/resize, not on every poll update
+    const canvasAreaRef = useRef<HTMLDivElement>(null);
+    const [codeDrawer, setCodeDrawer] = useState<{
+      id: string;
+      title: string;
+      code: string;
+    } | null>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+    const loadCanvasRef = useRef<() => void>(() => {});
 
-  useImperativeHandle(ref, () => ({
-    reload: () => loadCanvasRef.current(),
-  }));
-
-  // Clear canvas immediately when session changes so stale widgets don't show during load
-  useEffect(() => {
-    setCanvasWidgets([]);
-  }, [sessionId]);
-
-  // Load canvas on mount and expose reload() via ref — called explicitly after each agent result
-  useEffect(() => {
-    if (!cwd || !sessionId) return;
-
-    const loadCanvas = () => {
-      if (draggingRef.current) return;
-      canvasApi.load(cwd, sessionId)
-        .then(({ widgets: entries }) => {
-          if (!entries?.length) { setCanvasWidgets([]); return; }
-          const PAD = 24;
-          const minX = Math.min(...entries.map(e => e.x));
-          const minY = Math.min(...entries.map(e => e.y));
-          const dx   = PAD - minX;
-          const dy   = PAD - minY;
-          const baseWidgets = entries.map(e => ({
-            id:    e.canvasId,
-            kind:  e.kind as WidgetKind,
-            title: e.title,
-            x: e.x + dx, y: e.y + dy, w: e.w, h: e.h,
-          }));
-          setCanvasWidgets(baseWidgets);
-          const customEntries = entries.filter(e => e.kind === 'custom');
-          if (customEntries.length > 0) {
-            Promise.all(
-              customEntries.map(e =>
-                customWidgetApi.load(e.canvasId, sessionId).then(code => ({ canvasId: e.canvasId, code }))
-              )
-            ).then(results => {
-              setCanvasWidgets(prev => prev.map(w => {
-                const hit = results.find(r => r.canvasId === w.id);
-                return hit?.code ? { ...w, code: hit.code } : w;
-              }));
-            }).catch(() => null);
-          }
-        })
-        .catch(() => {});
-    };
-
-    loadCanvasRef.current = loadCanvas;
-    loadCanvas();
-  }, [cwd, sessionId]);
-
-  // Scroll to origin on the first render that has widgets, then hold that
-  // position for 900 ms — long enough for all widget iframes to finish
-  // loading their CDN scripts (Chart.js etc.), which can otherwise trigger
-  // the browser to scroll the canvas-area to bring them into view.
-  const initScrolledRef = useRef(false);
-  // Reset scroll lock when widget count grows (agent deployed a new widget)
-  useEffect(() => { initScrolledRef.current = false; }, [canvasWidgets.length]);
-  useLayoutEffect(() => {
-    if (canvasWidgets.length === 0 || initScrolledRef.current) return;
-    initScrolledRef.current = true;
-    const area = canvasAreaRef.current;
-    if (!area) return;
-
-    area.scrollTop  = 0;
-    area.scrollLeft = 0;
-
-    let locked = true;
-    const hold = () => { if (locked) { area.scrollTop = 0; area.scrollLeft = 0; } };
-    area.addEventListener('scroll', hold);
-    const t = setTimeout(() => { locked = false; area.removeEventListener('scroll', hold); }, 900);
-    return () => { clearTimeout(t); area.removeEventListener('scroll', hold); };
-  }, [canvasWidgets]);
-
-  // Canvas is saved explicitly in handleDrop / handleResize — NOT here — to avoid
-  // overwriting server-side changes made by the agent between a poll and a stale debounce fire.
-
-  // On mount: seed built-ins then fetch the full list from the API
-  useEffect(() => {
-    const seedPayload = WIDGET_REGISTRY.map(w => ({
-      id:          w.kind,
-      kind:        w.kind,
-      label:       w.label,
-      emoji:       w.emoji,
-      defaultW:    w.defaultW,
-      defaultH:    w.defaultH,
-      code:        w.code,
-      keywords:    w.keywords,
-      description: w.description,
-      meta:        w.meta,
-      isBuiltin:   true,
+    useImperativeHandle(ref, () => ({
+      reload: () => loadCanvasRef.current(),
     }));
 
-    widgetApi.seed(seedPayload)
-      .catch(() => { /* server offline — continue with registry fallback */ })
-      .finally(() => {
-        widgetApi.list()
-          .then(({ widgets }) => setApiWidgets(widgets))
-          .catch(() => { /* server offline — toolbar falls back to WIDGET_REGISTRY */ })
-          .finally(() => setLoading(false));
-      });
-  }, []);
+    // Clear canvas immediately when session changes so stale widgets don't show during load
+    useEffect(() => {
+      setCanvasWidgets([]);
+    }, []);
 
-  // Toolbar entries: prefer API list; fall back to local registry if server is offline
-  const toolbarEntries: { id: string; kind: string; label: string; emoji: string;
-                           defaultW: number; defaultH: number; code: string; isBuiltin: boolean }[] =
-    apiWidgets.length > 0
-      ? apiWidgets
-      : WIDGET_REGISTRY.map(w => ({ id: w.kind, kind: w.kind, label: w.label,
-          emoji: w.emoji, defaultW: w.defaultW, defaultH: w.defaultH,
-          code: w.code, isBuiltin: true }));
+    // Load canvas on mount and expose reload() via ref — called explicitly after each agent result
+    useEffect(() => {
+      if (!cwd || !sessionId) return;
 
-  function spawnWidget(entry: typeof toolbarEntries[number]) {
-    setCanvasWidgets(prev => {
-      const canvasW = canvasAreaRef.current?.clientWidth ?? 1400;
-      const { x, y } = findSpawnPos(prev, entry.defaultW, entry.defaultH, canvasW);
-      return applyGravity([...prev, {
-        id: uid(), kind: entry.kind as WidgetKind,
-        title: entry.label, code: entry.code,
-        x, y, w: entry.defaultW, h: entry.defaultH,
-      }]);
-    });
-  }
+      const loadCanvas = () => {
+        if (draggingRef.current) return;
+        canvasApi
+          .load(cwd, sessionId)
+          .then(({ widgets: entries }) => {
+            if (!entries?.length) {
+              setCanvasWidgets([]);
+              return;
+            }
+            const PAD = 24;
+            const minX = Math.min(...entries.map(e => e.x));
+            const minY = Math.min(...entries.map(e => e.y));
+            const dx = PAD - minX;
+            const dy = PAD - minY;
+            const baseWidgets = entries.map(e => ({
+              id: e.canvasId,
+              kind: e.kind as WidgetKind,
+              title: e.title,
+              x: e.x + dx,
+              y: e.y + dy,
+              w: e.w,
+              h: e.h,
+            }));
+            setCanvasWidgets(baseWidgets);
+            const customEntries = entries.filter(e => e.kind === 'custom');
+            if (customEntries.length > 0) {
+              Promise.all(
+                customEntries.map(e =>
+                  customWidgetApi
+                    .load(e.canvasId, sessionId)
+                    .then(code => ({ canvasId: e.canvasId, code })),
+                ),
+              )
+                .then(results => {
+                  setCanvasWidgets(prev =>
+                    prev.map(w => {
+                      const hit = results.find(r => r.canvasId === w.id);
+                      return hit?.code ? { ...w, code: hit.code } : w;
+                    }),
+                  );
+                })
+                .catch(() => null);
+            }
+          })
+          .catch(() => {});
+      };
 
-  async function handleSaveCustom(def: CustomWidgetDef) {
-    let parsedMeta: Record<string, string> = {};
-    try { parsedMeta = JSON.parse(def.meta) as Record<string, string>; } catch { /* plain text → store as-is */ }
+      loadCanvasRef.current = loadCanvas;
+      loadCanvas();
+    }, [cwd, sessionId]);
 
-    const record = await widgetApi.upsert({
-      id: def.id, kind: 'custom', label: def.name, emoji: '⚡',
-      defaultW: 340, defaultH: 280, code: def.code, isBuiltin: false,
-      keywords:    def.keywords.split(',').map(k => k.trim()).filter(Boolean),
-      description: def.description,
-      meta:        Object.keys(parsedMeta).length ? parsedMeta : { note: def.meta },
-    }).catch(() => null);
+    // Scroll to origin on the first render that has widgets, then hold that
+    // position for 900 ms — long enough for all widget iframes to finish
+    // loading their CDN scripts (Chart.js etc.), which can otherwise trigger
+    // the browser to scroll the canvas-area to bring them into view.
+    const initScrolledRef = useRef(false);
+    // Reset scroll lock when widget count grows (agent deployed a new widget)
+    useEffect(() => {
+      initScrolledRef.current = false;
+    }, []);
+    useLayoutEffect(() => {
+      if (canvasWidgets.length === 0 || initScrolledRef.current) return;
+      initScrolledRef.current = true;
+      const area = canvasAreaRef.current;
+      if (!area) return;
 
-    // Refresh API list (or add locally if offline)
-    if (record) {
-      setApiWidgets(prev => {
-        const exists = prev.find(w => w.id === def.id);
-        return exists ? prev.map(w => w.id === def.id ? record : w) : [...prev, record];
+      area.scrollTop = 0;
+      area.scrollLeft = 0;
+
+      let locked = true;
+      const hold = () => {
+        if (locked) {
+          area.scrollTop = 0;
+          area.scrollLeft = 0;
+        }
+      };
+      area.addEventListener('scroll', hold);
+      const t = setTimeout(() => {
+        locked = false;
+        area.removeEventListener('scroll', hold);
+      }, 900);
+      return () => {
+        clearTimeout(t);
+        area.removeEventListener('scroll', hold);
+      };
+    }, [canvasWidgets]);
+
+    // Canvas is saved explicitly in handleDrop / handleResize — NOT here — to avoid
+    // overwriting server-side changes made by the agent between a poll and a stale debounce fire.
+
+    // On mount: seed built-ins then fetch the full list from the API
+    useEffect(() => {
+      const seedPayload = WIDGET_REGISTRY.map(w => ({
+        id: w.kind,
+        kind: w.kind,
+        label: w.label,
+        emoji: w.emoji,
+        defaultW: w.defaultW,
+        defaultH: w.defaultH,
+        code: w.code,
+        keywords: w.keywords,
+        description: w.description,
+        meta: w.meta,
+        isBuiltin: true,
+      }));
+
+      widgetApi
+        .seed(seedPayload)
+        .catch(() => {
+          /* server offline — continue with registry fallback */
+        })
+        .finally(() => {
+          widgetApi
+            .list()
+            .then(({ widgets }) => setApiWidgets(widgets))
+            .catch(() => {
+              /* server offline — toolbar falls back to WIDGET_REGISTRY */
+            })
+            .finally(() => setLoading(false));
+        });
+    }, []);
+
+    // Toolbar entries: prefer API list; fall back to local registry if server is offline
+    const toolbarEntries: {
+      id: string;
+      kind: string;
+      label: string;
+      emoji: string;
+      defaultW: number;
+      defaultH: number;
+      code: string;
+      isBuiltin: boolean;
+    }[] =
+      apiWidgets.length > 0
+        ? apiWidgets
+        : WIDGET_REGISTRY.map(w => ({
+            id: w.kind,
+            kind: w.kind,
+            label: w.label,
+            emoji: w.emoji,
+            defaultW: w.defaultW,
+            defaultH: w.defaultH,
+            code: w.code,
+            isBuiltin: true,
+          }));
+
+    function spawnWidget(entry: (typeof toolbarEntries)[number]) {
+      setCanvasWidgets(prev => {
+        const canvasW = canvasAreaRef.current?.clientWidth ?? 1400;
+        const { x, y } = findSpawnPos(prev, entry.defaultW, entry.defaultH, canvasW);
+        return applyGravity([
+          ...prev,
+          {
+            id: uid(),
+            kind: entry.kind as WidgetKind,
+            title: entry.label,
+            code: entry.code,
+            x,
+            y,
+            w: entry.defaultW,
+            h: entry.defaultH,
+          },
+        ]);
       });
     }
 
-    // Spawn on canvas
-    setCanvasWidgets(prev => {
-      const next = [...prev, {
-        id: uid(), kind: 'custom' as WidgetKind, title: def.name, code: def.code,
-        ...findSpawnPos(prev, 340, 280, canvasAreaRef.current?.clientWidth ?? 1400), w: 340, h: 280,
-      }];
-      return resolveOverlaps(next);
-    });
+    async function handleSaveCustom(def: CustomWidgetDef) {
+      let parsedMeta: Record<string, string> = {};
+      try {
+        parsedMeta = JSON.parse(def.meta) as Record<string, string>;
+      } catch {
+        /* plain text → store as-is */
+      }
 
-    setEditingDef(null);
-    setShowNewEditor(false);
-  }
+      const record = await widgetApi
+        .upsert({
+          id: def.id,
+          kind: 'custom',
+          label: def.name,
+          emoji: '⚡',
+          defaultW: 340,
+          defaultH: 280,
+          code: def.code,
+          isBuiltin: false,
+          keywords: def.keywords
+            .split(',')
+            .map(k => k.trim())
+            .filter(Boolean),
+          description: def.description,
+          meta: Object.keys(parsedMeta).length ? parsedMeta : { note: def.meta },
+        })
+        .catch(() => null);
 
-  async function handleArchiveWidget(id: string) {
-    await widgetApi.archive(id).catch(() => null);
-    setApiWidgets(prev => prev.filter(w => w.id !== id));
-  }
+      // Refresh API list (or add locally if offline)
+      if (record) {
+        setApiWidgets(prev => {
+          const exists = prev.find(w => w.id === def.id);
+          return exists ? prev.map(w => (w.id === def.id ? record : w)) : [...prev, record];
+        });
+      }
 
-  function _saveCanvas(widgets: WidgetData[]) {
-    if (!cwd || !sessionId) return;
-    const entries: CanvasEntry[] = widgets.map(w => ({
-      canvasId: w.id,
-      widgetId: (w.kind === 'custom' || w.code) ? w.id : w.kind,
-      kind:     w.kind,
-      title:    w.title,
-      x: w.x, y: w.y, w: w.w, h: w.h,
-    }));
-    canvasApi.save(cwd, entries, sessionId).catch(() => {});
-  }
+      // Spawn on canvas
+      setCanvasWidgets(prev => {
+        const next = [
+          ...prev,
+          {
+            id: uid(),
+            kind: 'custom' as WidgetKind,
+            title: def.name,
+            code: def.code,
+            ...findSpawnPos(prev, 340, 280, canvasAreaRef.current?.clientWidth ?? 1400),
+            w: 340,
+            h: 280,
+          },
+        ];
+        return resolveOverlaps(next);
+      });
 
-  function handleDrop(id: string, x: number, y: number) {
-    draggingRef.current = false;
-    setDragging(false);
-    const sx = Math.max(0, snapVal(x));
-    const sy = Math.max(0, snapVal(y));
-    const moved = canvasWidgets.map(w => w.id === id ? { ...w, x: sx, y: sy } : w);
-    const gravitated = applyGravity(moved, id);
-    const next = resolveOverlaps(gravitated, id);
-    setCanvasWidgets(next);
-    _saveCanvas(next);
-  }
-  function handleResize(id: string, x: number, y: number, w: number, h: number) {
-    draggingRef.current = false;
-    setDragging(false);
-    const resized = canvasWidgets.map(ww => ww.id === id ? { ...ww, x, y, w, h } : ww);
-    const gravitated = applyGravity(resized, id);
-    const next = resolveOverlaps(gravitated, id);
-    setCanvasWidgets(next);
-    _saveCanvas(next);
-  }
+      setEditingDef(null);
+      setShowNewEditor(false);
+    }
 
-  return (
-    <div className="canvas-panel">
-      {codeDrawer && (
-        <CodeDrawer
-          title={codeDrawer.title}
-          initialCode={codeDrawer.code}
-          onApply={newCode => {
-            // Update in-memory state immediately
-            setCanvasWidgets(prev => prev.map(w => w.id === codeDrawer.id ? { ...w, code: newCode } : w));
-            setCodeDrawer(d => d ? { ...d, code: newCode } : null);
-            // Persist to server_data/custom_widgets/{canvasId}.js so it survives refresh
-            void customWidgetApi.save(codeDrawer.id, newCode, sessionId);
-          }}
-          onClose={() => setCodeDrawer(null)}
-        />
-      )}
-      {showCredManager && (
-        <CredentialManager agentHttp={AGENT_HTTP_BASE} onClose={() => setShowCredManager(false)} />
-      )}
-      {showNewEditor && (
-        <CustomWidgetEditor onSave={def => { void handleSaveCustom(def); }} onCancel={() => setShowNewEditor(false)} />
-      )}
-      {editingDef && (
-        <CustomWidgetEditor initial={editingDef} onSave={def => { void handleSaveCustom(def); }} onCancel={() => setEditingDef(null)} />
-      )}
+    async function handleArchiveWidget(id: string) {
+      await widgetApi.archive(id).catch(() => null);
+      setApiWidgets(prev => prev.filter(w => w.id !== id));
+    }
 
-      <div className="canvas-toolbar">
-        {/* Search input — filters all widgets by name/keywords */}
-        <input
-          ref={searchRef}
-          className="canvas-widget-search"
-          placeholder="Search widgets…"
-          value={widgetSearch}
-          onChange={e => setWidgetSearch(e.target.value)}
-        />
+    function _saveCanvas(widgets: WidgetData[]) {
+      if (!cwd || !sessionId) return;
+      const entries: CanvasEntry[] = widgets.map(w => ({
+        canvasId: w.id,
+        widgetId: w.kind === 'custom' || w.code ? w.id : w.kind,
+        kind: w.kind,
+        title: w.title,
+        x: w.x,
+        y: w.y,
+        w: w.w,
+        h: w.h,
+      }));
+      canvasApi.save(cwd, entries, sessionId).catch(() => {});
+    }
 
-        {/* Filtered built-in widgets */}
-        {toolbarEntries
-          .filter(e => e.kind !== 'custom')
-          .filter(e => {
-            if (!widgetSearch.trim()) return true;
-            const q = widgetSearch.toLowerCase();
-            const kwds = (e as WidgetRecord).keywords ?? [];
-            return (
-              e.label.toLowerCase().includes(q) ||
-              kwds.some(k => k.toLowerCase().includes(q)) ||
-              ((e as WidgetRecord).description ?? '').toLowerCase().includes(q)
-            );
-          })
-          .map(entry => (
-            <button key={entry.id} type="button" className="canvas-add-btn" onClick={() => spawnWidget(entry)}>
-              {entry.emoji} {entry.label}
-            </button>
-          ))}
+    function handleDrop(id: string, x: number, y: number) {
+      draggingRef.current = false;
+      setDragging(false);
+      const sx = Math.max(0, snapVal(x));
+      const sy = Math.max(0, snapVal(y));
+      const moved = canvasWidgets.map(w => (w.id === id ? { ...w, x: sx, y: sy } : w));
+      const gravitated = applyGravity(moved, id);
+      const next = resolveOverlaps(gravitated, id);
+      setCanvasWidgets(next);
+      _saveCanvas(next);
+    }
+    function handleResize(id: string, x: number, y: number, w: number, h: number) {
+      draggingRef.current = false;
+      setDragging(false);
+      const resized = canvasWidgets.map(ww => (ww.id === id ? { ...ww, x, y, w, h } : ww));
+      const gravitated = applyGravity(resized, id);
+      const next = resolveOverlaps(gravitated, id);
+      setCanvasWidgets(next);
+      _saveCanvas(next);
+    }
 
-        <span className="canvas-toolbar-divider" />
-
-        <span className="canvas-toolbar-divider" />
-        {canvasWidgets.length > 1 && (
-          <button type="button" className="canvas-add-btn canvas-add-btn--tidy"
-            title="Auto-arrange: pack all widgets neatly from top-left"
-            onClick={() => setCanvasWidgets(prev =>
-              autoArrange(prev, canvasAreaRef.current?.clientWidth ?? 1400)
-            )}>
-            ⊞ Tidy
-          </button>
-        )}
-        <button type="button" className="canvas-add-btn canvas-add-btn--custom" onClick={() => setShowNewEditor(true)}>
-          ⚡ + Custom
-        </button>
-        <button type="button" className="canvas-add-btn canvas-add-btn--creds" onClick={() => setShowCredManager(true)}
-          title="Manage API credentials available to all widgets">
-          🔑 Credentials
-        </button>
-
-        {/* Custom (user-saved) widgets */}
-        {toolbarEntries.filter(e => !e.isBuiltin).map(entry => (
-          <button key={entry.id} type="button" className="canvas-add-btn"
-            onClick={() => spawnWidget(entry)}
-            onContextMenu={e => {
-              e.preventDefault();
-              setEditingDef({
-                id:          entry.id,
-                name:        entry.label,
-                code:        entry.code,
-                keywords:    (entry as WidgetRecord).keywords?.join(', ') ?? '',
-                description: (entry as WidgetRecord).description ?? '',
-                meta:        (entry as WidgetRecord).meta ? JSON.stringify((entry as WidgetRecord).meta) : '',
-              });
-            }}>
-            ⚡ {entry.label}
-            <span className="canvas-custom-archive" title="Archive"
-              onClick={ev => { ev.stopPropagation(); void handleArchiveWidget(entry.id); }}>×</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Grid is a background-image on the area itself — covers full scrollable content */}
-      <div ref={canvasAreaRef} className={`canvas-area${dragging ? ' canvas-area--dragging' : ''}`}
-        style={{ overflowAnchor: 'none' } as React.CSSProperties}>
-        {canvasWidgets.length === 0 && (
-          <div className="canvas-empty">
-            <SquaresFourIcon size={36} color="var(--text-tertiary)" weight="duotone" />
-            <p className="canvas-empty-title">Empty canvas</p>
-            <p className="canvas-empty-hint">Add widgets · Drag to move · Resize edges · Right-click custom to edit</p>
-          </div>
-        )}
-        {canvasWidgets.map(w => (
-          <CanvasWidget key={w.id} data={w} sessionId={sessionId}
-            onDragStart={() => { draggingRef.current = true; setDragging(true); }}
-            onDrop={handleDrop} onResize={handleResize}
-            onClose={id => {
-              setCanvasWidgets(prev => {
-                const removed = prev.find(ww => ww.id === id);
-                // Clean up custom code file if one was saved for this instance
-                if (removed?.code) void customWidgetApi.remove(id, sessionId);
-                return prev.filter(ww => ww.id !== id);
-              });
+    return (
+      <div className="canvas-panel">
+        {codeDrawer && (
+          <CodeDrawer
+            title={codeDrawer.title}
+            initialCode={codeDrawer.code}
+            onApply={newCode => {
+              // Update in-memory state immediately
+              setCanvasWidgets(prev =>
+                prev.map(w => (w.id === codeDrawer.id ? { ...w, code: newCode } : w)),
+              );
+              setCodeDrawer(d => (d ? { ...d, code: newCode } : null));
+              // Persist to server_data/custom_widgets/{canvasId}.js so it survives refresh
+              void customWidgetApi.save(codeDrawer.id, newCode, sessionId);
             }}
-            onShowCode={(title, code) => setCodeDrawer({ id: w.id, title, code })}
+            onClose={() => setCodeDrawer(null)}
           />
-        ))}
+        )}
+        {showCredManager && (
+          <CredentialManager
+            agentHttp={AGENT_HTTP_BASE}
+            onClose={() => setShowCredManager(false)}
+          />
+        )}
+        {showNewEditor && (
+          <CustomWidgetEditor
+            onSave={def => {
+              void handleSaveCustom(def);
+            }}
+            onCancel={() => setShowNewEditor(false)}
+          />
+        )}
+        {editingDef && (
+          <CustomWidgetEditor
+            initial={editingDef}
+            onSave={def => {
+              void handleSaveCustom(def);
+            }}
+            onCancel={() => setEditingDef(null)}
+          />
+        )}
+
+        <div className="canvas-toolbar">
+          {/* Search input — filters all widgets by name/keywords */}
+          <input
+            ref={searchRef}
+            className="canvas-widget-search"
+            placeholder="Search widgets…"
+            value={widgetSearch}
+            onChange={e => setWidgetSearch(e.target.value)}
+          />
+
+          {/* Filtered built-in widgets */}
+          {toolbarEntries
+            .filter(e => e.kind !== 'custom')
+            .filter(e => {
+              if (!widgetSearch.trim()) return true;
+              const q = widgetSearch.toLowerCase();
+              const kwds = (e as WidgetRecord).keywords ?? [];
+              return (
+                e.label.toLowerCase().includes(q) ||
+                kwds.some(k => k.toLowerCase().includes(q)) ||
+                ((e as WidgetRecord).description ?? '').toLowerCase().includes(q)
+              );
+            })
+            .map(entry => (
+              <button
+                key={entry.id}
+                type="button"
+                className="canvas-add-btn"
+                onClick={() => spawnWidget(entry)}
+              >
+                {entry.emoji} {entry.label}
+              </button>
+            ))}
+
+          <span className="canvas-toolbar-divider" />
+
+          <span className="canvas-toolbar-divider" />
+          {canvasWidgets.length > 1 && (
+            <button
+              type="button"
+              className="canvas-add-btn canvas-add-btn--tidy"
+              title="Auto-arrange: pack all widgets neatly from top-left"
+              onClick={() =>
+                setCanvasWidgets(prev =>
+                  autoArrange(prev, canvasAreaRef.current?.clientWidth ?? 1400),
+                )
+              }
+            >
+              ⊞ Tidy
+            </button>
+          )}
+          <button
+            type="button"
+            className="canvas-add-btn canvas-add-btn--custom"
+            onClick={() => setShowNewEditor(true)}
+          >
+            ⚡ + Custom
+          </button>
+          <button
+            type="button"
+            className="canvas-add-btn canvas-add-btn--creds"
+            onClick={() => setShowCredManager(true)}
+            title="Manage API credentials available to all widgets"
+          >
+            🔑 Credentials
+          </button>
+
+          {/* Custom (user-saved) widgets */}
+          {toolbarEntries
+            .filter(e => !e.isBuiltin)
+            .map(entry => (
+              <button
+                key={entry.id}
+                type="button"
+                className="canvas-add-btn"
+                onClick={() => spawnWidget(entry)}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  setEditingDef({
+                    id: entry.id,
+                    name: entry.label,
+                    code: entry.code,
+                    keywords: (entry as WidgetRecord).keywords?.join(', ') ?? '',
+                    description: (entry as WidgetRecord).description ?? '',
+                    meta: (entry as WidgetRecord).meta
+                      ? JSON.stringify((entry as WidgetRecord).meta)
+                      : '',
+                  });
+                }}
+              >
+                ⚡ {entry.label}
+                <span
+                  className="canvas-custom-archive"
+                  title="Archive"
+                  onClick={ev => {
+                    ev.stopPropagation();
+                    void handleArchiveWidget(entry.id);
+                  }}
+                >
+                  ×
+                </span>
+              </button>
+            ))}
+        </div>
+
+        {/* Grid is a background-image on the area itself — covers full scrollable content */}
+        <div
+          ref={canvasAreaRef}
+          className={`canvas-area${dragging ? ' canvas-area--dragging' : ''}`}
+          style={{ overflowAnchor: 'none' } as React.CSSProperties}
+        >
+          {canvasWidgets.length === 0 && (
+            <div className="canvas-empty">
+              <SquaresFourIcon size={36} color="var(--text-tertiary)" weight="duotone" />
+              <p className="canvas-empty-title">Empty canvas</p>
+              <p className="canvas-empty-hint">
+                Add widgets · Drag to move · Resize edges · Right-click custom to edit
+              </p>
+            </div>
+          )}
+          {canvasWidgets.map(w => (
+            <CanvasWidget
+              key={w.id}
+              data={w}
+              sessionId={sessionId}
+              onDragStart={() => {
+                draggingRef.current = true;
+                setDragging(true);
+              }}
+              onDrop={handleDrop}
+              onResize={handleResize}
+              onClose={id => {
+                setCanvasWidgets(prev => {
+                  const removed = prev.find(ww => ww.id === id);
+                  // Clean up custom code file if one was saved for this instance
+                  if (removed?.code) void customWidgetApi.remove(id, sessionId);
+                  return prev.filter(ww => ww.id !== id);
+                });
+              }}
+              onShowCode={(title, code) => setCodeDrawer({ id: w.id, title, code })}
+            />
+          ))}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -2234,22 +2987,27 @@ type SessionInfo = {
 
 type FsEntry = { name: string; path: string; isDir: boolean };
 
-function DirPickerPanel({ rootPath, onConfirm, onCancel }: {
+function DirPickerPanel({
+  rootPath,
+  onConfirm,
+  onCancel,
+}: {
   rootPath: string;
   onConfirm: (path: string) => void;
   onCancel: () => void;
 }) {
-  const [browsePath,    setBrowsePath]   = useState('');
-  const [entries,       setEntries]      = useState<FsEntry[]>([]);
-  const [newFolderName, setNewFolderName] = useState('');
-  const [mkdirErr,      setMkdirErr]     = useState('');
+  const [browsePath, setBrowsePath] = useState('');
+  const [entries, setEntries] = useState<FsEntry[]>([]);
+  // null = no pending new folder; string = current edit value ('' = just started)
+  const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
+  const [mkdirErr, setMkdirErr] = useState('');
 
   const root = rootPath.replace(/\/$/, '');
   const rootParts = root.split('/').filter(Boolean);
 
   function isAboveRoot(path: string) {
     const p = path.replace(/\/$/, '');
-    return p !== root && !p.startsWith(root + '/');
+    return p !== root && !p.startsWith(`${root}/`);
   }
 
   function loadPath(path: string) {
@@ -2261,105 +3019,162 @@ function DirPickerPanel({ rootPath, onConfirm, onCancel }: {
         if (isAboveRoot(resolved)) return;
         setBrowsePath(resolved);
         setMkdirErr('');
-        const dirs = (d.entries ?? [])
-          .filter(e => e.isDir && !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__');
+        const dirs = (d.entries ?? []).filter(
+          e =>
+            e.isDir &&
+            !e.name.startsWith('.') &&
+            e.name !== 'node_modules' &&
+            e.name !== '__pycache__',
+        );
         setEntries(dirs);
       })
       .catch(() => null);
   }
 
-  function handleOpen() {
-    const name = newFolderName.trim();
-    if (name) {
-      // Create folder then open it
-      fetch(`${HTTP_BASE}/files/mkdir`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent: browsePath, name }),
-      })
-        .then(r => r.json())
-        .then((d: { path?: string; error?: string }) => {
-          if (d.error) { setMkdirErr(d.error); return; }
-          onConfirm(d.path ?? browsePath);
-        })
-        .catch(() => setMkdirErr('Failed to create folder'));
-    } else {
-      onConfirm(browsePath);
+  function commitNewFolder() {
+    const name = (pendingFolderName ?? '').trim();
+    if (!name) {
+      setPendingFolderName(null);
+      return;
     }
+    fetch(`${HTTP_BASE}/files/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent: browsePath, name }),
+    })
+      .then(r => r.json())
+      .then((d: { path?: string; error?: string }) => {
+        if (d.error) {
+          setMkdirErr(d.error);
+          return;
+        }
+        setPendingFolderName(null);
+        loadPath(d.path ?? browsePath);
+      })
+      .catch(() => setMkdirErr('Failed to create folder'));
   }
 
-  useEffect(() => { loadPath(root); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadPath(root);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: loadPath stable
+  }, [loadPath, root]);
 
   const parts = browsePath.split('/').filter(Boolean);
-  const parentPath = parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '/';
+  const parentPath = parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : '/';
   const atRoot = browsePath.replace(/\/$/, '') === root;
 
-  // Show only from the root folder name onwards
   const visibleParts = parts.slice(rootParts.length - 1);
   const visibleOffset = rootParts.length - 1;
 
   return (
-    <div className="dir-picker">
-      {/* Breadcrumb — root folder name + any subdirectories navigated into */}
-      <div className="dir-picker-crumb">
-        {visibleParts.map((seg, vi) => {
-          const i = vi + visibleOffset;
-          const segPath = '/' + parts.slice(0, i + 1).join('/');
-          const isRootSeg = i === rootParts.length - 1;
-          return (
-            <span key={i} className="dir-picker-crumb-seg">
-              {vi > 0 && <span className="dir-picker-crumb-sep">/</span>}
-              <button
-                type="button"
-                onClick={() => !isRootSeg && loadPath(segPath)}
-                style={{ cursor: isRootSeg ? 'default' : 'pointer' }}
-                disabled={isRootSeg}
-              >
-                {seg}
-              </button>
+    <>
+      <div className="dir-picker">
+        {/* Breadcrumb header + add-folder button */}
+        <div className="dir-picker-crumb">
+          <span className="dir-picker-crumb-segs">
+            {visibleParts.map((seg, vi) => {
+              const i = vi + visibleOffset;
+              const segPath = `/${parts.slice(0, i + 1).join('/')}`;
+              const isRootSeg = i === rootParts.length - 1;
+              return (
+                <span key={i} className="dir-picker-crumb-seg">
+                  {vi > 0 && <span className="dir-picker-crumb-sep">/</span>}
+                  <button
+                    type="button"
+                    onClick={() => !isRootSeg && loadPath(segPath)}
+                    style={{ cursor: isRootSeg ? 'default' : 'pointer' }}
+                    disabled={isRootSeg}
+                  >
+                    {seg}
+                  </button>
+                </span>
+              );
+            })}
+          </span>
+          <button
+            type="button"
+            className="dir-picker-add-btn"
+            title="New folder"
+            onClick={() => {
+              setPendingFolderName('untitled');
+              setMkdirErr('');
+            }}
+          >
+            +
+          </button>
+        </div>
+
+        {/* Folder list */}
+        <div className="dir-picker-list">
+          {!atRoot && (
+            <button
+              type="button"
+              className="dir-picker-entry dir-picker-entry--up"
+              onClick={() => loadPath(parentPath)}
+            >
+              <FolderIcon size={13} /> ..
+            </button>
+          )}
+          {entries.length === 0 && pendingFolderName === null && (
+            <span className="dir-picker-empty">No subdirectories</span>
+          )}
+          {entries.map(e => (
+            <button
+              key={e.path}
+              type="button"
+              className="dir-picker-entry"
+              onClick={() => loadPath(e.path)}
+            >
+              <FolderIcon size={13} />
+              {e.name}
+            </button>
+          ))}
+          {pendingFolderName !== null && (
+            <div className="dir-picker-entry dir-picker-entry--new">
+              <FolderIcon size={13} />
+              <input
+                className="dir-picker-newfolder-inline"
+                value={pendingFolderName}
+                onChange={e => {
+                  setPendingFolderName(e.target.value);
+                  setMkdirErr('');
+                }}
+                onBlur={commitNewFolder}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitNewFolder();
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setPendingFolderName(null);
+                    setMkdirErr('');
+                  }
+                }}
+              />
+            </div>
+          )}
+          {mkdirErr && (
+            <span
+              className="dir-picker-newfolder-err"
+              style={{ padding: '4px 12px', display: 'block' }}
+            >
+              {mkdirErr}
             </span>
-          );
-        })}
+          )}
+        </div>
       </div>
 
-      {/* Folder list */}
-      <div className="dir-picker-list">
-        {!atRoot && (
-          <button type="button" className="dir-picker-entry dir-picker-entry--up" onClick={() => loadPath(parentPath)}>
-            <FolderIcon size={13} /> ..
-          </button>
-        )}
-        {entries.length === 0 && <span className="dir-picker-empty">No subdirectories</span>}
-        {entries.map(e => (
-          <button key={e.path} type="button" className="dir-picker-entry" onClick={() => loadPath(e.path)}>
-            <FolderIcon size={13} />
-            {e.name}
-          </button>
-        ))}
-      </div>
-
-      {/* New folder input + single Open button */}
-      <div className="dir-picker-newfolder">
-        <input
-          className="dir-picker-newfolder-input"
-          placeholder="New folder name (optional)"
-          value={newFolderName}
-          onChange={e => { setNewFolderName(e.target.value); setMkdirErr(''); }}
-          onKeyDown={e => { if (e.key === 'Enter') handleOpen(); }}
-        />
-        {mkdirErr && <span className="dir-picker-newfolder-err">{mkdirErr}</span>}
-      </div>
-
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button type="button" className="dir-picker-open-btn" onClick={handleOpen}>
+      {/* Actions — outside the card */}
+      <div className="dir-picker-actions">
+        <button type="button" className="dir-picker-open-btn" onClick={() => onConfirm(browsePath)}>
           Open →
         </button>
-        <button type="button" className="new-session-cancel" onClick={onCancel}>
+        <button type="button" className="dir-picker-cancel-btn" onClick={onCancel}>
           Cancel
         </button>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -2370,8 +3185,8 @@ const MODE_FILTER_ALL = 'all';
 
 function relativeTime(ts: number) {
   const diff = Date.now() / 1000 - ts;
-  if (diff < 60)    return 'just now';
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
   return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -2382,17 +3197,33 @@ function absoluteTime(ts: number) {
 }
 
 function SessionCard({
-  s, onSelect, onDelete,
-}: { s: SessionInfo; onSelect: () => void; onDelete: () => void }) {
+  s,
+  onSelect,
+  onDelete,
+}: {
+  s: SessionInfo;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const modeKey = s.mode === 'widget' ? 'canvas' : s.mode === 'worker' ? 'document' : s.mode === 'coder' ? 'code' : 'chat';
+  const modeKey =
+    s.mode === 'widget'
+      ? 'canvas'
+      : s.mode === 'worker'
+        ? 'document'
+        : s.mode === 'coder'
+          ? 'code'
+          : 'chat';
   const accentColor = MODE_COLORS[modeKey] ?? 'var(--accent-blue)';
   const primaryLabel = s.title || s.dirName;
 
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirming) { setConfirming(true); return; }
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
     onDelete();
     setMenuOpen(false);
     setConfirming(false);
@@ -2418,7 +3249,11 @@ function SessionCard({
               type="button"
               className="agent-session-menu-btn"
               title="Options"
-              onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); setConfirming(false); }}
+              onClick={e => {
+                e.stopPropagation();
+                setMenuOpen(v => !v);
+                setConfirming(false);
+              }}
             >
               ···
             </button>
@@ -2431,7 +3266,15 @@ function SessionCard({
                 >
                   {confirming ? 'Click again to confirm' : 'Delete session'}
                 </button>
-                <button type="button" className="agent-session-menu-item" onClick={e => { e.stopPropagation(); setMenuOpen(false); onSelect(); }}>
+                <button
+                  type="button"
+                  className="agent-session-menu-item"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onSelect();
+                  }}
+                >
                   Open session
                 </button>
               </div>
@@ -2439,11 +3282,11 @@ function SessionCard({
           </div>
         </div>
       </div>
-      {s.lastMessage && (
-        <div className="agent-session-preview">{s.lastMessage}</div>
-      )}
+      {s.lastMessage && <div className="agent-session-preview">{s.lastMessage}</div>}
       <div className="agent-session-meta" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span>{s.messageCount} message{s.messageCount !== 1 ? 's' : ''}</span>
+        <span>
+          {s.messageCount} message{s.messageCount !== 1 ? 's' : ''}
+        </span>
         {s.workingDir && <CopyPathInline path={s.workingDir} />}
       </div>
     </div>
@@ -2457,30 +3300,41 @@ function SessionListPage({
   onSelect: (sessionId: string, cwd: string) => void;
   onNew: () => void;
 }) {
-  const [sessions,    setSessions]    = useState<SessionInfo[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [fetchErr,    setFetchErr]    = useState<string | null>(null);
-  const [search,      setSearch]      = useState('');
-  const [sortKey,     setSortKey]     = useState<SortKey>('recent');
-  const [modeFilter,  setModeFilter]  = useState(MODE_FILTER_ALL);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchErr, setFetchErr] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('recent');
+  const [modeFilter, setModeFilter] = useState(MODE_FILTER_ALL);
   const searchRef = useRef<HTMLInputElement>(null);
 
   function load() {
     fetch(`${HTTP_BASE}/sessions`)
       .then(r => r.json())
-      .then((d: { sessions: SessionInfo[] }) => { setSessions(d.sessions ?? []); setLoading(false); })
-      .catch(e => { setFetchErr(e.message); setLoading(false); });
+      .then((d: { sessions: SessionInfo[] }) => {
+        setSessions(d.sessions ?? []);
+        setLoading(false);
+      })
+      .catch(e => {
+        setFetchErr(e.message);
+        setLoading(false);
+      });
   }
 
   useEffect(() => {
     load();
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
-  }, []);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load stable
+  }, [load]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA'
+      ) {
         e.preventDefault();
         searchRef.current?.focus();
       }
@@ -2502,20 +3356,32 @@ function SessionListPage({
       if (modeFilter !== MODE_FILTER_ALL && (s.mode ?? 'general') !== modeFilter) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return s.dirName.toLowerCase().includes(q) ||
-             s.workingDir.toLowerCase().includes(q) ||
-             s.lastMessage.toLowerCase().includes(q) ||
-             s.title.toLowerCase().includes(q);
+      return (
+        s.dirName.toLowerCase().includes(q) ||
+        s.workingDir.toLowerCase().includes(q) ||
+        s.lastMessage.toLowerCase().includes(q) ||
+        s.title.toLowerCase().includes(q)
+      );
     })
     .sort((a, b) => {
-      if (sortKey === 'recent')   return b.lastModified - a.lastModified;
-      if (sortKey === 'alpha')    return a.dirName.localeCompare(b.dirName);
+      if (sortKey === 'recent') return b.lastModified - a.lastModified;
+      if (sortKey === 'alpha') return a.dirName.localeCompare(b.dirName);
       if (sortKey === 'messages') return b.messageCount - a.messageCount;
       return 0;
     });
 
-  const modePillLabel: Record<string, string> = { general: 'General', widget: 'Widget', worker: 'Worker', coder: 'Coder' };
-  const modeIconKey: Record<string, string>   = { general: 'chat', widget: 'canvas', worker: 'document', coder: 'code' };
+  const modePillLabel: Record<string, string> = {
+    general: 'General',
+    widget: 'Widget',
+    worker: 'Worker',
+    coder: 'Coder',
+  };
+  const modeIconKey: Record<string, string> = {
+    general: 'chat',
+    widget: 'canvas',
+    worker: 'document',
+    coder: 'code',
+  };
 
   return (
     <div className="agent-session-page">
@@ -2528,7 +3394,12 @@ function SessionListPage({
           <p className="agent-session-subtitle">4 modes · start a new chat or resume a session</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" className="agent-session-refresh-btn" title="Refresh" onClick={load}>
+          <button
+            type="button"
+            className="agent-session-refresh-btn"
+            title="Refresh"
+            onClick={load}
+          >
             <ArrowCounterClockwiseIcon size={13} />
           </button>
           <button type="button" className="agent-session-new-btn" onClick={onNew}>
@@ -2549,7 +3420,11 @@ function SessionListPage({
               onChange={e => setSearch(e.target.value)}
             />
             {search && (
-              <button type="button" className="agent-session-search-clear" onClick={() => setSearch('')}>
+              <button
+                type="button"
+                className="agent-session-search-clear"
+                onClick={() => setSearch('')}
+              >
                 <XIcon size={11} />
               </button>
             )}
@@ -2572,7 +3447,9 @@ function SessionListPage({
             type="button"
             className={`agent-session-mode-pill${modeFilter === MODE_FILTER_ALL ? ' active' : ''}`}
             onClick={() => setModeFilter(MODE_FILTER_ALL)}
-          >All</button>
+          >
+            All
+          </button>
           {presentModes.map(m => (
             <button
               key={m}
@@ -2588,26 +3465,37 @@ function SessionListPage({
       )}
 
       <div className="agent-session-list">
-        {loading && (
-          <>{[1,2,3].map(i => <div key={i} className="agent-session-skeleton" />)}</>
-        )}
+        {loading && [1, 2, 3].map(i => <div key={i} className="agent-session-skeleton" />)}
         {fetchErr && (
           <div className="agent-session-empty">
             <p style={{ color: 'var(--accent-red)' }}>Could not reach server: {fetchErr}</p>
-            <p>Make sure <code>server.py</code> is running.</p>
+            <p>
+              Make sure <code>server.py</code> is running.
+            </p>
           </div>
         )}
         {!loading && !fetchErr && sessions.length === 0 && (
           <div className="agent-session-empty">
             <TerminalIcon size={32} color="var(--text-tertiary)" weight="duotone" />
-            <p>No sessions yet — click <strong>+ New chat</strong> to start one.</p>
+            <p>
+              No sessions yet — click <strong>+ New chat</strong> to start one.
+            </p>
           </div>
         )}
         {!loading && !fetchErr && sessions.length > 0 && filtered.length === 0 && (
           <div className="agent-session-empty">
-            <p>No sessions match <strong>{search || modeFilter}</strong></p>
-            <button type="button" className="agent-session-refresh-btn" style={{ marginTop: 8 }}
-              onClick={() => { setSearch(''); setModeFilter(MODE_FILTER_ALL); }}>
+            <p>
+              No sessions match <strong>{search || modeFilter}</strong>
+            </p>
+            <button
+              type="button"
+              className="agent-session-refresh-btn"
+              style={{ marginTop: 8 }}
+              onClick={() => {
+                setSearch('');
+                setModeFilter(MODE_FILTER_ALL);
+              }}
+            >
               Clear filters
             </button>
           </div>
@@ -2629,11 +3517,11 @@ function SessionListPage({
 
 function fmtConvTime(ts: number): string {
   const d = new Date(ts * 1000);
-  const dd   = String(d.getDate()).padStart(2, '0');
-  const mm   = String(d.getMonth() + 1).padStart(2, '0');
-  const yy   = String(d.getFullYear()).slice(2);
-  const hh   = String(d.getHours()).padStart(2, '0');
-  const min  = String(d.getMinutes()).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(2);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
   return `${dd}/${mm}/${yy} ${hh}:${min}`;
 }
 
@@ -2652,10 +3540,10 @@ function ConversationsPanel({
   onNew: () => void;
   onClose: () => void;
 }) {
-  const [sessions,          setSessions]          = useState<SessionInfo[]>([]);
-  const [query,             setQuery]             = useState('');
-  const [loading,           setLoading]           = useState(true);
-  const [defaultSessionId,  setDefaultSessionId]  = useState<string | null>(null);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [defaultSessionId, setDefaultSessionId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   function loadSessions() {
@@ -2670,13 +3558,17 @@ function ConversationsPanel({
       .catch(() => setLoading(false));
   }
 
-  useEffect(() => { loadSessions(); }, [cwd, httpBase]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadSessions();
+    // biome-ignore lint/correctness/useExhaustiveDependencies: loadSessions stable
+  }, [loadSessions]);
 
   function handleSetDefault(sessionId: string) {
     const next = defaultSessionId === sessionId ? null : sessionId;
     setDefaultSessionId(next); // optimistic update — instant visual feedback
     fetch(`${httpBase}/session-default`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cwd, sessionId: next ?? '' }),
     }).catch(() => setDefaultSessionId(defaultSessionId)); // revert on error
   }
@@ -2692,13 +3584,17 @@ function ConversationsPanel({
 
   async function handleDelete(sessionId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    await fetch(`${httpBase}/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).catch(() => null);
+    await fetch(`${httpBase}/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    }).catch(() => null);
     setSessions(prev => prev.filter(s => s.sessionId !== sessionId));
   }
 
   const q = query.toLowerCase();
   const filtered = q
-    ? sessions.filter(s => s.title.toLowerCase().includes(q) || s.lastMessage.toLowerCase().includes(q))
+    ? sessions.filter(
+        s => s.title.toLowerCase().includes(q) || s.lastMessage.toLowerCase().includes(q),
+      )
     : sessions;
 
   return (
@@ -2708,7 +3604,9 @@ function ConversationsPanel({
         <button type="button" className="conv-new-btn" onClick={onNew} title="New conversation">
           <PlusIcon size={13} />
         </button>
-        <button type="button" className="canvas-widget-close" onClick={onClose}><XIcon size={13} /></button>
+        <button type="button" className="canvas-widget-close" onClick={onClose}>
+          <XIcon size={13} />
+        </button>
       </div>
 
       <div className="conv-search-row">
@@ -2717,7 +3615,6 @@ function ConversationsPanel({
           placeholder="Search conversations…"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          autoFocus
         />
       </div>
 
@@ -2729,52 +3626,63 @@ function ConversationsPanel({
         {filtered.map(s => {
           const isDefault = defaultSessionId === s.sessionId;
           return (
-          <div
-            key={s.sessionId}
-            className={`conv-item${s.sessionId === activeSessionId ? ' conv-item--active' : ''}`}
-          >
-            {/* Clickable title area */}
-            <div className="conv-item-click" role="button" tabIndex={0}
-              onClick={() => { onSelect(s.sessionId); onClose(); }}
-              onKeyDown={e => { if (e.key === 'Enter') { onSelect(s.sessionId); onClose(); } }}
+            <div
+              key={s.sessionId}
+              className={`conv-item${s.sessionId === activeSessionId ? ' conv-item--active' : ''}`}
             >
-              <div className="conv-item-top">
-                <span className="conv-item-title">{s.title}</span>
-                {isDefault && <span className="conv-item-default-badge">default</span>}
-                <span className="conv-item-time">{fmtConvTime(s.lastModified)}</span>
+              {/* Clickable title area */}
+              <div
+                className="conv-item-click"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  onSelect(s.sessionId);
+                  onClose();
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    onSelect(s.sessionId);
+                    onClose();
+                  }
+                }}
+              >
+                <div className="conv-item-top">
+                  <span className="conv-item-title">{s.title}</span>
+                  {isDefault && <span className="conv-item-default-badge">default</span>}
+                  <span className="conv-item-time">{fmtConvTime(s.lastModified)}</span>
+                </div>
+                <div className="conv-item-id-row">
+                  <span className="conv-item-id">{s.sessionId}</span>
+                </div>
               </div>
-              <div className="conv-item-id-row">
-                <span className="conv-item-id">{s.sessionId}</span>
+              {/* Action buttons — separate from click area, no nesting issue */}
+              <div className="conv-item-actions">
+                <button
+                  type="button"
+                  className={`conv-item-action-btn${isDefault ? ' conv-item-action-btn--default-active' : ''}`}
+                  title={isDefault ? 'Unset as default' : 'Set as default for this project'}
+                  onClick={() => handleSetDefault(s.sessionId)}
+                >
+                  {isDefault ? '★' : '☆'}
+                </button>
+                <button
+                  type="button"
+                  className="conv-item-action-btn"
+                  title="Copy ID"
+                  onClick={() => void navigator.clipboard.writeText(s.sessionId)}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="conv-item-action-btn conv-item-action-btn--delete"
+                  title="Delete"
+                  onClick={e => void handleDelete(s.sessionId, e)}
+                >
+                  <TrashIcon size={11} />
+                </button>
               </div>
             </div>
-            {/* Action buttons — separate from click area, no nesting issue */}
-            <div className="conv-item-actions">
-              <button
-                type="button"
-                className={`conv-item-action-btn${isDefault ? ' conv-item-action-btn--default-active' : ''}`}
-                title={isDefault ? 'Unset as default' : 'Set as default for this project'}
-                onClick={() => handleSetDefault(s.sessionId)}
-              >
-                {isDefault ? '★' : '☆'}
-              </button>
-              <button
-                type="button"
-                className="conv-item-action-btn"
-                title="Copy ID"
-                onClick={() => void navigator.clipboard.writeText(s.sessionId)}
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                className="conv-item-action-btn conv-item-action-btn--delete"
-                title="Delete"
-                onClick={e => void handleDelete(s.sessionId, e)}
-              >
-                <TrashIcon size={11} />
-              </button>
-            </div>
-          </div>
           );
         })}
       </div>
@@ -2790,7 +3698,8 @@ function BoltzingIndicator({ variant = 'chat' }: { variant?: 'chat' | 'float' })
   const [secs, setSecs] = useState(0);
   const [msgIdx, setMsgIdx] = useState(0);
   useEffect(() => {
-    setSecs(0); setMsgIdx(0);
+    setSecs(0);
+    setMsgIdx(0);
     const t = setInterval(() => setSecs(s => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
@@ -2830,14 +3739,17 @@ function BoltzingIndicator({ variant = 'chat' }: { variant?: 'chat' | 'float' })
 function SessionStep({ done, active, label }: { done: boolean; active: boolean; label: string }) {
   const [secs, setSecs] = useState(0);
   useEffect(() => {
-    if (!active) { setSecs(0); return; }
+    if (!active) {
+      setSecs(0);
+      return;
+    }
     setSecs(0);
     const t = setInterval(() => setSecs(s => s + 1), 1000);
     return () => clearInterval(t);
   }, [active]);
 
   let hint = '';
-  if (active && secs >= 8)  hint = `${secs}s`;
+  if (active && secs >= 8) hint = `${secs}s`;
   if (active && secs >= 25) hint = `${secs}s — loading history…`;
   if (active && secs >= 45) hint = `${secs}s — large history, almost there`;
 
@@ -2857,8 +3769,14 @@ function SessionStep({ done, active, label }: { done: boolean; active: boolean; 
 // ── Session-create error panel ────────────────────────────────────────────────
 
 function SessionCreateErrorPanel({
-  error, apiKeyValue, apiKeySaving,
-  onApiKeyValueChange, onSaveApiKey, onRetry, onSignOut, onBack,
+  error,
+  apiKeyValue,
+  apiKeySaving,
+  onApiKeyValueChange,
+  onSaveApiKey,
+  onRetry,
+  onSignOut,
+  onBack,
 }: {
   error: string;
   apiKeyValue: string;
@@ -2871,34 +3789,47 @@ function SessionCreateErrorPanel({
 }) {
   return (
     <>
-      <p className="new-session-title" style={{ color: 'var(--accent-red)' }}>Session unavailable</p>
+      <p className="new-session-title" style={{ color: 'var(--accent-red)' }}>
+        Session unavailable
+      </p>
       <p className="new-session-hint">{error}</p>
-      <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <p className="new-session-hint" style={{ marginTop: 0 }}>Enter your API key to reconnect:</p>
+      <div
+        style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
+        <p className="new-session-hint" style={{ marginTop: 0 }}>
+          Enter your API key to reconnect:
+        </p>
         <input
           type="password"
           className="conv-search-input"
           placeholder="Paste API key…"
           value={apiKeyValue}
           onChange={e => onApiKeyValueChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') onSaveApiKey(); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') onSaveApiKey();
+          }}
           style={{ width: '100%', boxSizing: 'border-box' }}
-          autoFocus
         />
         <button
           type="button"
           className="new-session-cancel"
           disabled={apiKeySaving || !apiKeyValue.trim()}
           onClick={onSaveApiKey}
-          style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
+          style={{ opacity: !apiKeyValue.trim() || apiKeySaving ? 0.5 : 1 }}
         >
           {apiKeySaving ? 'Saving…' : 'Save & retry'}
         </button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button type="button" className="new-session-cancel" onClick={onRetry}>Try again</button>
-        <button type="button" className="new-session-cancel" onClick={onSignOut}>Sign out</button>
-        <button type="button" className="new-session-cancel" onClick={onBack}>Back</button>
+        <button type="button" className="new-session-cancel" onClick={onRetry}>
+          Try again
+        </button>
+        <button type="button" className="new-session-cancel" onClick={onSignOut}>
+          Sign out
+        </button>
+        <button type="button" className="new-session-cancel" onClick={onBack}>
+          Back
+        </button>
       </div>
     </>
   );
@@ -2908,60 +3839,92 @@ function SessionCreateErrorPanel({
 
 function AgentPage() {
   // ── Session routing ─────────────────────────────────────────────────────────
-  const { cwd: searchCwd, sessionId: searchSessionId, mode: searchMode, isNew: searchIsNew } = Route.useSearch();
+  const {
+    cwd: searchCwd,
+    sessionId: searchSessionId,
+    mode: searchMode,
+    isNew: searchIsNew,
+  } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [view,           setView]           = useState<'list' | 'chat'>(() => searchCwd ? 'chat' : 'list');
-  const [activeCwd,      setActiveCwd]      = useState(searchCwd ?? '');
-  const [activeSessionId,setActiveSessionId]= useState<string | null>(searchSessionId ?? null);
-  const [activeDirName,  setActiveDirName]  = useState(() =>
-    searchCwd ? (searchCwd.split('/').filter(Boolean).pop() ?? searchCwd) : '');
+  const [view, setView] = useState<'list' | 'chat'>(() => (searchCwd ? 'chat' : 'list'));
+  const [activeCwd, setActiveCwd] = useState(searchCwd ?? '');
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(searchSessionId ?? null);
+  const [activeDirName, setActiveDirName] = useState(() =>
+    searchCwd ? (searchCwd.split('/').filter(Boolean).pop() ?? searchCwd) : '',
+  );
 
   // Agent mode — must be declared before openSession which closes over it
-  const [agentMode,        setAgentMode]        = useState<AgentMode>(() => {
+  const [agentMode, setAgentMode] = useState<AgentMode>(() => {
     if (searchMode) return searchMode;
-    if (searchSessionId) return (localStorage.getItem(modeLSKey(searchSessionId)) as AgentMode | null) ?? 'general';
+    if (searchSessionId)
+      return (localStorage.getItem(modeLSKey(searchSessionId)) as AgentMode | null) ?? 'general';
     return 'general';
   });
-  const [editorRefreshKey,  setEditorRefreshKey]  = useState(0);
+  const [editorRefreshKey, setEditorRefreshKey] = useState(0);
   const canvasPanelRef = useRef<CanvasPanelHandle>(null);
-  const [docViewer, setDocViewer] = useState<{ path: string; name: string; docType: string; pages: number; wordCount: number; content: string; truncated: boolean } | null>(null);
+  const [docViewer, setDocViewer] = useState<{
+    path: string;
+    name: string;
+    docType: string;
+    pages: number;
+    wordCount: number;
+    content: string;
+    truncated: boolean;
+  } | null>(null);
   const [docViewerLoading, setDocViewerLoading] = useState(false);
   // pendingNewCwd: set when "new conversation" is clicked inside an existing chat session
-  const [pendingNewCwd,    setPendingNewCwd]    = useState<string | null>(null);
+  const [pendingNewCwd, setPendingNewCwd] = useState<string | null>(null);
   const [showModeSelector, setShowModeSelector] = useState(false);
-  const [pendingNewMode,   setPendingNewMode]   = useState<AgentMode | null>(null);
-  const [defaultCwd,       setDefaultCwd]       = useState('');
+  const [pendingNewMode, setPendingNewMode] = useState<AgentMode | null>(null);
+  const [coderStartChoice, setCoderStartChoice] = useState<
+    'empty' | 'describe' | 'existing' | 'github' | null
+  >(null);
+  const [coderInputText, setCoderInputText] = useState('');
+  const [coderInputDone, setCoderInputDone] = useState(false);
+  const [defaultCwd, setDefaultCwd] = useState('');
   // Session creation state
-  const [sessionCreating,     setSessionCreating]     = useState(false);
-  const [sessionCreateError,  setSessionCreateError]  = useState<string | null>(null);
-  const [sessionCreateStep,   setSessionCreateStep]   = useState<'creating' | 'starting' | 'connecting'>('creating');
-  const [sessionCreateMode,   setSessionCreateMode]   = useState<'create' | 'resume'>('create');
+  const [sessionCreating, setSessionCreating] = useState(false);
+  const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
+  const [sessionCreateStep, setSessionCreateStep] = useState<
+    'creating' | 'starting' | 'connecting'
+  >('creating');
+  const [sessionCreateMode, setSessionCreateMode] = useState<'create' | 'resume'>('create');
   // BZ_API_KEY form shown inside the session-create error panel
-  const [apiKeyValue,       setApiKeyValue]       = useState('');
-  const [apiKeySaving,      setApiKeySaving]      = useState(false);
-  const [showApiKeyPrompt,  setShowApiKeyPrompt]  = useState(false);
+  const [apiKeyValue, setApiKeyValue] = useState('');
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [showApiKeyPrompt, setShowApiKeyPrompt] = useState(false);
   // Abort controller + params for cancel / retry
-  const createAbortRef          = useRef<AbortController | null>(null);
+  const createAbortRef = useRef<AbortController | null>(null);
   const sessionCreatingParamsRef = useRef<{ cwd: string; mode: AgentMode } | null>(null);
   // Session permanently unavailable (max reconnect retries exceeded)
-  const [sessionUnavailable,  setSessionUnavailable]  = useState(false);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
 
   // Navigate to a session and reflect it in the URL
-  const openSession = useCallback((cwd: string, sessionId?: string | null, mode?: AgentMode) => {
-    const sid     = sessionId ?? undefined;
-    const newMode = mode
-      // Resuming an existing session → restore its saved mode
-      ?? (sid ? (localStorage.getItem(modeLSKey(sid)) as AgentMode | null) ?? agentMode : agentMode);
-    setActiveCwd(cwd);
-    setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
-    setActiveSessionId(sid ?? null);
-    setView('chat');
-    setAgentMode(newMode);
-    // Canvas mode is per-session
-    setCanvasMode(sid ? localStorage.getItem(`bz-canvas:${sid}`) === '1' : false);
-    void navigate({ to: '/agent', search: { cwd, sessionId: sid, mode: newMode }, replace: true });
-  }, [navigate]);
+  const openSession = useCallback(
+    (cwd: string, sessionId?: string | null, mode?: AgentMode) => {
+      const sid = sessionId ?? undefined;
+      const newMode =
+        mode ??
+        // Resuming an existing session → restore its saved mode
+        (sid
+          ? ((localStorage.getItem(modeLSKey(sid)) as AgentMode | null) ?? agentMode)
+          : agentMode);
+      setActiveCwd(cwd);
+      setActiveDirName(cwd.split('/').filter(Boolean).pop() ?? cwd);
+      setActiveSessionId(sid ?? null);
+      setView('chat');
+      setAgentMode(newMode);
+      // Canvas mode is per-session
+      setCanvasMode(sid ? localStorage.getItem(`bz-canvas:${sid}`) === '1' : false);
+      void navigate({
+        to: '/agent',
+        search: { cwd, sessionId: sid, mode: newMode },
+        replace: true,
+      });
+    },
+    [navigate, agentMode],
+  );
 
   // Go back to the list and clear URL params
   const goToList = useCallback(() => {
@@ -2970,77 +3933,90 @@ function AgentPage() {
   }, [navigate]);
 
   // Create a new session: connect via pool (spawns bzcode), then navigate.
-  const startNewSession = useCallback(async (cwd: string, mode: AgentMode) => {
-    const controller = new AbortController();
-    createAbortRef.current = controller;
-    sessionCreatingParamsRef.current = { cwd, mode };
-    setSessionCreating(true);
-    setSessionCreateError(null);
-    setSessionCreateStep('starting');
-    setSessionCreateMode('create');
-    try {
-      const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd, mode }),
-        signal: controller.signal,
-      });
-      if (!poolRes.ok) {
-        const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
-        setSessionCreateError(err.detail ?? err.error ?? 'Failed to start agent');
-        return;
-      }
-      const data = await poolRes.json() as { sessionId: string };
-      setSessionCreating(false);
-      setPendingNewCwd(null);
-      openSession(cwd, data.sessionId, mode as AgentMode);
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') {
+  const startNewSession = useCallback(
+    async (cwd: string, mode: AgentMode) => {
+      const controller = new AbortController();
+      createAbortRef.current = controller;
+      sessionCreatingParamsRef.current = { cwd, mode };
+      setSessionCreating(true);
+      setSessionCreateError(null);
+      setSessionCreateStep('starting');
+      setSessionCreateMode('create');
+      try {
+        const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cwd, mode }),
+          signal: controller.signal,
+        });
+        if (!poolRes.ok) {
+          const err = (await poolRes.json().catch(() => ({}))) as {
+            detail?: string;
+            error?: string;
+          };
+          setSessionCreateError(err.detail ?? err.error ?? 'Failed to start agent');
+          return;
+        }
+        const data = (await poolRes.json()) as { sessionId: string };
         setSessionCreating(false);
         setPendingNewCwd(null);
-        return;
+        openSession(cwd, data.sessionId, mode as AgentMode);
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') {
+          setSessionCreating(false);
+          setPendingNewCwd(null);
+          return;
+        }
+        setSessionCreateError('Could not reach the server');
+        setSessionCreating(false);
       }
-      setSessionCreateError('Could not reach the server');
-      setSessionCreating(false);
-    }
-  }, [openSession]);
+    },
+    [openSession],
+  );
 
   // Resume an existing session: connect bzcode (showing progress), then navigate.
-  const connectAndOpenSession = useCallback(async (cwd: string, sessionId: string, mode?: AgentMode) => {
-    const resolvedMode = mode ?? (localStorage.getItem(modeLSKey(sessionId)) as AgentMode | null) ?? agentMode;
-    const controller = new AbortController();
-    createAbortRef.current = controller;
-    sessionCreatingParamsRef.current = { cwd, mode: resolvedMode };
-    setSessionCreating(true);
-    setSessionCreateError(null);
-    setSessionCreateStep('starting');
-    setSessionCreateMode('resume');
-    const connectingTimer = setTimeout(() => setSessionCreateStep('connecting'), 12000);
-    try {
-      const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd, sessionId, mode: resolvedMode }),
-        signal: controller.signal,
-      });
-      if (!poolRes.ok) {
-        const err = await poolRes.json().catch(() => ({})) as { detail?: string; error?: string };
-        setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
-        return;
-      }
-      setSessionCreating(false);
-      openSession(cwd, sessionId, resolvedMode);
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') {
+  const connectAndOpenSession = useCallback(
+    async (cwd: string, sessionId: string, mode?: AgentMode) => {
+      const resolvedMode =
+        mode ?? (localStorage.getItem(modeLSKey(sessionId)) as AgentMode | null) ?? agentMode;
+      const controller = new AbortController();
+      createAbortRef.current = controller;
+      sessionCreatingParamsRef.current = { cwd, mode: resolvedMode };
+      setSessionCreating(true);
+      setSessionCreateError(null);
+      setSessionCreateStep('starting');
+      setSessionCreateMode('resume');
+      const connectingTimer = setTimeout(() => setSessionCreateStep('connecting'), 12000);
+      try {
+        const poolRes = await fetch(`${HTTP_BASE}/api/pool/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cwd, sessionId, mode: resolvedMode }),
+          signal: controller.signal,
+        });
+        if (!poolRes.ok) {
+          const err = (await poolRes.json().catch(() => ({}))) as {
+            detail?: string;
+            error?: string;
+          };
+          setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
+          return;
+        }
         setSessionCreating(false);
-        return;
+        openSession(cwd, sessionId, resolvedMode);
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') {
+          setSessionCreating(false);
+          return;
+        }
+        setSessionCreateError('Could not reach the server');
+        setSessionCreating(false);
+      } finally {
+        clearTimeout(connectingTimer);
       }
-      setSessionCreateError('Could not reach the server');
-      setSessionCreating(false);
-    } finally {
-      clearTimeout(connectingTimer);
-    }
-  }, [openSession, agentMode]);
+    },
+    [openSession, agentMode],
+  );
 
   const cancelSessionCreate = useCallback(() => {
     createAbortRef.current?.abort();
@@ -3059,7 +4035,9 @@ function AgentPage() {
 
   const handleSignOut = useCallback(async () => {
     await fetch(`${HTTP_BASE}/auth/logout`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
     }).catch(() => null);
     window.location.reload();
   }, []);
@@ -3085,18 +4063,25 @@ function AgentPage() {
 
   // Show API key prompt after 10s of waiting for session creation
   useEffect(() => {
-    if (!sessionCreating) { setShowApiKeyPrompt(false); return; }
+    if (!sessionCreating) {
+      setShowApiKeyPrompt(false);
+      return;
+    }
     const t = setTimeout(() => setShowApiKeyPrompt(true), 10_000);
     return () => clearTimeout(t);
   }, [sessionCreating]);
 
   // Clear batch queue from sessionStorage on mount (already loaded into state)
-  useEffect(() => { sessionStorage.removeItem('agent:batchQueue'); }, []);
+  useEffect(() => {
+    sessionStorage.removeItem('agent:batchQueue');
+  }, []);
 
   // Sidebar session clicks dispatch this event to open a session while already on the agent page
   useEffect(() => {
     function handler(e: Event) {
-      const { cwd, sessionId, mode } = (e as CustomEvent<{ cwd: string; sessionId: string; mode: string }>).detail;
+      const { cwd, sessionId, mode } = (
+        e as CustomEvent<{ cwd: string; sessionId: string; mode: string }>
+      ).detail;
       void connectAndOpenSession(cwd, sessionId, mode as AgentMode);
     }
     window.addEventListener('bz:open-session', handler);
@@ -3121,9 +4106,24 @@ function AgentPage() {
   useEffect(() => {
     fetch(`${HTTP_BASE}/api/home`)
       .then(r => r.json())
-      .then((d: { defaultCwd?: string }) => { if (d.defaultCwd) setDefaultCwd(d.defaultCwd); })
+      .then((d: { defaultCwd?: string }) => {
+        if (d.defaultCwd) setDefaultCwd(d.defaultCwd);
+      })
       .catch(() => null);
   }, []);
+
+  // Handle ?new=1 navigation from home page: wait for defaultCwd, then create session
+  const isNewSessionRef = useRef(searchIsNew && !searchCwd);
+  useEffect(() => {
+    if (!isNewSessionRef.current || !defaultCwd) return;
+    isNewSessionRef.current = false;
+    const mode = searchMode ?? 'general';
+    if (mode === 'worker' || mode === 'coder') {
+      setPendingNewMode(mode);
+    } else {
+      void startNewSession(defaultCwd, mode);
+    }
+  }, [defaultCwd, searchMode, startNewSession]);
 
   // On first mount pick up pending message from sessionStorage (cwd/sessionId come via URL now)
   useEffect(() => {
@@ -3143,14 +4143,17 @@ function AgentPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('connecting');
   const [currentModel, setCurrentModel] = useState<string>('');
-  const [availableModels, setAvailableModels] = useState<{id: string; displayName: string}[]>([]);
+  const userSetModelRef = useRef(false); // true once user explicitly picks a model; prevents status msgs from reverting it
+  const [availableModels, setAvailableModels] = useState<{ id: string; displayName: string }[]>([]);
   const [mode, setMode] = useState<SessionMode>('default');
-  const modeRef = useRef<SessionMode>('default');        // always current — readable inside stale closures
+  const modeRef = useRef<SessionMode>('default'); // always current — readable inside stale closures
   const pendingModeRef = useRef<SessionMode | null>(null); // mode user explicitly requested, waiting for bzcode confirmation
   const [availableModes, setAvailableModes] = useState<SessionMode[]>(['default', 'plan', 'yolo']);
-  const [availableCommands, setAvailableCommands] = useState<Array<{name: string; description: string; aliases?: string[]}>>([]);
+  const [availableCommands, setAvailableCommands] = useState<
+    Array<{ name: string; description: string; aliases?: string[] }>
+  >([]);
   // Slash command menu state
-  const [slashMenuIdx,       setSlashMenuIdx]       = useState(0);
+  const [slashMenuIdx, setSlashMenuIdx] = useState(0);
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -3161,37 +4164,55 @@ function AgentPage() {
   const [pendingInput, setPendingInput] = useState<InputPromptData | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<AnyAttachment[]>([]);
-  const [bzHubModal,        setBzHubModal]        = useState<BzHubModal | null>(null);
-  const [isCompacting,      setIsCompacting]      = useState(false);
-  const [compactDoneMsg,    setCompactDoneMsg]    = useState<string | null>(null);
-  const [authExpired,       setAuthExpired]       = useState(false);
-  const [batchQueue,        setBatchQueue]        = useState<{ cwd: string; message: string }[]>(() => {
-    try { return JSON.parse(sessionStorage.getItem('agent:batchQueue') ?? '[]') as { cwd: string; message: string }[]; } catch { return []; }
+  const [bzHubModal, setBzHubModal] = useState<BzHubModal | null>(null);
+  const [isCompacting, setIsCompacting] = useState(false);
+  const [compactDoneMsg, setCompactDoneMsg] = useState<string | null>(null);
+  const [authExpired, setAuthExpired] = useState(false);
+  const [batchQueue, setBatchQueue] = useState<{ cwd: string; message: string }[]>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('agent:batchQueue') ?? '[]') as {
+        cwd: string;
+        message: string;
+      }[];
+    } catch {
+      return [];
+    }
   });
-  const [sessionTitle,      setSessionTitle]      = useState('');
-  const [isEditingTitle,    setIsEditingTitle]    = useState(false);
+  const [sessionTitle, setSessionTitle] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [canvasMode,      setCanvasMode]      = useState(() => {
+  const [_canvasMode, setCanvasMode] = useState(() => {
     if (!searchSessionId) return false;
     return localStorage.getItem(`bz-canvas:${searchSessionId}`) === '1';
   });
-  const [showWidgetChat,  setShowWidgetChat]  = useState(true);
-  const [liveLearningOn,  setLiveLearningOn]  = useState(() => localStorage.getItem('bz:live-learning') === '1');
-  const [llJob,           setLlJob]           = useState<'idle'|'collecting'|'training'|'done'>('idle');
-  const [llJobDismissed,  setLlJobDismissed]  = useState(false);
-  const [llGain,          setLlGain]          = useState<{ accuracy: number; quality: number }>(() => {
-    try { return JSON.parse(localStorage.getItem('bz:ll-gain') ?? 'null') ?? { accuracy: 13.4, quality: 91.3 }; } catch { return { accuracy: 13.4, quality: 91.3 }; }
+  const [showWidgetChat, setShowWidgetChat] = useState(true);
+  const [liveLearningOn, setLiveLearningOn] = useState(
+    () => localStorage.getItem('bz:live-learning') === '1',
+  );
+  const [llJob, setLlJob] = useState<'idle' | 'collecting' | 'training' | 'done'>('idle');
+  const [llJobDismissed, setLlJobDismissed] = useState(false);
+  const [llGain, setLlGain] = useState<{ accuracy: number; quality: number }>(() => {
+    try {
+      return (
+        JSON.parse(localStorage.getItem('bz:ll-gain') ?? 'null') ?? {
+          accuracy: 13.4,
+          quality: 91.3,
+        }
+      );
+    } catch {
+      return { accuracy: 13.4, quality: 91.3 };
+    }
   });
   const [stickyMsgIdx, setStickyMsgIdx] = useState(-1);
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
-  const pendingAutoSendRef  = useRef<string | null>(null);
-  const isCompactingRef     = useRef(false);
-  const streamingBlocksRef  = useRef<StreamingBlocks>(new Map());
-  const reconnectAttemptsRef   = useRef(0);
-  const confirmedSessionIdRef  = useRef<string | null>(null);
-  const prevWsUrlRef           = useRef<string | null>(null);
+  const pendingAutoSendRef = useRef<string | null>(null);
+  const isCompactingRef = useRef(false);
+  const streamingBlocksRef = useRef<StreamingBlocks>(new Map());
+  const reconnectAttemptsRef = useRef(0);
+  const confirmedSessionIdRef = useRef<string | null>(null);
+  const prevWsUrlRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -3212,7 +4233,7 @@ function AgentPage() {
     for (const msgEl of userMsgEls) {
       const elRect = msgEl.getBoundingClientRect();
       if (elRect.top - stickyCardOffset < containerRect.top) {
-        const idx = parseInt((msgEl as HTMLElement).dataset['userMsgIdx'] ?? '-1', 10);
+        const idx = parseInt((msgEl as HTMLElement).dataset.userMsgIdx ?? '-1', 10);
         if (idx > currentStickyIdx) currentStickyIdx = idx;
       }
     }
@@ -3221,8 +4242,12 @@ function AgentPage() {
     if (currentStickyIdx !== -1 && stickyHeight > 0) {
       for (const msgEl of userMsgEls) {
         const elRect = msgEl.getBoundingClientRect();
-        const idx = parseInt((msgEl as HTMLElement).dataset['userMsgIdx'] ?? '-1', 10);
-        if (idx > currentStickyIdx && elRect.top >= containerRect.top && elRect.top < containerRect.top + stickyHeight + kickGap) {
+        const idx = parseInt((msgEl as HTMLElement).dataset.userMsgIdx ?? '-1', 10);
+        if (
+          idx > currentStickyIdx &&
+          elRect.top >= containerRect.top &&
+          elRect.top < containerRect.top + stickyHeight + kickGap
+        ) {
           translateY = elRect.top - containerRect.top - stickyHeight - kickGap;
           break;
         }
@@ -3239,7 +4264,7 @@ function AgentPage() {
     if (el) el.scrollTop = el.scrollHeight;
     // RAF ensures updateSticky reads final layout positions after the browser paints
     requestAnimationFrame(() => updateSticky());
-  }, [items, updateSticky]);
+  }, [updateSticky]);
 
   // Attach scroll listener — must re-run when `view` becomes 'chat' because the
   // scroll container isn't mounted during list view (scrollRef.current is null then).
@@ -3261,7 +4286,7 @@ function AgentPage() {
     const maxH = lh * 9;
     el.style.height = `${Math.max(Math.min(el.scrollHeight, maxH), lh)}px`;
     el.style.overflowY = el.scrollHeight >= maxH ? 'auto' : 'hidden';
-  }, [inputValue]);
+  }, []);
 
   const sendRaw = useCallback((msg: object) => {
     const sid = confirmedSessionIdRef.current;
@@ -3274,79 +4299,139 @@ function AgentPage() {
   }, []);
 
   // ── BoltzHub SSE streaming ────────────────────────────────────────────────
-  const startBzHubSSE = useCallback(async (
-    endpoint: 'push' | 'sync',
-    body: Record<string, unknown>,
-  ) => {
-    const itemId = uid();
-    if (endpoint === 'push') {
-      setItems(prev => [...prev, { id: itemId, kind: 'push-progress', step: 'build', message: 'Starting…' } as DisplayItem]);
-    } else {
-      setItems(prev => [...prev, { id: itemId, kind: 'sync-progress', step: 'download', message: 'Starting…' } as DisplayItem]);
-    }
+  const startBzHubSSE = useCallback(
+    async (endpoint: 'push' | 'sync', body: Record<string, unknown>) => {
+      const itemId = uid();
+      if (endpoint === 'push') {
+        setItems(prev => [
+          ...prev,
+          { id: itemId, kind: 'push-progress', step: 'build', message: 'Starting…' } as DisplayItem,
+        ]);
+      } else {
+        setItems(prev => [
+          ...prev,
+          {
+            id: itemId,
+            kind: 'sync-progress',
+            step: 'download',
+            message: 'Starting…',
+          } as DisplayItem,
+        ]);
+      }
 
-    try {
-      const resp = await fetch(`${AGENT_HTTP_BASE}/boltzhub/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!resp.body) return;
+      try {
+        const resp = await fetch(`${AGENT_HTTP_BASE}/boltzhub/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!resp.body) return;
 
-      const reader  = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let   buffer  = '';
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() ?? '';
-        for (const chunk of chunks) {
-          const line = chunk.split('\n').find(l => l.startsWith('data: '));
-          if (!line) continue;
-          const data = JSON.parse(line.slice(6)) as { step: string; message: string; serviceUrl?: string };
-          if (endpoint === 'push') {
-            setItems(prev => prev.map(item =>
-              item.id === itemId
-                ? { id: itemId, kind: 'push-progress' as const, step: data.step as PushStep, message: data.message, serviceUrl: data.serviceUrl, appId: (data as Record<string,string>).appId }
-                : item
-            ));
-          } else {
-            setItems(prev => prev.map(item =>
-              item.id === itemId
-                ? { id: itemId, kind: 'sync-progress' as const, step: data.step as SyncStep, message: data.message }
-                : item
-            ));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() ?? '';
+          for (const chunk of chunks) {
+            const line = chunk.split('\n').find(l => l.startsWith('data: '));
+            if (!line) continue;
+            const data = JSON.parse(line.slice(6)) as {
+              step: string;
+              message: string;
+              serviceUrl?: string;
+            };
+            if (endpoint === 'push') {
+              setItems(prev =>
+                prev.map(item =>
+                  item.id === itemId
+                    ? {
+                        id: itemId,
+                        kind: 'push-progress' as const,
+                        step: data.step as PushStep,
+                        message: data.message,
+                        serviceUrl: data.serviceUrl,
+                        appId: (data as Record<string, string>).appId,
+                      }
+                    : item,
+                ),
+              );
+            } else {
+              setItems(prev =>
+                prev.map(item =>
+                  item.id === itemId
+                    ? {
+                        id: itemId,
+                        kind: 'sync-progress' as const,
+                        step: data.step as SyncStep,
+                        message: data.message,
+                      }
+                    : item,
+                ),
+              );
+            }
           }
         }
+      } catch (e) {
+        const errMsg = String(e);
+        if (endpoint === 'push') {
+          setItems(prev =>
+            prev.map(item =>
+              item.id === itemId
+                ? {
+                    id: itemId,
+                    kind: 'push-progress' as const,
+                    step: 'error' as PushStep,
+                    message: errMsg,
+                  }
+                : item,
+            ),
+          );
+        } else {
+          setItems(prev =>
+            prev.map(item =>
+              item.id === itemId
+                ? {
+                    id: itemId,
+                    kind: 'sync-progress' as const,
+                    step: 'error' as SyncStep,
+                    message: errMsg,
+                  }
+                : item,
+            ),
+          );
+        }
       }
-    } catch (e) {
-      const errMsg = String(e);
-      if (endpoint === 'push') {
-        setItems(prev => prev.map(item => item.id === itemId ? { id: itemId, kind: 'push-progress' as const, step: 'error' as PushStep, message: errMsg } : item));
-      } else {
-        setItems(prev => prev.map(item => item.id === itemId ? { id: itemId, kind: 'sync-progress' as const, step: 'error' as SyncStep, message: errMsg } : item));
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
-  const startPush = useCallback(async (cwd: string, releaseNotes?: string, versionNumber?: string) => {
-    setBzHubModal(null);
-    await startBzHubSSE('push', { cwd, releaseNotes, versionNumber });
-  }, [startBzHubSSE]);
+  const startPush = useCallback(
+    async (cwd: string, releaseNotes?: string, versionNumber?: string) => {
+      setBzHubModal(null);
+      await startBzHubSSE('push', { cwd, releaseNotes, versionNumber });
+    },
+    [startBzHubSSE],
+  );
 
-  const startSync = useCallback(async (cwd: string, appId?: string) => {
-    setBzHubModal(null);
-    await startBzHubSSE('sync', { cwd, appId });
-  }, [startBzHubSSE]);
+  const startSync = useCallback(
+    async (cwd: string, appId?: string) => {
+      setBzHubModal(null);
+      await startBzHubSSE('sync', { cwd, appId });
+    },
+    [startBzHubSSE],
+  );
 
   // SSE + REST — connects via POST /api/pool/connect, streams via GET /api/pool/{id}/stream.
   // Reconnects whenever connectParams change (new session) or wsKey increments (force reconnect).
-  const connectParams = view === 'chat' && activeCwd
-    ? { cwd: activeCwd, mode: agentMode, sessionId: activeSessionId || '' }
-    : null;
+  const connectParams =
+    view === 'chat' && activeCwd
+      ? { cwd: activeCwd, mode: agentMode, sessionId: activeSessionId || '' }
+      : null;
 
   useEffect(() => {
     if (!connectParams) return;
@@ -3371,7 +4456,9 @@ function AgentPage() {
     let abortController: AbortController | null = null;
 
     // Helper: restore history from messages array (same logic as before)
-    const restoreHistory = (history: Array<{ role: string; content: unknown; isMeta?: boolean }>) => {
+    const restoreHistory = (
+      history: Array<{ role: string; content: unknown; isMeta?: boolean }>,
+    ) => {
       const HANDSHAKE_TEXT = 'Hi, hand shake, say yes';
       const firstRealIdx = history.findIndex(m => {
         if (m.role !== 'user' || m.isMeta) return false;
@@ -3379,7 +4466,7 @@ function AgentPage() {
         // Array content: real if it has any text or image block
         if (Array.isArray(m.content)) {
           return (m.content as Array<Record<string, unknown>>).some(
-            b => b['type'] === 'text' || b['type'] === 'image'
+            b => b.type === 'text' || b.type === 'image',
           );
         }
         return false;
@@ -3390,14 +4477,21 @@ function AgentPage() {
       for (const m of conversationHistory) {
         if (m.role !== 'user' || !Array.isArray(m.content)) continue;
         for (const block of m.content as Array<Record<string, unknown>>) {
-          if (block['type'] === 'toolResult' && typeof block['toolUseId'] === 'string') {
-            const raw = block['content'];
-            const content = typeof raw === 'string'
-              ? raw
-              : Array.isArray(raw)
-                ? (raw as Array<Record<string, unknown>>).filter(b => b['type'] === 'text').map(b => String(b['text'] ?? '')).join('\n')
-                : '';
-            toolResultMap.set(block['toolUseId'] as string, { content, isError: !!block['isError'] });
+          if (block.type === 'toolResult' && typeof block.toolUseId === 'string') {
+            const raw = block.content;
+            const content =
+              typeof raw === 'string'
+                ? raw
+                : Array.isArray(raw)
+                  ? (raw as Array<Record<string, unknown>>)
+                      .filter(b => b.type === 'text')
+                      .map(b => String(b.text ?? ''))
+                      .join('\n')
+                  : '';
+            toolResultMap.set(block.toolUseId as string, {
+              content,
+              isError: !!block.isError,
+            });
           }
         }
       }
@@ -3413,17 +4507,17 @@ function AgentPage() {
           } else if (Array.isArray(m.content)) {
             const blocks = m.content as Array<Record<string, unknown>>;
             text = blocks
-              .filter(b => b['type'] === 'text')
-              .map(b => String(b['text'] ?? ''))
+              .filter(b => b.type === 'text')
+              .map(b => String(b.text ?? ''))
               .join('');
-            const imgBlocks = blocks.filter(b => b['type'] === 'image');
+            const imgBlocks = blocks.filter(b => b.type === 'image');
             if (imgBlocks.length) {
               attachments = imgBlocks.map(b => {
-                const src = b['source'] as Record<string, unknown> | undefined;
+                const src = b.source as Record<string, unknown> | undefined;
                 return {
-                  data:      String(src?.['data'] ?? ''),
-                  mediaType: String(src?.['mediaType'] ?? 'image/png'),
-                  name:      'image',
+                  data: String(src?.data ?? ''),
+                  mediaType: String(src?.mediaType ?? 'image/png'),
+                  name: 'image',
                 } as AnyAttachment;
               });
             }
@@ -3439,17 +4533,24 @@ function AgentPage() {
           }
           restored.push({ id: uid(), kind: 'user', text: text || '(image)', attachments });
         } else {
-          const content = Array.isArray(m.content) ? m.content as Array<Record<string, unknown>> : [];
+          const content = Array.isArray(m.content)
+            ? (m.content as Array<Record<string, unknown>>)
+            : [];
           const textBlocks = bzBlocksToAssistantBlocks(content as unknown[]);
-          if (textBlocks.length) restored.push({ id: uid(), kind: 'assistant', blocks: textBlocks });
+          if (textBlocks.length)
+            restored.push({ id: uid(), kind: 'assistant', blocks: textBlocks });
           for (const b of content) {
-            if (b['type'] === 'toolUse' && typeof b['id'] === 'string' && typeof b['name'] === 'string') {
-              const result = toolResultMap.get(b['id']);
+            if (b.type === 'toolUse' && typeof b.id === 'string' && typeof b.name === 'string') {
+              const result = toolResultMap.get(b.id);
               restored.push({
-                id: uid(), kind: 'tool',
-                toolUseId: b['id'], name: b['name'],
-                status: 'done', input: b['input'],
-                output: result?.content, isError: result?.isError,
+                id: uid(),
+                kind: 'tool',
+                toolUseId: b.id,
+                name: b.name,
+                status: 'done',
+                input: b.input,
+                output: result?.content,
+                isError: result?.isError,
               } as DisplayItem);
             }
           }
@@ -3458,25 +4559,34 @@ function AgentPage() {
       if (restored.length) setItems(restored);
 
       const last = conversationHistory[conversationHistory.length - 1];
-      const lastIsToolResult = last?.role === 'user' && Array.isArray(last.content) &&
-        (last.content as Array<Record<string,unknown>>).some(b => b['type'] === 'toolResult');
+      const lastIsToolResult =
+        last?.role === 'user' &&
+        Array.isArray(last.content) &&
+        (last.content as Array<Record<string, unknown>>).some(b => b.type === 'toolResult');
       if (lastIsToolResult) {
-        setItems(prev => [...prev, {
-          id: uid(), kind: 'system' as const,
-          message: '⚠ Previous turn was interrupted mid-execution. Send your message again to continue.',
-        }]);
+        setItems(prev => [
+          ...prev,
+          {
+            id: uid(),
+            kind: 'system' as const,
+            message:
+              '⚠ Previous turn was interrupted mid-execution. Send your message again to continue.',
+          },
+        ]);
       }
     };
 
     // Helper: handle one SSE message (same switch as the old ws.onmessage)
     const handleMessage = (msg: Record<string, unknown>) => {
-      const type = msg['type'] as string;
+      const type = msg.type as string;
 
       if (type === 'session') {
-        const history = msg['messages'] as Array<{ role: string; content: unknown; isMeta?: boolean }> | undefined;
+        const history = msg.messages as
+          | Array<{ role: string; content: unknown; isMeta?: boolean }>
+          | undefined;
         if (history?.length) restoreHistory(history);
-        if (msg['sessionId']) {
-          const sid = msg['sessionId'] as string;
+        if (msg.sessionId) {
+          const sid = msg.sessionId as string;
           confirmedSessionIdRef.current = sid;
           localStorage.setItem(modeLSKey(sid), agentMode);
           fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
@@ -3487,17 +4597,25 @@ function AgentPage() {
             })
             .catch(() => null);
         }
-        if (Array.isArray(msg['modes'])) setAvailableModes(msg['modes'] as SessionMode[]);
-        if (Array.isArray(msg['commands'])) setAvailableCommands(msg['commands'] as Array<{name:string;description:string;aliases?:string[]}>);
-      }
-
-      else if (type === 'status') {
-        const s = msg['status'] as string;
-        // Track current model from bzcode status messages
-        if (msg['model']) {
-          const minfo = msg['model'] as Record<string, string>;
-          const mname = minfo['name'] || minfo['displayName'] || '';
+        if (Array.isArray(msg.modes)) setAvailableModes(msg.modes as SessionMode[]);
+        if (Array.isArray(msg.commands))
+          setAvailableCommands(
+            msg.commands as Array<{ name: string; description: string; aliases?: string[] }>,
+          );
+      } else if (type === 'status') {
+        const s = msg.status as string;
+        // Track current model from bzcode status messages (only if user hasn't explicitly chosen one)
+        if (msg.model && !userSetModelRef.current) {
+          const minfo = msg.model as Record<string, string>;
+          const mname = minfo.name || minfo.displayName || '';
           if (mname) setCurrentModel(mname);
+        }
+        if (msg.mode) {
+          const m = msg.mode as SessionMode;
+          if (!pendingModeRef.current || m === modeRef.current) {
+            setMode(m);
+            modeRef.current = m;
+          }
         }
         if (s === 'running') {
           setIsStreaming(true);
@@ -3510,30 +4628,30 @@ function AgentPage() {
           isCompactingRef.current = false;
           streamingBlocksRef.current.clear();
           setStreamingBlocks([]);
-          if (msg['mode']) {
-            const m = msg['mode'] as SessionMode;
-            if (pendingModeRef.current) {
-              if (m === pendingModeRef.current) pendingModeRef.current = null;
-            }
-            if (!pendingModeRef.current || m === modeRef.current) {
-              setMode(m); modeRef.current = m;
-            }
+          if (pendingModeRef.current && msg.mode === pendingModeRef.current) {
+            pendingModeRef.current = null;
           }
           if (wasCompacting) {
-            const summary = items.findLast?.((i: DisplayItem) => i.kind === 'system' && (i as { text: string }).text.includes('compacted'));
-            const summaryText = summary ? (summary as { text: string }).text : 'Context compacted';
+            const summary = items.findLast?.(
+              (i: DisplayItem) =>
+                i.kind === 'system' && (i as { message: string }).message.includes('compacted'),
+            );
+            const summaryText = summary
+              ? (summary as { message: string }).message
+              : 'Context compacted';
             setCompactDoneMsg(summaryText);
             setTimeout(() => setCompactDoneMsg(null), 5000);
             setTimeout(() => setWsKey(k => k + 1), 800);
           }
         }
-      }
-
-      else if (type === 'delta') {
-        if (msg['field'] === 'signature' || msg['blockType'] === 'toolUse') return;
-        const idx = msg['blockIndex'] as number;
-        const existing = streamingBlocksRef.current.get(idx) ?? { type: msg['blockType'] as string, content: '' };
-        existing.content += msg['content'] as string;
+      } else if (type === 'delta') {
+        if (msg.field === 'signature' || msg.blockType === 'toolUse') return;
+        const idx = msg.blockIndex as number;
+        const existing = streamingBlocksRef.current.get(idx) ?? {
+          type: msg.blockType as string,
+          content: '',
+        };
+        existing.content += msg.content as string;
         streamingBlocksRef.current.set(idx, existing);
         if (streamingRafRef.current === null) {
           streamingRafRef.current = requestAnimationFrame(() => {
@@ -3548,10 +4666,8 @@ function AgentPage() {
             }
           });
         }
-      }
-
-      else if (type === 'assistant') {
-        const blocks = bzBlocksToAssistantBlocks(msg['content'] as unknown[]);
+      } else if (type === 'assistant') {
+        const blocks = bzBlocksToAssistantBlocks(msg.content as unknown[]);
         streamingBlocksRef.current.clear();
         setStreamingBlocks([]);
         if (blocks.length) {
@@ -3563,60 +4679,90 @@ function AgentPage() {
             return [...prev, { id: uid(), kind: 'assistant', blocks }];
           });
         }
-      }
-
-      else if (type === 'tool') {
-        const toolUseId = msg['toolUseId'] as string;
-        const status = msg['status'] as 'running' | 'done' | 'error';
+      } else if (type === 'tool') {
+        const toolUseId = msg.toolUseId as string;
+        const status = msg.status as 'running' | 'done' | 'error';
         setItems(prev => {
-          const idx = prev.findIndex(i => i.kind === 'tool' && (i as Extract<DisplayItem, { kind: 'tool' }>).toolUseId === toolUseId);
+          const idx = prev.findIndex(
+            i =>
+              i.kind === 'tool' &&
+              (i as Extract<DisplayItem, { kind: 'tool' }>).toolUseId === toolUseId,
+          );
           if (idx >= 0) {
             const updated = { ...prev[idx] } as Extract<DisplayItem, { kind: 'tool' }>;
             updated.status = status;
-            if (status === 'done') { updated.output = msg['content'] as string; updated.isError = msg['isError'] as boolean; }
-            else if (status === 'error') { updated.output = msg['message'] as string; updated.isError = true; }
+            if (status === 'done') {
+              updated.output = msg.content as string;
+              updated.isError = msg.isError as boolean;
+            } else if (status === 'error') {
+              updated.output = msg.message as string;
+              updated.isError = true;
+            }
             return [...prev.slice(0, idx), updated, ...prev.slice(idx + 1)];
           }
-          return [...prev, { id: uid(), kind: 'tool', toolUseId, name: msg['name'] as string, status, input: msg['input'] }];
+          return [
+            ...prev,
+            {
+              id: uid(),
+              kind: 'tool',
+              toolUseId,
+              name: msg.name as string,
+              status,
+              input: msg.input,
+            },
+          ];
         });
-      }
-
-      else if (type === 'prompt') {
-        const subtype = msg['subtype'] as string;
-        const requestId = msg['requestId'] as string;
+      } else if (type === 'prompt') {
+        const subtype = msg.subtype as string;
+        const requestId = msg.requestId as string;
         if (subtype === 'permission') {
           // In yolo mode, the backend auto-approves — this prompt only arrives in non-yolo modes
-          setPendingPermission({ requestId, tool: msg['tool'] as string, input: msg['input'] });
+          setPendingPermission({ requestId, tool: msg.tool as string, input: msg.input });
         } else if (subtype === 'input') {
-          const questions = (msg['questions'] as Question[] | undefined) ?? [];
-          setPendingInput({ requestId, message: msg['message'] as string, questions });
+          const questions = (msg.questions as Question[] | undefined) ?? [];
+          setPendingInput({ requestId, message: msg.message as string, questions });
         }
-      }
-
-      else if (type === 'system') {
-        const event   = msg['event']   as string;
-        const message = msg['message'] as string;
+      } else if (type === 'system') {
+        const event = msg.event as string;
+        const message = msg.message as string;
         if (event === 'auth-error') {
           setAuthExpired(true);
         } else if (message) {
           setItems(prev => [...prev, { id: uid(), kind: 'system' as const, message }]);
         }
-      }
-
-      else if (type === 'auth_error') {
+      } else if (type === 'auth_error') {
         sessionStorage.setItem('bz:returnUrl', window.location.href);
         cancelled = true;
         window.location.href = '/login';
-      }
-
-      else if (type === 'result') {
-        if (msg['usage']) setTokenUsage(msg['usage'] as TokenUsage);
-        if (msg['status'] === 'success' && msg['output']) {
-          setItems(prev => [...prev, { id: uid(), kind: 'assistant', blocks: [{ type: 'text', text: msg['output'] as string }] }]);
+      } else if (type === 'result') {
+        if (msg.usage) setTokenUsage(msg.usage as TokenUsage);
+        if (msg.status === 'success' && msg.output) {
+          setItems(prev => [
+            ...prev,
+            {
+              id: uid(),
+              kind: 'assistant',
+              blocks: [{ type: 'text', text: msg.output as string }],
+            },
+          ]);
         }
-        if (msg['status'] === 'success') {
+        if (msg.status === 'success') {
           setEditorRefreshKey(k => k + 1);
           canvasPanelRef.current?.reload();
+        }
+        if (msg.status === 'error') {
+          const raw = (msg.error as string) || '';
+          const isQuota = /ResourceExhausted|quota exceeded|token quota|rate.?limit/i.test(raw);
+          const userMsg = isQuota
+            ? "You've reached your monthly token limit. Your quota will reset at the start of next month, or you can upgrade your plan at boltzbit.com."
+            : `Something went wrong: ${raw
+                .replace(/^API error \d+:\s*/i, '')
+                .replace(/\\n$/, '')
+                .trim()}`;
+          setItems(prev => [
+            ...prev,
+            { id: uid(), kind: 'system' as const, message: userMsg, isError: true },
+          ]);
         }
       }
     };
@@ -3641,10 +4787,14 @@ function AgentPage() {
         }
         if (cancelled) return;
 
-        const connData = await connResp.json() as {
-          sessionId: string; messages: Array<{ role: string; content: unknown; isMeta?: boolean }>;
-          cwd: string; mode: string; sessionMode?: string;
-          modes?: SessionMode[]; commands?: Array<{name: string; description: string; aliases?: string[]}>;
+        const connData = (await connResp.json()) as {
+          sessionId: string;
+          messages: Array<{ role: string; content: unknown; isMeta?: boolean }>;
+          cwd: string;
+          mode: string;
+          sessionMode?: string;
+          modes?: SessionMode[];
+          commands?: Array<{ name: string; description: string; aliases?: string[] }>;
         };
         const sid = connData.sessionId;
         confirmedSessionIdRef.current = sid;
@@ -3657,16 +4807,20 @@ function AgentPage() {
         // Set the bzcode runtime mode (e.g. "yolo") from the server
         if (connData.sessionMode && connData.sessionMode !== 'default') {
           const sm = connData.sessionMode as SessionMode;
-          setMode(sm); modeRef.current = sm;
+          setMode(sm);
+          modeRef.current = sm;
         }
         if (connData.modes?.length) setAvailableModes(connData.modes);
         if (connData.commands?.length) setAvailableCommands(connData.commands);
         // Fetch available models and current model for this session
         fetch(`${HTTP_BASE}/api/models?session_id=${encodeURIComponent(sid)}`)
           .then(r => r.json())
-          .then((d: { models: {id: string; displayName: string}[]; current: string }) => {
+          .then((d: { models: { id: string; displayName: string }[]; current: string }) => {
             if (d.models?.length) setAvailableModels(d.models);
-            if (d.current) setCurrentModel(d.current);
+            if (d.current) {
+              userSetModelRef.current = false;
+              setCurrentModel(d.current);
+            }
           })
           .catch(() => null);
         setConnStatus('connected');
@@ -3679,7 +4833,8 @@ function AgentPage() {
           setItems(prev => [...prev, { id: uid(), kind: 'user' as const, text }]);
           setTimeout(() => {
             fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ type: 'user', content: text }),
             }).catch(() => null);
           }, 200);
@@ -3698,10 +4853,9 @@ function AgentPage() {
 
         // Step 2: GET /api/pool/{id}/stream — SSE
         abortController = new AbortController();
-        const streamResp = await fetch(
-          `${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/stream`,
-          { signal: abortController.signal },
-        );
+        const streamResp = await fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/stream`, {
+          signal: abortController.signal,
+        });
         if (!streamResp.ok || !streamResp.body) throw new Error('SSE stream failed');
 
         const reader = streamResp.body.getReader();
@@ -3720,7 +4874,9 @@ function AgentPage() {
             try {
               const msg = JSON.parse(line.slice(6)) as Record<string, unknown>;
               handleMessage(msg);
-            } catch { /* skip malformed */ }
+            } catch {
+              /* skip malformed */
+            }
           }
         }
       } catch (e) {
@@ -3739,7 +4895,7 @@ function AgentPage() {
           return;
         }
         reconnectAttemptsRef.current = attempt + 1;
-        const delay = Math.min(2_000 * Math.pow(2, attempt), 30_000);
+        const delay = Math.min(2_000 * 2 ** attempt, 30_000);
         reconnectTimer = setTimeout(() => {
           if (!cancelled) setWsKey(k => k + 1);
         }, delay);
@@ -3753,7 +4909,7 @@ function AgentPage() {
       if (abortController) abortController.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [connectParams ? JSON.stringify(connectParams) : null, wsKey]);
+  }, [activeCwd, agentMode, connectParams, items.findLast]);
 
   // Close model dropdown on outside click
   useEffect(() => {
@@ -3767,37 +4923,50 @@ function AgentPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, [modelDropdownOpen]);
 
-  const handlePermission = useCallback((requestId: string, behavior: 'allow' | 'deny' | 'always') => {
-    sendRaw({ type: 'user', subtype: 'permission', requestId, behavior });
-    setPendingPermission(null);
-  }, [sendRaw]);
+  const handlePermission = useCallback(
+    (requestId: string, behavior: 'allow' | 'deny' | 'always') => {
+      sendRaw({ type: 'user', subtype: 'permission', requestId, behavior });
+      setPendingPermission(null);
+    },
+    [sendRaw],
+  );
 
-  const handleInputAnswer = useCallback((requestId: string, answers: Record<string, string>) => {
-    sendRaw({ type: 'user', subtype: 'input', requestId, answers });
-    setPendingInput(null);
-  }, [sendRaw]);
+  const handleInputAnswer = useCallback(
+    (requestId: string, answers: Record<string, string>) => {
+      sendRaw({ type: 'user', subtype: 'input', requestId, answers });
+      setPendingInput(null);
+    },
+    [sendRaw],
+  );
 
-  const handleModeChange = useCallback((m: SessionMode) => {
-    setMode(m);
-    modeRef.current = m;
-    pendingModeRef.current = m; // await bzcode confirmation before allowing status to override
-    sendRaw({ type: 'setMode', mode: m });
-  }, [sendRaw]);
+  const handleModeChange = useCallback(
+    (m: SessionMode) => {
+      setMode(m);
+      modeRef.current = m;
+      pendingModeRef.current = m; // await bzcode confirmation before allowing status to override
+      sendRaw({ type: 'setMode', mode: m });
+    },
+    [sendRaw],
+  );
 
   const handleAbort = useCallback(() => {
     sendRaw({ type: 'abort' });
   }, [sendRaw]);
 
-  const saveTitle = useCallback((title: string) => {
-    const trimmed = title.trim();
-    if (!trimmed || !activeSessionId) return;
-    setSessionTitle(trimmed);
-    setIsEditingTitle(false);
-    fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(activeSessionId)}/title`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: trimmed }),
-    }).catch(() => null);
-  }, [activeSessionId]);
+  const saveTitle = useCallback(
+    (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed || !activeSessionId) return;
+      setSessionTitle(trimmed);
+      setIsEditingTitle(false);
+      fetch(`${HTTP_BASE}/sessions/${encodeURIComponent(activeSessionId)}/title`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      }).catch(() => null);
+    },
+    [activeSessionId],
+  );
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -3806,25 +4975,59 @@ function AgentPage() {
     files.forEach(file => {
       if (isDocFile(file.name)) {
         // Document: upload to server for parsing
-        const placeholder: DocAttachment = { kind: 'doc', name: file.name, docType: '', pages: 0, wordCount: 0, content: '', truncated: false, loading: true };
+        const placeholder: DocAttachment = {
+          kind: 'doc',
+          name: file.name,
+          docType: '',
+          pages: 0,
+          wordCount: 0,
+          content: '',
+          truncated: false,
+          loading: true,
+        };
         const placeholderId = file.name + Date.now();
         setAttachments(prev => [...prev, { ...placeholder, name: placeholderId } as DocAttachment]);
         const form = new FormData();
         form.append('file', file);
         fetch(`${HTTP_BASE}/api/doc/parse`, { method: 'POST', body: form })
           .then(r => r.json())
-          .then((d: { filename?: string; type?: string; pages?: number; wordCount?: number; content?: string; truncated?: boolean; error?: string }) => {
-            if (d.error) {
-              setAttachments(prev => prev.filter(a => (a as DocAttachment).name !== placeholderId));
-              return;
-            }
-            setAttachments(prev => prev.map(a =>
-              (a as DocAttachment).name === placeholderId
-                ? { kind: 'doc', name: file.name, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated, loading: false } as DocAttachment
-                : a
-            ));
-          })
-          .catch(() => setAttachments(prev => prev.filter(a => (a as DocAttachment).name !== placeholderId)));
+          .then(
+            (d: {
+              filename?: string;
+              type?: string;
+              pages?: number;
+              wordCount?: number;
+              content?: string;
+              truncated?: boolean;
+              error?: string;
+            }) => {
+              if (d.error) {
+                setAttachments(prev =>
+                  prev.filter(a => (a as DocAttachment).name !== placeholderId),
+                );
+                return;
+              }
+              setAttachments(prev =>
+                prev.map(a =>
+                  (a as DocAttachment).name === placeholderId
+                    ? ({
+                        kind: 'doc',
+                        name: file.name,
+                        docType: d.type ?? '',
+                        pages: d.pages ?? 0,
+                        wordCount: d.wordCount ?? 0,
+                        content: d.content ?? '',
+                        truncated: !!d.truncated,
+                        loading: false,
+                      } as DocAttachment)
+                    : a,
+                ),
+              );
+            },
+          )
+          .catch(() =>
+            setAttachments(prev => prev.filter(a => (a as DocAttachment).name !== placeholderId)),
+          );
       } else {
         // Image: read as base64
         const reader = new FileReader();
@@ -3842,7 +5045,7 @@ function AgentPage() {
   }, []);
 
   // Live learning: trigger a mock training job every 10 user messages
-  const llRoundCountRef = useRef(0);
+  const _llRoundCountRef = useRef(0);
   const triggerLiveLearnJob = useCallback(() => {
     if (!liveLearningOn) return;
     setLlJob('collecting');
@@ -3871,11 +5074,14 @@ function AgentPage() {
     const snapshotAttachments = attachments;
     setAttachments([]);
 
-    setItems(prev => [...prev, { id: uid(), kind: 'user', text: text || '(image)', attachments: snapshotAttachments }]);
+    setItems(prev => [
+      ...prev,
+      { id: uid(), kind: 'user', text: text || '(image)', attachments: snapshotAttachments },
+    ]);
 
     // Build content blocks — images as base64, docs as inline text blocks
-    const imgAtts  = snapshotAttachments.filter(a => !isDocAttachment(a)) as Attachment[];
-    const docAtts  = snapshotAttachments.filter(isDocAttachment);
+    const imgAtts = snapshotAttachments.filter(a => !isDocAttachment(a)) as Attachment[];
+    const docAtts = snapshotAttachments.filter(isDocAttachment);
 
     if (imgAtts.length === 0 && docAtts.length === 0) {
       sendRaw({ type: 'user', content: text });
@@ -3890,23 +5096,40 @@ function AgentPage() {
       }
       if (fullText) blocks.push({ type: 'text', text: fullText });
       for (const att of imgAtts) {
-        blocks.push({ type: 'image', source: { type: 'base64', mediaType: att.mediaType, data: att.data } });
+        blocks.push({
+          type: 'image',
+          source: { type: 'base64', mediaType: att.mediaType, data: att.data },
+        });
       }
       sendRaw({ type: 'user', content: blocks });
     }
-  }, [inputValue, attachments, isStreaming, sendRaw]);
+  }, [
+    inputValue,
+    attachments,
+    isStreaming,
+    sendRaw,
+    isCompacting,
+    sessionTitle,
+    triggerLiveLearnJob,
+  ]);
 
   // ── Slash command menu ──────────────────────────────────────────────────────
 
-  const selectSlashCommand = useCallback((name: string) => {
-    setSlashMenuDismissed(true);
-    setSlashMenuIdx(0);
-    setInputValue('');
-    const text = `/${name}`;
-    setItems(prev => [...prev, { id: uid(), kind: 'user', text }]);
-    if (name === 'compact') { setIsCompacting(true); isCompactingRef.current = true; }
-    sendRaw({ type: 'user', content: text });
-  }, [sendRaw]);
+  const selectSlashCommand = useCallback(
+    (name: string) => {
+      setSlashMenuDismissed(true);
+      setSlashMenuIdx(0);
+      setInputValue('');
+      const text = `/${name}`;
+      setItems(prev => [...prev, { id: uid(), kind: 'user', text }]);
+      if (name === 'compact') {
+        setIsCompacting(true);
+        isCompactingRef.current = true;
+      }
+      sendRaw({ type: 'user', content: text });
+    },
+    [sendRaw],
+  );
 
   // BoltzHub group — hardcoded; actions replicate the VSCode extension workflow
   const boltzHubCmds: SlashCommand[] = [
@@ -3917,7 +5140,9 @@ function AgentPage() {
       iconType: 'sparkle',
       iconColor: '#facc15',
       action: () => {
-        setSlashMenuDismissed(true); setSlashMenuIdx(0); setInputValue('');
+        setSlashMenuDismissed(true);
+        setSlashMenuIdx(0);
+        setInputValue('');
         window.open('https://boltzbit.com', '_blank');
       },
     },
@@ -3928,21 +5153,34 @@ function AgentPage() {
       iconType: 'cloud-up',
       iconColor: '#60a5fa',
       action: () => {
-        setSlashMenuDismissed(true); setSlashMenuIdx(0); setInputValue('');
+        setSlashMenuDismissed(true);
+        setSlashMenuIdx(0);
+        setInputValue('');
         // Check login + app config, then show the right modal
         fetch(`${AGENT_HTTP_BASE}/boltzhub/check?cwd=${encodeURIComponent(activeCwd)}`)
           .then(r => r.json())
-          .then((d: { isLoggedIn: boolean; hasAppConfig: boolean; appConfig?: { id: string; name: string } }) => {
-            if (!d.isLoggedIn) {
-              setItems(prev => [...prev, { id: uid(), kind: 'assistant', blocks: [{ type: 'text', text: 'Not logged in to BoltzHub. Run `bzcode` in a terminal and log in first.' }] }]);
-              return;
-            }
-            if (!d.hasAppConfig) {
-              setBzHubModal({ type: 'create-app', cwd: activeCwd });
-            } else {
-              setBzHubModal({ type: 'release-notes', cwd: activeCwd, appId: d.appConfig!.id, appName: d.appConfig!.name });
-            }
-          })
+          .then(
+            (d: {
+              isLoggedIn: boolean;
+              hasAppConfig: boolean;
+              appConfig?: { id: string; name: string };
+            }) => {
+              if (!d.isLoggedIn) {
+                setBzHubModal({ type: 'create-app', cwd: activeCwd });
+                return;
+              }
+              if (!d.hasAppConfig) {
+                setBzHubModal({ type: 'create-app', cwd: activeCwd });
+              } else {
+                setBzHubModal({
+                  type: 'release-notes',
+                  cwd: activeCwd,
+                  appId: d.appConfig?.id ?? '',
+                  appName: d.appConfig?.name ?? '',
+                });
+              }
+            },
+          )
           .catch(() => setBzHubModal({ type: 'create-app', cwd: activeCwd }));
       },
     },
@@ -3953,7 +5191,9 @@ function AgentPage() {
       iconType: 'cloud-down',
       iconColor: '#2dd4bf',
       action: () => {
-        setSlashMenuDismissed(true); setSlashMenuIdx(0); setInputValue('');
+        setSlashMenuDismissed(true);
+        setSlashMenuIdx(0);
+        setInputValue('');
         setBzHubModal({ type: 'sync', cwd: activeCwd });
       },
     },
@@ -3964,7 +5204,9 @@ function AgentPage() {
       iconType: 'chart',
       iconColor: '#a78bfa',
       action: () => {
-        setSlashMenuDismissed(true); setSlashMenuIdx(0); setInputValue('');
+        setSlashMenuDismissed(true);
+        setSlashMenuIdx(0);
+        setInputValue('');
         setBzHubModal({ type: 'token-usage', period: '30d' });
       },
     },
@@ -3982,94 +5224,354 @@ function AgentPage() {
 
   const commandGroups: SlashCommandGroup[] = [
     { title: 'BoltzHub', commands: boltzHubCmds },
-    { title: 'Code',     commands: codeCmds },
+    { title: 'Code', commands: codeCmds },
   ];
 
-  const slashFilter    = inputValue.startsWith('/') ? inputValue.slice(1).toLowerCase() : '';
-  const filteredGroups = commandGroups.map(g => ({
-    ...g,
-    commands: g.commands.filter(c =>
-      !slashFilter ||
-      c.label.toLowerCase().includes(slashFilter) ||
-      c.description.toLowerCase().includes(slashFilter)
-    ),
-  })).filter(g => g.commands.length > 0);
-  const flatFiltered   = filteredGroups.flatMap(g => g.commands);
-  const showSlashMenu  = inputValue.startsWith('/') && !isStreaming && !slashMenuDismissed && flatFiltered.length > 0;
-  const safeIdx        = Math.min(slashMenuIdx, Math.max(0, flatFiltered.length - 1));
+  const slashFilter = inputValue.startsWith('/') ? inputValue.slice(1).toLowerCase() : '';
+  const filteredGroups = commandGroups
+    .map(g => ({
+      ...g,
+      commands: g.commands.filter(
+        c =>
+          !slashFilter ||
+          c.label.toLowerCase().includes(slashFilter) ||
+          c.description.toLowerCase().includes(slashFilter),
+      ),
+    }))
+    .filter(g => g.commands.length > 0);
+  const flatFiltered = filteredGroups.flatMap(g => g.commands);
+  const showSlashMenu =
+    inputValue.startsWith('/') && !isStreaming && !slashMenuDismissed && flatFiltered.length > 0;
+  const safeIdx = Math.min(slashMenuIdx, Math.max(0, flatFiltered.length - 1));
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (showSlashMenu) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashMenuIdx(i => Math.min(i + 1, flatFiltered.length - 1)); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashMenuIdx(i => Math.max(i - 1, 0)); return; }
-      if (e.key === 'Escape')    { e.preventDefault(); setSlashMenuDismissed(true); return; }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashMenuIdx(i => Math.min(i + 1, flatFiltered.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashMenuIdx(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashMenuDismissed(true);
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         const cmd = flatFiltered[safeIdx];
-        if (cmd) { cmd.action(); return; }
+        if (cmd) {
+          cmd.action();
+          return;
+        }
       }
       if (e.key === 'Tab') {
         e.preventDefault();
         const cmd = flatFiltered[safeIdx];
-        if (cmd) setInputValue('/' + cmd.id);
+        if (cmd) setInputValue(`/${cmd.id}`);
         return;
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   }
 
-  const allItems = isStreaming && streamingBlocks.length > 0
-    ? [...items, { id: '__streaming__', kind: 'assistant' as const, blocks: streamingBlocks }]
-    : items;
+  const allItems =
+    isStreaming && streamingBlocks.length > 0
+      ? [...items, { id: '__streaming__', kind: 'assistant' as const, blocks: streamingBlocks }]
+      : items;
 
   const modeColor = MODE_META[mode].color;
 
   // ── Shared session-creation overlay (used in both list and chat views) ────────
-  const newSessionOverlay = (pendingNewMode !== null || sessionCreating || sessionCreateError) ? (
-    <div className="new-session-overlay">
-      <div className="new-session-panel">
-        {sessionCreating && (
-          <>
-            <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
-            <div className="new-session-steps">
-              <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
-              <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
-              <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
-            </div>
-            {showApiKeyPrompt && (
-              <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
-                <input type="password" className="conv-search-input" placeholder="Paste API key…" value={apiKeyValue}
-                  onChange={e => setApiKeyValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
-                  style={{ width: '100%', boxSizing: 'border-box' }} autoFocus />
-                <button type="button" className="new-session-cancel" disabled={apiKeySaving || !apiKeyValue.trim()}
-                  onClick={handleSaveApiKey} style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}>
-                  {apiKeySaving ? 'Saving…' : 'Save & restart'}
-                </button>
+  const newSessionOverlay =
+    pendingNewMode !== null || sessionCreating || sessionCreateError ? (
+      <div className="new-session-overlay">
+        <div className="new-session-panel">
+          {sessionCreating && (
+            <>
+              <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
+              <div className="new-session-steps">
+                <SessionStep
+                  done={sessionCreateStep !== 'creating'}
+                  active={sessionCreateStep === 'creating'}
+                  label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'}
+                />
+                <SessionStep
+                  done={sessionCreateStep === 'connecting'}
+                  active={sessionCreateStep === 'starting'}
+                  label="Starting agent"
+                />
+                <SessionStep
+                  done={false}
+                  active={sessionCreateStep === 'connecting'}
+                  label="Connecting"
+                />
               </div>
-            )}
-            <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
-          </>
-        )}
-        {sessionCreateError && !sessionCreating && (
-          <SessionCreateErrorPanel error={sessionCreateError} apiKeyValue={apiKeyValue} apiKeySaving={apiKeySaving}
-            onApiKeyValueChange={setApiKeyValue} onSaveApiKey={handleSaveApiKey} onRetry={retrySessionCreate}
-            onSignOut={handleSignOut} onBack={() => { setSessionCreateError(null); setPendingNewMode(null); }} />
-        )}
-        {pendingNewMode !== null && !sessionCreating && !sessionCreateError && (
-          <>
-            <div className="new-session-header">
-              <span className="new-session-title">Select working directory</span>
-            </div>
-            <p className="new-session-hint">Choose the project folder for this {pendingNewMode} session.</p>
-            <DirPickerPanel rootPath={defaultCwd}
-              onConfirm={cwd => { const mode = pendingNewMode; setPendingNewMode(null); void startNewSession(cwd, mode!); }}
-              onCancel={() => setPendingNewMode(null)} />
-          </>
-        )}
+              {showApiKeyPrompt && (
+                <div
+                  style={{
+                    width: '100%',
+                    marginTop: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  <p className="new-session-hint" style={{ marginTop: 0 }}>
+                    Taking too long? Enter your API key to restart:
+                  </p>
+                  <input
+                    type="password"
+                    className="conv-search-input"
+                    placeholder="Paste API key…"
+                    value={apiKeyValue}
+                    onChange={e => setApiKeyValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSaveApiKey();
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="button"
+                    className="new-session-cancel"
+                    disabled={apiKeySaving || !apiKeyValue.trim()}
+                    onClick={handleSaveApiKey}
+                    style={{ opacity: !apiKeyValue.trim() || apiKeySaving ? 0.5 : 1 }}
+                  >
+                    {apiKeySaving ? 'Saving…' : 'Save & restart'}
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="new-session-cancel"
+                style={{ marginTop: 4 }}
+                onClick={cancelSessionCreate}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+          {sessionCreateError && !sessionCreating && (
+            <SessionCreateErrorPanel
+              error={sessionCreateError}
+              apiKeyValue={apiKeyValue}
+              apiKeySaving={apiKeySaving}
+              onApiKeyValueChange={setApiKeyValue}
+              onSaveApiKey={handleSaveApiKey}
+              onRetry={retrySessionCreate}
+              onSignOut={handleSignOut}
+              onBack={() => {
+                setSessionCreateError(null);
+                setPendingNewMode(null);
+              }}
+            />
+          )}
+          {pendingNewMode !== null &&
+            !sessionCreating &&
+            !sessionCreateError &&
+            (() => {
+              const isCoder = pendingNewMode === 'coder';
+              const needInput =
+                isCoder &&
+                (coderStartChoice === 'describe' || coderStartChoice === 'github') &&
+                !coderInputDone;
+              const showDirPicker = !isCoder || (coderStartChoice !== null && !needInput);
+
+              function cancelCoder() {
+                setCoderStartChoice(null);
+                setCoderInputText('');
+                setCoderInputDone(false);
+                setPendingNewMode(null);
+              }
+              function confirmInput() {
+                if (coderInputText.trim()) setCoderInputDone(true);
+              }
+
+              return (
+                <>
+                  {/* Step 1 — Coder start options */}
+                  {isCoder && coderStartChoice === null && (
+                    <>
+                      <div className="new-session-header">
+                        <span className="new-session-title">Start your project</span>
+                      </div>
+                      <div className="coder-start-options">
+                        {(
+                          [
+                            {
+                              key: 'describe',
+                              label: 'Describe an app',
+                              desc: "Tell me what to build — I'll do the rest",
+                            },
+                            {
+                              key: 'empty',
+                              label: 'Empty project',
+                              desc: 'Start from scratch in a blank folder',
+                            },
+                            {
+                              key: 'existing',
+                              label: 'Open existing code',
+                              desc: 'Browse to a project you already have',
+                            },
+                            {
+                              key: 'github',
+                              label: 'Clone from GitHub',
+                              desc: "Paste a repo URL and I'll pull it down",
+                            },
+                          ] as const
+                        ).map(opt => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            className="coder-start-option"
+                            onClick={() => {
+                              setCoderStartChoice(opt.key);
+                              setCoderInputText('');
+                              setCoderInputDone(false);
+                            }}
+                          >
+                            <span className="coder-start-option-label">{opt.label}</span>
+                            <span className="coder-start-option-desc">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" className="new-session-cancel" onClick={cancelCoder}>
+                        Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {/* Step 2 — Description or GitHub URL input */}
+                  {needInput && (
+                    <>
+                      <div className="new-session-header">
+                        <button
+                          type="button"
+                          className="coder-start-back"
+                          onClick={() => {
+                            setCoderStartChoice(null);
+                            setCoderInputText('');
+                          }}
+                        >
+                          ← Back
+                        </button>
+                        <span className="new-session-title">
+                          {coderStartChoice === 'describe'
+                            ? 'Describe your app'
+                            : 'GitHub repository'}
+                        </span>
+                      </div>
+                      <p className="new-session-hint">
+                        {coderStartChoice === 'describe'
+                          ? 'What does the app do? Who uses it? The more detail, the better.'
+                          : 'Paste the repository URL to clone.'}
+                      </p>
+                      {coderStartChoice === 'describe' ? (
+                        <textarea
+                          className="coder-start-textarea"
+                          placeholder="e.g. A CRM for tracking sales leads — contact list, pipeline view, notes per deal"
+                          value={coderInputText}
+                          onChange={e => setCoderInputText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              confirmInput();
+                            }
+                          }}
+                        />
+                      ) : (
+                        <input
+                          className="coder-start-input"
+                          type="url"
+                          placeholder="https://github.com/org/repo"
+                          value={coderInputText}
+                          onChange={e => setCoderInputText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') confirmInput();
+                          }}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="coder-start-continue"
+                        disabled={!coderInputText.trim()}
+                        onClick={confirmInput}
+                      >
+                        Continue →
+                      </button>
+                      <button
+                        type="button"
+                        className="new-session-cancel"
+                        style={{ marginTop: 4 }}
+                        onClick={cancelCoder}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {/* Step 3 — Directory picker */}
+                  {showDirPicker && (
+                    <>
+                      <div className="new-session-header">
+                        {isCoder && (
+                          <button
+                            type="button"
+                            className="coder-start-back"
+                            onClick={() => {
+                              coderStartChoice === 'empty' || coderStartChoice === 'existing'
+                                ? setCoderStartChoice(null)
+                                : setCoderInputDone(false);
+                            }}
+                          >
+                            ← Back
+                          </button>
+                        )}
+                        <span className="new-session-title">Select working directory</span>
+                      </div>
+                      <p className="new-session-hint">
+                        Choose the project folder for this {pendingNewMode} session.
+                      </p>
+                      <DirPickerPanel
+                        rootPath={defaultCwd}
+                        onConfirm={cwd => {
+                          const m = pendingNewMode!;
+                          if (
+                            m === 'coder' &&
+                            coderStartChoice === 'describe' &&
+                            coderInputText.trim()
+                          )
+                            pendingAutoSendRef.current = coderInputText.trim();
+                          else if (
+                            m === 'coder' &&
+                            coderStartChoice === 'github' &&
+                            coderInputText.trim()
+                          )
+                            pendingAutoSendRef.current = `Clone this GitHub repository and help me work on it: ${coderInputText.trim()}`;
+                          setCoderStartChoice(null);
+                          setCoderInputText('');
+                          setCoderInputDone(false);
+                          setPendingNewMode(null);
+                          void startNewSession(cwd, m);
+                        }}
+                        onCancel={cancelCoder}
+                      />
+                    </>
+                  )}
+                </>
+              );
+            })()}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   // ── Session list (early return — all hooks above already ran) ────────────────
   if (view === 'list') {
@@ -4082,13 +5584,28 @@ function AgentPage() {
         {showModeSelector && (
           <div className="new-session-overlay">
             <div className="new-session-panel">
-              <div className="new-session-header"><span className="new-session-title">New chat</span></div>
+              <div className="new-session-header">
+                <span className="new-session-title">New chat</span>
+              </div>
               <p className="new-session-hint">Select how this agent should behave.</p>
-              <ModeSelector selected={agentMode} onSelect={m => {
-                setShowModeSelector(false);
-                if (m === 'worker' || m === 'coder') { setPendingNewMode(m); } else { void startNewSession(defaultCwd, m); }
-              }} />
-              <button type="button" className="new-session-cancel" onClick={() => setShowModeSelector(false)}>Cancel</button>
+              <ModeSelector
+                selected={agentMode}
+                onSelect={m => {
+                  setShowModeSelector(false);
+                  if (m === 'worker' || m === 'coder') {
+                    setPendingNewMode(m);
+                  } else {
+                    void startNewSession(defaultCwd, m);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="new-session-cancel"
+                onClick={() => setShowModeSelector(false)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -4103,20 +5620,29 @@ function AgentPage() {
       {/* Batch queue banner */}
       {batchQueue.length > 0 && (
         <div className="agent-batch-banner">
-          <span>Also queued for {batchQueue.length} other project{batchQueue.length !== 1 ? 's' : ''}:</span>
+          <span>
+            Also queued for {batchQueue.length} other project{batchQueue.length !== 1 ? 's' : ''}:
+          </span>
           {batchQueue.map((item, i) => (
-            <button key={i} type="button" className="agent-batch-link"
+            <button
+              key={i}
+              type="button"
+              className="agent-batch-link"
               onClick={() => {
                 const remaining = batchQueue.filter((_, j) => j !== i);
                 setBatchQueue(remaining);
-                if (remaining.length > 0) sessionStorage.setItem('agent:batchQueue', JSON.stringify(remaining));
+                if (remaining.length > 0)
+                  sessionStorage.setItem('agent:batchQueue', JSON.stringify(remaining));
                 openSession(item.cwd, null);
                 if (item.message) setInputValue(item.message);
-              }}>
+              }}
+            >
               {item.cwd.split('/').filter(Boolean).pop()}
             </button>
           ))}
-          <button type="button" className="agent-batch-dismiss" onClick={() => setBatchQueue([])}><XIcon size={12} /></button>
+          <button type="button" className="agent-batch-dismiss" onClick={() => setBatchQueue([])}>
+            <XIcon size={12} />
+          </button>
         </div>
       )}
       {/* Header */}
@@ -4140,7 +5666,10 @@ function AgentPage() {
               <span
                 className="agent-session-title"
                 title="Click to rename"
-                onClick={() => { setEditingTitleValue(sessionTitle); setIsEditingTitle(true); }}
+                onClick={() => {
+                  setEditingTitleValue(sessionTitle);
+                  setIsEditingTitle(true);
+                }}
               >
                 {sessionTitle}
               </span>
@@ -4151,11 +5680,15 @@ function AgentPage() {
               ref={titleInputRef}
               className="agent-title-input"
               value={editingTitleValue}
-              autoFocus
               onChange={e => setEditingTitleValue(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter')  { e.preventDefault(); saveTitle(editingTitleValue); }
-                if (e.key === 'Escape') { setIsEditingTitle(false); }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveTitle(editingTitleValue);
+                }
+                if (e.key === 'Escape') {
+                  setIsEditingTitle(false);
+                }
               }}
               onBlur={() => saveTitle(editingTitleValue)}
             />
@@ -4176,812 +5709,1153 @@ function AgentPage() {
               className={`agent-model-dropdown-trigger${isStreaming ? ' agent-model-dropdown-trigger--disabled' : ''}${modelDropdownOpen ? ' agent-model-dropdown-trigger--open' : ''}`}
               disabled={isStreaming}
               title={isStreaming ? 'Cannot change model while agent is running' : 'Select model'}
-              onClick={() => { if (!isStreaming) { setModelSearch(''); setModelDropdownOpen(o => !o); } }}
+              onClick={() => {
+                if (!isStreaming) {
+                  setModelSearch('');
+                  setModelDropdownOpen(o => !o);
+                }
+              }}
             >
               <span className="agent-model-dropdown-label">
-                {(currentModel && availableModels.find(m => m.id === currentModel)?.displayName)
-                  || currentModel || 'Model'}
+                {(currentModel && availableModels.find(m => m.id === currentModel)?.displayName) ||
+                  currentModel ||
+                  'Model'}
               </span>
-              <svg className="agent-model-dropdown-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
-                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="agent-model-dropdown-chevron"
+                width="10"
+                height="6"
+                viewBox="0 0 10 6"
+                fill="none"
+              >
+                <path
+                  d="M1 1l4 4 4-4"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
 
-            {modelDropdownOpen && (() => {
-              const MODEL_GROUPS: { label: string; test: (name: string) => boolean }[] = [
-                { label: 'Boltzbit',   test: n => n.startsWith('Boltzbit') },
-                { label: 'Anthropic',  test: n => n.startsWith('Claude') },
-                { label: 'Google',     test: n => n.startsWith('Gemini') },
-                { label: 'OpenAI',     test: n => n.startsWith('GPT') || n.startsWith('o1') || n.startsWith('o3') },
-                { label: 'Open Source', test: () => true },
-              ];
-              const q = modelSearch.toLowerCase();
-              const filteredModels = q ? availableModels.filter(m => m.displayName.toLowerCase().includes(q)) : availableModels;
-              const grouped: { label: string; models: typeof availableModels }[] = MODEL_GROUPS.map(g => ({ label: g.label, models: [] }));
-              for (const m of filteredModels) {
-                const gi = MODEL_GROUPS.findIndex(g => g.test(m.displayName));
-                grouped[gi === -1 ? grouped.length - 1 : gi].models.push(m);
-              }
-              const renderOption = (m: { id: string; displayName: string }) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`agent-model-dropdown-option${m.id === currentModel ? ' agent-model-dropdown-option--active' : ''}`}
-                  onClick={() => {
-                    setCurrentModel(m.id);
-                    setModelDropdownOpen(false);
-                    const sid = activeSessionId;
-                    fetch(`${HTTP_BASE}/api/sessions/${encodeURIComponent(sid)}/model`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ model: m.id }),
-                    }).catch(() => null);
-                  }}
-                >
-                  <span className="agent-model-dropdown-option-name">{m.displayName}</span>
-                  {m.id === currentModel && (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="agent-model-dropdown-check">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-              );
-              return (
-                <div className="agent-model-dropdown-panel">
-                  <div className="agent-model-dropdown-search-wrap">
-                    <svg className="agent-model-dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                    <input
-                      className="agent-model-dropdown-search"
-                      type="text"
-                      placeholder="Search models…"
-                      value={modelSearch}
-                      autoFocus
-                      onChange={e => setModelSearch(e.target.value)}
-                      onKeyDown={e => e.key === 'Escape' && setModelDropdownOpen(false)}
-                    />
-                  </div>
-                  {grouped.filter(g => g.models.length > 0).map(g => (
-                    <div key={g.label} className="agent-model-dropdown-group">
-                      <div className="agent-model-dropdown-group-label">{g.label}</div>
-                      {g.models.map(renderOption)}
-                    </div>
-                  ))}
-                  {currentModel && availableModels.length > 0 && !availableModels.find(m => m.id === currentModel) && (
-                    <button type="button" className="agent-model-dropdown-option agent-model-dropdown-option--active">
-                      <span className="agent-model-dropdown-option-name">{currentModel}</span>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="agent-model-dropdown-check">
-                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            {modelDropdownOpen &&
+              (() => {
+                const MODEL_GROUPS: { label: string; test: (name: string) => boolean }[] = [
+                  { label: 'Boltzbit', test: n => n.startsWith('Boltzbit') },
+                  { label: 'Anthropic', test: n => n.startsWith('Claude') },
+                  { label: 'Google', test: n => n.startsWith('Gemini') },
+                  {
+                    label: 'OpenAI',
+                    test: n => n.startsWith('GPT') || n.startsWith('o1') || n.startsWith('o3'),
+                  },
+                  { label: 'Open Source', test: () => true },
+                ];
+                const q = modelSearch.toLowerCase();
+                const filteredModels = q
+                  ? availableModels.filter(m => m.displayName.toLowerCase().includes(q))
+                  : availableModels;
+                const grouped: { label: string; models: typeof availableModels }[] =
+                  MODEL_GROUPS.map(g => ({ label: g.label, models: [] }));
+                for (const m of filteredModels) {
+                  const gi = MODEL_GROUPS.findIndex(g => g.test(m.displayName));
+                  grouped[gi === -1 ? grouped.length - 1 : gi]?.models.push(m);
+                }
+                const renderOption = (m: { id: string; displayName: string }) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`agent-model-dropdown-option${m.id === currentModel ? ' agent-model-dropdown-option--active' : ''}`}
+                    onClick={() => {
+                      setCurrentModel(m.id);
+                      userSetModelRef.current = true;
+                      setModelDropdownOpen(false);
+                      // Send as a /model slash command so bzcode switches immediately
+                      const cmd = `/model ${m.id}`;
+                      setItems(prev => [...prev, { id: uid(), kind: 'user' as const, text: cmd }]);
+                      sendRaw({ type: 'user', content: cmd });
+                    }}
+                  >
+                    <span className="agent-model-dropdown-option-name">{m.displayName}</span>
+                    {m.id === currentModel && (
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        className="agent-model-dropdown-check"
+                      >
+                        <path
+                          d="M2 6l3 3 5-5"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+                    )}
+                  </button>
+                );
+                return (
+                  <div className="agent-model-dropdown-panel">
+                    <div className="agent-model-dropdown-search-wrap">
+                      <svg
+                        className="agent-model-dropdown-search-icon"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        className="agent-model-dropdown-search"
+                        type="text"
+                        placeholder="Search models…"
+                        value={modelSearch}
+                        onChange={e => setModelSearch(e.target.value)}
+                        onKeyDown={e => e.key === 'Escape' && setModelDropdownOpen(false)}
+                      />
+                    </div>
+                    {grouped
+                      .filter(g => g.models.length > 0)
+                      .map(g => (
+                        <div key={g.label} className="agent-model-dropdown-group">
+                          <div className="agent-model-dropdown-group-label">{g.label}</div>
+                          {g.models.map(renderOption)}
+                        </div>
+                      ))}
+                    {currentModel &&
+                      availableModels.length > 0 &&
+                      !availableModels.find(m => m.id === currentModel) && (
+                        <button
+                          type="button"
+                          className="agent-model-dropdown-option agent-model-dropdown-option--active"
+                        >
+                          <span className="agent-model-dropdown-option-name">{currentModel}</span>
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            className="agent-model-dropdown-check"
+                          >
+                            <path
+                              d="M2 6l3 3 5-5"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                  </div>
+                );
+              })()}
           </div>
         )}
-
       </div>
 
       {/* Body — layout depends on mode */}
-      <div className={
-        agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder'
-          ? 'agent-canvas-layout'
-          : 'agent-chat-col'
-      }>
-      <div className={`agent-chat-col${(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat ? ' agent-chat-col--float-prompt' : ''}`}>
-
-      {/* Collapse strip — widget / worker / coder modes */}
-      {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && (
-        <div className="agent-widget-chat-strip">
-          <button
-            type="button"
-            className="agent-widget-chat-strip-btn"
-            title="Hide chat"
-            onClick={() => setShowWidgetChat(false)}
-          >
-            <ChatCircleDotsIcon size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* Messages wrapper — position:relative so the sticky overlay anchors here, not inside the scrollable area */}
-      <div className="agent-messages-wrapper">
-        {/* Sticky overlay is a SIBLING of the scroll container so it doesn't scroll with content */}
-        {stickyMsgIdx !== -1 && allItems[stickyMsgIdx]?.kind === 'user' && (
-          <div
-            ref={stickyOverlayRef}
-            className="agent-sticky-overlay"
-            style={{ transform: `translateY(${stickyTranslateY}px)` }}
-          >
-            <div className="agent-sticky-inner">
-              <StickyLastPrompt
-              text={(allItems[stickyMsgIdx] as Extract<DisplayItem, { kind: 'user' }>).text}
-              attachments={(allItems[stickyMsgIdx] as Extract<DisplayItem, { kind: 'user' }>).attachments}
-            />
+      <div
+        className={
+          agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder'
+            ? 'agent-canvas-layout'
+            : 'agent-chat-col'
+        }
+      >
+        <div
+          className={`agent-chat-col${(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat ? ' agent-chat-col--float-prompt' : ''}`}
+        >
+          {/* Collapse strip — widget / worker / coder modes */}
+          {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && (
+            <div className="agent-widget-chat-strip">
+              <button
+                type="button"
+                className="agent-widget-chat-strip-btn"
+                title="Hide chat"
+                onClick={() => setShowWidgetChat(false)}
+              >
+                <ChatCircleDotsIcon size={14} />
+              </button>
             </div>
-            <div className="agent-sticky-fade" />
+          )}
+
+          {/* Messages wrapper — position:relative so the sticky overlay anchors here, not inside the scrollable area */}
+          <div className="agent-messages-wrapper">
+            {/* Sticky overlay is a SIBLING of the scroll container so it doesn't scroll with content */}
+            {stickyMsgIdx !== -1 && allItems[stickyMsgIdx]?.kind === 'user' && (
+              <div
+                ref={stickyOverlayRef}
+                className="agent-sticky-overlay"
+                style={{ transform: `translateY(${stickyTranslateY}px)` }}
+              >
+                <div className="agent-sticky-inner">
+                  <StickyLastPrompt
+                    text={(allItems[stickyMsgIdx] as Extract<DisplayItem, { kind: 'user' }>).text}
+                    attachments={
+                      (
+                        allItems[stickyMsgIdx] as Extract<DisplayItem, { kind: 'user' }>
+                      ).attachments?.filter(a => !isDocAttachment(a)) as Attachment[] | undefined
+                    }
+                  />
+                </div>
+                <div className="agent-sticky-fade" />
+              </div>
+            )}
+
+            <div ref={scrollRef} className="chat-messages">
+              {allItems.length === 0 ? (
+                <div className="chat-empty">
+                  {/* Connecting state: show for any session while bzcode is starting */}
+                  {connStatus === 'connecting' && (
+                    <>
+                      <BoltzbitLogo
+                        key={activeSessionId || wsKey}
+                        size={40}
+                        className="boltzbit-logo-animate"
+                      />
+                      <p className="chat-loading-label">Connecting…</p>
+                    </>
+                  )}
+
+                  {/* Connected with empty chat: one-shot settling pulse */}
+                  {connStatus === 'connected' ? (
+                    <>
+                      <BoltzbitLogo
+                        key={activeSessionId || wsKey}
+                        size={40}
+                        className="boltzbit-logo-animate-settling"
+                      />
+                      <p className="chat-loading-label chat-loading-label--ready">
+                        {activeDirName
+                          ? `Working in ${activeDirName} — what can I help you with?`
+                          : 'What can I help you with?'}
+                      </p>
+                    </>
+                  ) : null}
+
+                  {/* Error / disconnected (transient — still retrying) */}
+                  {!sessionUnavailable &&
+                    (connStatus === 'error' || connStatus === 'disconnected') && (
+                      <>
+                        <BoltzbitLogo size={40} />
+                        <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
+                          {connStatus === 'error' ? 'Connection failed' : 'Disconnected'}
+                        </p>
+                      </>
+                    )}
+
+                  {/* Session permanently unavailable — stop retrying, show clear error */}
+                  {sessionUnavailable && (
+                    <>
+                      <BoltzAgentMark size={36} color="var(--text-tertiary)" />
+                      <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
+                        This session is unavailable
+                      </p>
+                      <p
+                        className="chat-loading-label"
+                        style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}
+                      >
+                        bzcode may be unreachable or the session was deleted.
+                      </p>
+                      <button
+                        type="button"
+                        className="new-session-cancel"
+                        style={{ marginTop: 12 }}
+                        onClick={goToList}
+                      >
+                        Back to sessions
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="chat-messages-inner">
+                  {allItems.map((item, idx) => {
+                    if (item.kind === 'user')
+                      return (
+                        <div key={item.id} data-user-msg-idx={idx}>
+                          <div className="agent-user-msg animate-slide-in">
+                            {item.attachments && item.attachments.length > 0 && (
+                              <div className="agent-attach-chips">
+                                {(
+                                  item.attachments.filter(a => !isDocAttachment(a)) as Attachment[]
+                                ).map((att, i) => (
+                                  <span key={i} className="agent-attach-chip">
+                                    <img
+                                      src={`data:${att.mediaType};base64,${att.data}`}
+                                      alt={att.name}
+                                      className="agent-attach-thumb"
+                                    />
+                                    <span className="agent-attach-name">{att.name}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {item.text !== '(image)' && item.text}
+                          </div>
+                        </div>
+                      );
+
+                    if (item.kind === 'assistant') {
+                      const isLive = item.id === '__streaming__';
+                      return (
+                        <div key={item.id} className="chat-message">
+                          {item.blocks.map((block, j) => {
+                            if (block.type === 'text') {
+                              const cmdList = parseCommandListOutput(block.text);
+                              if (cmdList) return <CommandListDisplay key={j} result={cmdList} />;
+                              const docPaths =
+                                agentMode === 'worker' ? extractDocPaths(block.text) : [];
+                              const widgetIds =
+                                agentMode === 'widget' && !isLive
+                                  ? extractWidgetIds(block.text)
+                                  : [];
+                              return (
+                                <div key={j} className="agent-msg-row">
+                                  <span className="agent-block-icon">
+                                    <BlockDot size={10} />
+                                  </span>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div
+                                      className="chat-bubble-assistant"
+                                      dangerouslySetInnerHTML={{
+                                        __html: parseMarkdownToHTML(block.text),
+                                      }}
+                                    />
+                                    {widgetIds.length > 0 && (
+                                      <div className="agent-doc-open-chips">
+                                        {widgetIds.map(id => (
+                                          <button
+                                            key={id}
+                                            type="button"
+                                            className="agent-doc-open-btn"
+                                            onClick={() => {}}
+                                          >
+                                            <svg
+                                              viewBox="0 0 24 24"
+                                              width="13"
+                                              height="13"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              strokeWidth="2"
+                                              strokeLinecap="round"
+                                              style={{ flexShrink: 0 }}
+                                            >
+                                              <rect x="3" y="3" width="7" height="7" />
+                                              <rect x="14" y="3" width="7" height="7" />
+                                              <rect x="3" y="14" width="7" height="7" />
+                                              <rect x="14" y="14" width="7" height="7" />
+                                            </svg>
+                                            View on canvas
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {docPaths.length > 0 && (
+                                      <div className="agent-doc-open-chips">
+                                        {docPaths.map(p => (
+                                          <button
+                                            key={p}
+                                            type="button"
+                                            className="agent-doc-open-btn"
+                                            onClick={() => {
+                                              const ext = p.split('.').pop()?.toLowerCase() ?? '';
+                                              const absPath = p.startsWith('/')
+                                                ? p
+                                                : `${activeCwd}/${p}`;
+                                              // Office files: open in EditorPanel (Excel, PPT, Word)
+                                              if (
+                                                [
+                                                  'xlsx',
+                                                  'xls',
+                                                  'pptx',
+                                                  'ppt',
+                                                  'docx',
+                                                  'doc',
+                                                ].includes(ext)
+                                              ) {
+                                                setEditorRefreshKey(k => k + 1);
+                                                window.dispatchEvent(
+                                                  new CustomEvent('open-file', {
+                                                    detail: { path: absPath },
+                                                  }),
+                                                );
+                                                return;
+                                              }
+                                              setDocViewerLoading(true);
+                                              setDocViewer(null);
+                                              fetch(`${HTTP_BASE}/api/doc/parse`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ path: absPath }),
+                                              })
+                                                .then(r => r.json())
+                                                .then(
+                                                  (d: {
+                                                    filename?: string;
+                                                    type?: string;
+                                                    pages?: number;
+                                                    wordCount?: number;
+                                                    content?: string;
+                                                    truncated?: boolean;
+                                                    error?: string;
+                                                  }) => {
+                                                    if (d.error) return;
+                                                    setDocViewer({
+                                                      path: absPath,
+                                                      name:
+                                                        d.filename ??
+                                                        absPath.split('/').pop() ??
+                                                        absPath,
+                                                      docType: d.type ?? '',
+                                                      pages: d.pages ?? 0,
+                                                      wordCount: d.wordCount ?? 0,
+                                                      content: d.content ?? '',
+                                                      truncated: !!d.truncated,
+                                                    });
+                                                  },
+                                                )
+                                                .finally(() => setDocViewerLoading(false));
+                                            }}
+                                          >
+                                            {p.split('.').pop()?.toLowerCase() === 'xlsx' ||
+                                            p.split('.').pop()?.toLowerCase() === 'xls'
+                                              ? '📊'
+                                              : '📄'}{' '}
+                                            Open {p.split('/').pop()}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (block.type === 'thinking')
+                              return (
+                                <details key={j} className="agent-thinking">
+                                  <summary
+                                    className={`agent-thinking-summary${isLive ? ' agent-thinking-summary--live' : ''}`}
+                                  >
+                                    <TriangleCubes className="agent-thinking-marker" />
+                                    <span>Thinking…</span>
+                                  </summary>
+                                  <div
+                                    className="agent-thinking-content"
+                                    dangerouslySetInnerHTML={{
+                                      __html: parseMarkdownToHTML(block.text),
+                                    }}
+                                  />
+                                </details>
+                              );
+                            return null;
+                          })}
+                        </div>
+                      );
+                    }
+
+                    if (item.kind === 'tool') {
+                      if (agentMode === 'widget') {
+                        if (item.name === 'Skill')
+                          return <WidgetSkillBadge key={item.id} item={item} />;
+                        return null;
+                      }
+                      if (
+                        agentMode === 'worker' &&
+                        ['Bash', 'Read', 'Write', 'Edit', 'NotebookEdit'].includes(item.name)
+                      ) {
+                        const label: Record<string, string> = {
+                          Bash: 'Ran command',
+                          Read: 'Read file',
+                          Write: 'Wrote file',
+                          Edit: 'Edited file',
+                          NotebookEdit: 'Edited notebook',
+                        };
+                        const icon = item.name === 'Bash' ? '⚡' : '📄';
+                        const statusColor =
+                          item.status === 'error'
+                            ? 'var(--accent-red)'
+                            : item.status === 'running'
+                              ? 'var(--text-tertiary)'
+                              : 'var(--text-tertiary)';
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '2px 0',
+                              fontSize: 11,
+                              color: statusColor,
+                              opacity: 0.7,
+                            }}
+                          >
+                            <span>{icon}</span>
+                            <span>{label[item.name] ?? item.name}</span>
+                            {item.status === 'running' && (
+                              <span style={{ color: 'var(--accent-blue)' }}>…</span>
+                            )}
+                            {item.status === 'error' && (
+                              <span style={{ color: 'var(--accent-red)' }}>✗</span>
+                            )}
+                            {item.status === 'done' && !item.isError && <span>✓</span>}
+                          </div>
+                        );
+                      }
+                      return <ToolCard key={item.id} item={item} />;
+                    }
+                    if (item.kind === 'push-progress')
+                      return <PushProgressCard key={item.id} item={item} />;
+                    if (item.kind === 'sync-progress')
+                      return <SyncProgressCard key={item.id} item={item} />;
+                    if (item.kind === 'compact-summary')
+                      return <CompactSummaryCard key={item.id} text={item.text} />;
+                    if (item.kind === 'system')
+                      return (
+                        <div
+                          key={item.id}
+                          className={`agent-system-msg${item.isError ? ' agent-system-msg--error' : ''}`}
+                        >
+                          {item.message}
+                        </div>
+                      );
+
+                    return null;
+                  })}
+
+                  {isStreaming && streamingBlocks.length === 0 && <BoltzingIndicator />}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="agent-prompt-section">
+            {/* Sticky prompt cards — rendered above input bar */}
+            {(pendingPermission || pendingInput) && (
+              <div className="agent-prompt-overlay">
+                {pendingPermission && (
+                  <PermissionCard
+                    prompt={pendingPermission}
+                    mode={mode}
+                    onRespond={handlePermission}
+                    onDismiss={() => setPendingPermission(null)}
+                  />
+                )}
+                {pendingInput && (
+                  <InputPromptCard
+                    prompt={pendingInput}
+                    mode={mode}
+                    onAnswer={handleInputAnswer}
+                    onDismiss={() => setPendingInput(null)}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Auth expired banner */}
+            {authExpired && (
+              <div className="auth-expired-banner">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span className="auth-expired-text">
+                  Your session has expired — please sign in again to continue.
+                </span>
+                <button
+                  type="button"
+                  className="auth-expired-btn"
+                  onClick={() => {
+                    sessionStorage.setItem('bz:returnUrl', window.location.href);
+                    fetch(`${HTTP_BASE}/auth/logout`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ authUrl: 'https://boltzhub.com' }),
+                    }).finally(() => {
+                      window.location.href = '/login';
+                    });
+                  }}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  className="auth-expired-dismiss"
+                  onClick={() => setAuthExpired(false)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Compacting banner — shown while /compact is running */}
+            {isCompacting && (
+              <div className="compact-banner">
+                <BoltzbitLogo size={14} className="boltzbit-logo-animate" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span className="compact-banner-text">Compacting conversation…</span>
+                    <span className="compact-banner-sub">
+                      Summarising history to free context space
+                    </span>
+                  </div>
+                  <div className="compact-progress-track">
+                    <div className="compact-progress-bar" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Compact done toast */}
+            {compactDoneMsg && !isCompacting && (
+              <div className="compact-done-toast">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="13"
+                  height="13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>{compactDoneMsg}</span>
+                <button
+                  type="button"
+                  onClick={() => setCompactDoneMsg(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    padding: '0 2px',
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Slash command menu — appears above the input bar */}
+            {showSlashMenu && (
+              <div className="slash-menu">
+                <div className="slash-menu-list">
+                  {filteredGroups.map(group => (
+                    <div key={group.title} className="slash-menu-group">
+                      <div className="slash-menu-section">{group.title}</div>
+                      {group.commands.map(cmd => {
+                        const flatIdx = flatFiltered.findIndex(c => c.id === cmd.id);
+                        return (
+                          <button
+                            key={cmd.id}
+                            type="button"
+                            className={`slash-menu-item${flatIdx === safeIdx ? ' slash-menu-item--selected' : ''}`}
+                            onClick={() => cmd.action()}
+                            onMouseEnter={() => setSlashMenuIdx(flatIdx)}
+                          >
+                            <span className="slash-menu-icon">
+                              <SlashIcon type={cmd.iconType} color={cmd.iconColor} />
+                            </span>
+                            <span className="slash-menu-name">{cmd.label}</span>
+                            <span className="slash-menu-desc">{cmd.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="agent-input-bar">
+              {/* Working indicator — floats above input box when agent is running in float-prompt mode */}
+              {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') &&
+                !showWidgetChat &&
+                isStreaming && <BoltzingIndicator variant="float" />}
+
+              {/* Show-chat button — floats above input box, visible only when prompt is floating */}
+              {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') &&
+                !showWidgetChat && (
+                  <button
+                    type="button"
+                    className="agent-widget-showchat-btn"
+                    title="Show chat"
+                    onClick={() => setShowWidgetChat(true)}
+                  >
+                    <ChatCircleDotsIcon size={14} />
+                    Chat
+                  </button>
+                )}
+
+              {/* Hidden file input — accepts images always, documents in worker mode */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={
+                  agentMode === 'worker'
+                    ? 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.md,.markdown'
+                    : 'image/*'
+                }
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFileSelect}
+              />
+
+              <div
+                className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}${isStreaming ? ' agent-input-box--busy' : ''}`}
+                style={{ '--mode-color': modeColor } as React.CSSProperties}
+              >
+                {/* Live Learning notification — inside the input box so it's one unified card */}
+                {liveLearningOn && llJob !== 'idle' && !llJobDismissed && (
+                  <LiveLearningNotification
+                    stage={llJob}
+                    gain={llGain}
+                    onDismiss={() => setLlJobDismissed(true)}
+                    onViewPage={() => {
+                      setLlJobDismissed(true);
+                      window.location.href = '/learning';
+                    }}
+                  />
+                )}
+                {/* Attachment chips preview */}
+                {attachments.length > 0 && (
+                  <div className="agent-attach-chips agent-attach-chips--input">
+                    {attachments.map((att, i) => (
+                      <span
+                        key={i}
+                        className={`agent-attach-chip${isDocAttachment(att) ? ' agent-attach-chip--doc' : ''}`}
+                      >
+                        {isDocAttachment(att) ? (
+                          <>
+                            <span className="agent-attach-doc-icon">📄</span>
+                            <span className="agent-attach-name">
+                              {att.loading
+                                ? `Parsing ${att.name}…`
+                                : `${att.name} · ${att.pages} page${att.pages !== 1 ? 's' : ''} · ${att.wordCount.toLocaleString()} words${att.truncated ? ' (truncated)' : ''}`}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <img
+                              src={`data:${(att as Attachment).mediaType};base64,${(att as Attachment).data}`}
+                              alt={att.name}
+                              className="agent-attach-thumb"
+                            />
+                            <span className="agent-attach-name">{att.name}</span>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="agent-attach-remove"
+                          onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                          aria-label="Remove"
+                        >
+                          <XIcon size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  ref={textareaRef}
+                  className="agent-input-textarea"
+                  placeholder={
+                    isStreaming ? 'bzcode is running — click ■ to stop' : 'Ask the agent…'
+                  }
+                  value={inputValue}
+                  rows={1}
+                  disabled={isStreaming || sessionUnavailable}
+                  onChange={e => {
+                    setInputValue(e.target.value);
+                    setSlashMenuDismissed(false);
+                    setSlashMenuIdx(0);
+                  }}
+                  onPaste={e => {
+                    const text = e.clipboardData.getData('text/plain');
+                    if (!text) return;
+                    e.preventDefault();
+                    const el = e.currentTarget;
+                    const start = el.selectionStart ?? el.value.length;
+                    const end = el.selectionEnd ?? el.value.length;
+                    const next = inputValue.slice(0, start) + text + inputValue.slice(end);
+                    setInputValue(next);
+                    setSlashMenuDismissed(false);
+                    requestAnimationFrame(() => {
+                      if (textareaRef.current) {
+                        textareaRef.current.selectionStart = textareaRef.current.selectionEnd =
+                          start + text.length;
+                      }
+                    });
+                  }}
+                  onKeyDown={handleKeyDown}
+                />
+
+                {/* Control row */}
+                <div className="agent-input-controls">
+                  {/* Attach file */}
+                  <button
+                    type="button"
+                    className="agent-ctrl-btn"
+                    title={
+                      agentMode === 'worker'
+                        ? 'Attach image or document (PDF, DOCX, XLSX, PPTX)'
+                        : 'Attach image'
+                    }
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <PaperclipIcon size={15} />
+                  </button>
+                  <span className="agent-ctrl-divider" />
+
+                  {/* Live Learning toggle */}
+                  <button
+                    type="button"
+                    className={`agent-ctrl-btn agent-ll-toggle${liveLearningOn ? ' agent-ll-toggle--on' : ''}`}
+                    title={
+                      liveLearningOn
+                        ? 'Live Learning: ON — click to disable'
+                        : 'Live Learning: OFF — click to enable'
+                    }
+                    onClick={() => {
+                      const next = !liveLearningOn;
+                      setLiveLearningOn(next);
+                      localStorage.setItem('bz:live-learning', next ? '1' : '0');
+                    }}
+                  >
+                    <LlBrainIcon size={14} />
+                    <span className="agent-ll-label">Live Learning</span>
+                  </button>
+                  <span className="agent-ctrl-divider" />
+
+                  {/* Token stats */}
+                  {tokenUsage && (
+                    <span
+                      className="agent-token-stats"
+                      title="Accumulated token usage for this session"
+                    >
+                      in {formatNum(tokenUsage.inputTokens)} · out{' '}
+                      {formatNum(tokenUsage.outputTokens)}
+                      {tokenUsage.bzTokens ? ` · bz ${formatNum(tokenUsage.bzTokens)}` : ''}
+                    </span>
+                  )}
+
+                  {/* Spacer */}
+                  <span style={{ flex: 1 }} />
+
+                  {/* Mode selector */}
+                  <div className="agent-mode-wrapper">
+                    <button
+                      type="button"
+                      className="agent-ctrl-btn agent-mode-btn"
+                      onClick={() => setModeDropdownOpen(o => !o)}
+                      title={`Mode: ${MODE_META[mode].label}`}
+                    >
+                      {mode === 'plan' && <ListChecksIcon size={13} color={modeColor} />}
+                      {mode === 'yolo' && (
+                        <LightningIcon size={13} color={modeColor} weight="fill" />
+                      )}
+                      {mode === 'default' && (
+                        <span className="agent-mode-dot-sm" style={{ background: modeColor }} />
+                      )}
+                      <span className="agent-mode-label-sm" style={{ color: modeColor }}>
+                        {MODE_META[mode].label}
+                      </span>
+                      <CaretDownIcon size={10} />
+                    </button>
+                    {modeDropdownOpen && (
+                      <ModeDropdown
+                        mode={mode}
+                        availableModes={availableModes}
+                        onSelect={handleModeChange}
+                        onClose={() => setModeDropdownOpen(false)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Submit / Stop */}
+                  {isStreaming ? (
+                    <button
+                      type="button"
+                      className="agent-submit-btn agent-submit-btn--stop"
+                      style={{ background: modeColor }}
+                      onClick={handleAbort}
+                      title="Stop (cancel running command)"
+                    >
+                      <SquareIcon size={14} weight="fill" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="agent-submit-btn"
+                      style={{
+                        background:
+                          !inputValue.trim() && attachments.length === 0 ? undefined : modeColor,
+                      }}
+                      onClick={handleSubmit}
+                      disabled={!inputValue.trim() && attachments.length === 0}
+                      title="Send"
+                    >
+                      <ArrowUpIcon size={14} weight="bold" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* end agent-prompt-section */}
+        </div>
+        {/* end agent-chat-col */}
+
+        {agentMode === 'widget' && (
+          <div className="agent-widget-canvas-wrap">
+            <CanvasPanel ref={canvasPanelRef} cwd={activeCwd} sessionId={activeSessionId} />
           </div>
         )}
+        {(agentMode === 'worker' || agentMode === 'coder') && (
+          <EditorPanel
+            cwd={activeCwd}
+            codeMode={agentMode === 'coder'}
+            refreshKey={editorRefreshKey}
+            sessionId={activeSessionId}
+            isStreaming={isStreaming}
+          />
+        )}
+      </div>
 
-        <div ref={scrollRef} className="chat-messages">
-        {allItems.length === 0 ? (
-          <div className="chat-empty">
-            {/* Connecting state: show for any session while bzcode is starting */}
-            {connStatus === 'connecting' && (
-              <>
-                <BoltzbitLogo key={activeSessionId || wsKey} size={40} className="boltzbit-logo-animate" />
-                <p className="chat-loading-label">Connecting…</p>
-              </>
-            )}
-
-            {/* Connected with empty chat: one-shot settling pulse */}
-            {connStatus === 'connected' ? (
-              <>
-                <BoltzbitLogo
-                  key={activeSessionId || wsKey}
-                  size={40}
-                  className="boltzbit-logo-animate-settling"
+      {/* Document viewer — slides over canvas/editor when a doc path is opened */}
+      {(docViewer || docViewerLoading) && (
+        <>
+          <div
+            className="code-drawer-backdrop"
+            onClick={() => {
+              setDocViewer(null);
+              setDocViewerLoading(false);
+            }}
+          />
+          <div className="code-drawer doc-viewer-drawer">
+            <div className="code-drawer-header">
+              <span className="code-drawer-title">
+                📄 {docViewerLoading ? 'Loading…' : docViewer?.name}
+              </span>
+              {docViewer && !docViewerLoading && (
+                <span className="doc-viewer-meta">
+                  {docViewer.docType.toUpperCase()} · {docViewer.pages} page
+                  {docViewer.pages !== 1 ? 's' : ''} · {docViewer.wordCount.toLocaleString()} words
+                  {docViewer.truncated && (
+                    <span className="doc-viewer-truncated"> · truncated</span>
+                  )}
+                </span>
+              )}
+              <button
+                type="button"
+                className="code-drawer-apply-btn"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => {
+                  setDocViewer(null);
+                  setDocViewerLoading(false);
+                }}
+                title="Close"
+              >
+                <XIcon size={13} />
+              </button>
+            </div>
+            <div className="doc-viewer-body">
+              {docViewerLoading && (
+                <div className="doc-viewer-loading">
+                  <BoltzbitLogo size={28} className="boltzbit-logo-animate" />
+                  <span>Parsing document…</span>
+                </div>
+              )}
+              {docViewer && !docViewerLoading && (
+                <div
+                  className="doc-viewer-content"
+                  dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(docViewer.content) }}
                 />
-                <p className="chat-loading-label chat-loading-label--ready">
-                  {activeDirName
-                    ? `Working in ${activeDirName} — what can I help you with?`
-                    : 'What can I help you with?'}
-                </p>
-              </>
-            ) : null}
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
-            {/* Error / disconnected (transient — still retrying) */}
-            {!sessionUnavailable && (connStatus === 'error' || connStatus === 'disconnected') && (
+      {/* Mode selector — shown when user clicks "+" to create a new session */}
+      {(pendingNewCwd || sessionCreating || sessionCreateError) && (
+        <div className="new-session-overlay">
+          <div className="new-session-panel">
+            {sessionCreating && (
               <>
-                <BoltzbitLogo size={40} />
-                <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
-                  {connStatus === 'error' ? 'Connection failed' : 'Disconnected'}
-                </p>
-              </>
-            )}
-
-            {/* Session permanently unavailable — stop retrying, show clear error */}
-            {sessionUnavailable && (
-              <>
-                <BoltzAgentMark size={36} color="var(--text-tertiary)" />
-                <p className="chat-loading-label" style={{ color: 'var(--accent-red)' }}>
-                  This session is unavailable
-                </p>
-                <p className="chat-loading-label" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  bzcode may be unreachable or the session was deleted.
-                </p>
+                <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
+                <div className="new-session-steps">
+                  <SessionStep
+                    done={sessionCreateStep !== 'creating'}
+                    active={sessionCreateStep === 'creating'}
+                    label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'}
+                  />
+                  <SessionStep
+                    done={sessionCreateStep === 'connecting'}
+                    active={sessionCreateStep === 'starting'}
+                    label="Starting agent"
+                  />
+                  <SessionStep
+                    done={false}
+                    active={sessionCreateStep === 'connecting'}
+                    label="Connecting"
+                  />
+                </div>
+                {showApiKeyPrompt && sessionCreateMode !== 'resume' && (
+                  <div
+                    style={{
+                      width: '100%',
+                      marginTop: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <p className="new-session-hint" style={{ marginTop: 0 }}>
+                      Taking too long? Enter your API key to restart:
+                    </p>
+                    <input
+                      type="password"
+                      className="conv-search-input"
+                      placeholder="Paste API key…"
+                      value={apiKeyValue}
+                      onChange={e => setApiKeyValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleSaveApiKey();
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                    <button
+                      type="button"
+                      className="new-session-cancel"
+                      disabled={apiKeySaving || !apiKeyValue.trim()}
+                      onClick={handleSaveApiKey}
+                      style={{ opacity: !apiKeyValue.trim() || apiKeySaving ? 0.5 : 1 }}
+                    >
+                      {apiKeySaving ? 'Saving…' : 'Save & restart'}
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="new-session-cancel"
-                  style={{ marginTop: 12 }}
-                  onClick={goToList}
+                  style={{ marginTop: 4 }}
+                  onClick={cancelSessionCreate}
                 >
-                  Back to sessions
+                  Cancel
+                </button>
+              </>
+            )}
+            {sessionCreateError && !sessionCreating && (
+              <SessionCreateErrorPanel
+                error={sessionCreateError}
+                apiKeyValue={apiKeyValue}
+                apiKeySaving={apiKeySaving}
+                onApiKeyValueChange={setApiKeyValue}
+                onSaveApiKey={handleSaveApiKey}
+                onRetry={retrySessionCreate}
+                onSignOut={handleSignOut}
+                onBack={() => {
+                  setSessionCreateError(null);
+                  setPendingNewCwd(null);
+                }}
+              />
+            )}
+            {pendingNewCwd && !sessionCreating && !sessionCreateError && (
+              <>
+                <div className="new-session-header">
+                  <span className="new-session-title">Choose a mode</span>
+                  <span className="new-session-cwd">
+                    {pendingNewCwd.split('/').filter(Boolean).pop()}
+                  </span>
+                </div>
+                <p className="new-session-hint">
+                  Select how this agent should behave in the new conversation.
+                </p>
+                <ModeSelector
+                  selected={agentMode}
+                  onSelect={m => {
+                    const cwd = pendingNewCwd;
+                    setPendingNewCwd(null);
+                    void startNewSession(cwd, m);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="new-session-cancel"
+                  onClick={() => setPendingNewCwd(null)}
+                >
+                  Cancel
                 </button>
               </>
             )}
           </div>
-        ) : (
-          <div className="chat-messages-inner">
-            {allItems.map((item, idx) => {
-              if (item.kind === 'user') return (
-                <div key={item.id} data-user-msg-idx={idx}>
-                  <div className="agent-user-msg animate-slide-in">
-                    {item.attachments && item.attachments.length > 0 && (
-                      <div className="agent-attach-chips">
-                        {item.attachments.map((att, i) => (
-                          <span key={i} className="agent-attach-chip">
-                            <img src={`data:${att.mediaType};base64,${att.data}`} alt={att.name} className="agent-attach-thumb" />
-                            <span className="agent-attach-name">{att.name}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {item.text !== '(image)' && item.text}
-                  </div>
-                </div>
-              );
+        </div>
+      )}
 
-              if (item.kind === 'assistant') {
-                const isLive = item.id === '__streaming__';
-                return (
-                  <div key={item.id} className="chat-message">
-                    {item.blocks.map((block, j) => {
-                      if (block.type === 'text') {
-                        const cmdList = parseCommandListOutput(block.text);
-                        if (cmdList) return <CommandListDisplay key={j} result={cmdList} />;
-                        const docPaths    = agentMode === 'worker' ? extractDocPaths(block.text) : [];
-                        const widgetIds   = agentMode === 'widget' && !isLive ? extractWidgetIds(block.text) : [];
-                        return (
-                          <div key={j} className="agent-msg-row">
-                            <span className="agent-block-icon"><BlockDot size={10} /></span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                className="chat-bubble-assistant"
-                                dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
-                              />
-                              {widgetIds.length > 0 && (
-                                <div className="agent-doc-open-chips">
-                                  {widgetIds.map(id => (
-                                    <button
-                                      key={id}
-                                      type="button"
-                                      className="agent-doc-open-btn"
-                                      onClick={() => {}}
-                                    >
-                                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                                      View on canvas
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                              {docPaths.length > 0 && (
-                                <div className="agent-doc-open-chips">
-                                  {docPaths.map(p => (
-                                    <button
-                                      key={p}
-                                      type="button"
-                                      className="agent-doc-open-btn"
-                                      onClick={() => {
-                                        const ext = p.split('.').pop()?.toLowerCase() ?? '';
-                                        const absPath = p.startsWith('/') ? p : `${activeCwd}/${p}`;
-                                        // Office files: open in EditorPanel (Excel, PPT, Word)
-                                        if (['xlsx','xls','pptx','ppt','docx','doc'].includes(ext)) {
-                                          setEditorRefreshKey(k => k + 1);
-                                          window.dispatchEvent(new CustomEvent('open-file', { detail: { path: absPath } }));
-                                          return;
-                                        }
-                                        setDocViewerLoading(true);
-                                        setDocViewer(null);
-                                        fetch(`${HTTP_BASE}/api/doc/parse`, {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ path: absPath }),
-                                        })
-                                          .then(r => r.json())
-                                          .then((d: { filename?: string; type?: string; pages?: number; wordCount?: number; content?: string; truncated?: boolean; error?: string }) => {
-                                            if (d.error) return;
-                                            setDocViewer({ path: absPath, name: d.filename ?? absPath.split('/').pop() ?? absPath, docType: d.type ?? '', pages: d.pages ?? 0, wordCount: d.wordCount ?? 0, content: d.content ?? '', truncated: !!d.truncated });
-                                          })
-                                          .finally(() => setDocViewerLoading(false));
-                                      }}
-                                    >
-                                      {(p.split('.').pop()?.toLowerCase() === 'xlsx' || p.split('.').pop()?.toLowerCase() === 'xls') ? '📊' : '📄'} Open {p.split('/').pop()}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-                      if (block.type === 'thinking') return (
-                        <details key={j} className="agent-thinking">
-                          <summary className={`agent-thinking-summary${isLive ? ' agent-thinking-summary--live' : ''}`}>
-                            <TriangleCubes className="agent-thinking-marker" />
-                            <span>Thinking…</span>
-                          </summary>
-                          <div
-                            className="agent-thinking-content"
-                            dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
-                          />
-                        </details>
-                      );
-                      return null;
-                    })}
-                  </div>
-                );
+      {/* New-session overlay (dir picker / creating spinner) triggered from sidebar New chat */}
+      {newSessionOverlay}
+
+      {/* BoltzHub modals — rendered inside agent-page so they overlay the chat */}
+      {(() => {
+        const m = bzHubModal;
+        if (!m) return null;
+        if (m.type === 'create-app')
+          return (
+            <CreateAppModal
+              cwd={m.cwd}
+              agentHttp={AGENT_HTTP_BASE}
+              onClose={() => setBzHubModal(null)}
+              onCreated={cfg =>
+                setBzHubModal({
+                  type: 'release-notes',
+                  cwd: m.cwd,
+                  appId: cfg.id,
+                  appName: cfg.name,
+                })
               }
-
-              if (item.kind === 'tool') {
-                if (agentMode === 'widget') {
-                  if (item.name === 'Skill') return <WidgetSkillBadge key={item.id} item={item} />;
-                  return null;
-                }
-                if (agentMode === 'worker' && ['Bash', 'Read', 'Write', 'Edit', 'NotebookEdit'].includes(item.name)) {
-                  const label: Record<string, string> = { Bash: 'Ran command', Read: 'Read file', Write: 'Wrote file', Edit: 'Edited file', NotebookEdit: 'Edited notebook' };
-                  const icon = item.name === 'Bash' ? '⚡' : '📄';
-                  const statusColor = item.status === 'error' ? 'var(--accent-red)' : item.status === 'running' ? 'var(--text-tertiary)' : 'var(--text-tertiary)';
-                  return (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', fontSize: 11, color: statusColor, opacity: 0.7 }}>
-                      <span>{icon}</span>
-                      <span>{label[item.name] ?? item.name}</span>
-                      {item.status === 'running' && <span style={{ color: 'var(--accent-blue)' }}>…</span>}
-                      {item.status === 'error' && <span style={{ color: 'var(--accent-red)' }}>✗</span>}
-                      {item.status === 'done' && !item.isError && <span>✓</span>}
-                    </div>
-                  );
-                }
-                return <ToolCard key={item.id} item={item} />;
-              }
-              if (item.kind === 'push-progress')   return <PushProgressCard key={item.id} item={item} />;
-              if (item.kind === 'sync-progress')   return <SyncProgressCard key={item.id} item={item} />;
-              if (item.kind === 'compact-summary') return <CompactSummaryCard key={item.id} text={item.text} />;
-              if (item.kind === 'system') return (
-                <div key={item.id} className="agent-system-msg">{item.message}</div>
-              );
-
-              return null;
-            })}
-
-            {isStreaming && streamingBlocks.length === 0 && (
-              <BoltzingIndicator />
-            )}
-          </div>
-        )}
-        </div>
-      </div>
-
-      <div className="agent-prompt-section">
-
-      {/* Sticky prompt cards — rendered above input bar */}
-      {(pendingPermission || pendingInput) && (
-        <div className="agent-prompt-overlay">
-          {pendingPermission && (
-            <PermissionCard
-              prompt={pendingPermission}
-              mode={mode}
-              onRespond={handlePermission}
-              onDismiss={() => setPendingPermission(null)}
             />
-          )}
-          {pendingInput && (
-            <InputPromptCard
-              prompt={pendingInput}
-              mode={mode}
-              onAnswer={handleInputAnswer}
-              onDismiss={() => setPendingInput(null)}
+          );
+        if (m.type === 'release-notes')
+          return (
+            <ReleaseNotesModal
+              appName={m.appName}
+              appId={m.appId}
+              onClose={() => setBzHubModal(null)}
+              onPush={(notes, version) => void startPush(m.cwd, notes, version)}
             />
-          )}
-        </div>
-      )}
-
-      {/* Auth expired banner */}
-      {authExpired && (
-        <div className="auth-expired-banner">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span className="auth-expired-text">Your session has expired — please sign in again to continue.</span>
-          <button
-            type="button"
-            className="auth-expired-btn"
-            onClick={() => {
-              sessionStorage.setItem('bz:returnUrl', window.location.href);
-              fetch(`${HTTP_BASE}/auth/logout`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ authUrl: 'https://boltzhub.com' }),
-              }).finally(() => { window.location.href = '/login'; });
-            }}
-          >Sign in</button>
-          <button type="button" className="auth-expired-dismiss" onClick={() => setAuthExpired(false)}>✕</button>
-        </div>
-      )}
-
-      {/* Compacting banner — shown while /compact is running */}
-      {isCompacting && (
-        <div className="compact-banner">
-          <BoltzbitLogo size={14} className="boltzbit-logo-animate" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-              <span className="compact-banner-text">Compacting conversation…</span>
-              <span className="compact-banner-sub">Summarising history to free context space</span>
-            </div>
-            <div className="compact-progress-track">
-              <div className="compact-progress-bar" />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Compact done toast */}
-      {compactDoneMsg && !isCompacting && (
-        <div className="compact-done-toast">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>{compactDoneMsg}</span>
-          <button type="button" onClick={() => setCompactDoneMsg(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:'0 2px', lineHeight:1 }}>✕</button>
-        </div>
-      )}
-
-      {/* Slash command menu — appears above the input bar */}
-      {showSlashMenu && (
-        <div className="slash-menu">
-          <div className="slash-menu-list">
-            {filteredGroups.map(group => (
-              <div key={group.title} className="slash-menu-group">
-                <div className="slash-menu-section">{group.title}</div>
-                {group.commands.map(cmd => {
-                  const flatIdx = flatFiltered.findIndex(c => c.id === cmd.id);
-                  return (
-                    <button
-                      key={cmd.id}
-                      type="button"
-                      className={`slash-menu-item${flatIdx === safeIdx ? ' slash-menu-item--selected' : ''}`}
-                      onClick={() => cmd.action()}
-                      onMouseEnter={() => setSlashMenuIdx(flatIdx)}
-                    >
-                      <span className="slash-menu-icon">
-                        <SlashIcon type={cmd.iconType} color={cmd.iconColor} />
-                      </span>
-                      <span className="slash-menu-name">{cmd.label}</span>
-                      <span className="slash-menu-desc">{cmd.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="agent-input-bar">
-        {/* Working indicator — floats above input box when agent is running in float-prompt mode */}
-        {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat && isStreaming && (
-          <BoltzingIndicator variant="float" />
-        )}
-
-        {/* Show-chat button — floats above input box, visible only when prompt is floating */}
-        {(agentMode === 'widget' || agentMode === 'worker' || agentMode === 'coder') && !showWidgetChat && (
-          <button
-            type="button"
-            className="agent-widget-showchat-btn"
-            title="Show chat"
-            onClick={() => setShowWidgetChat(true)}
-          >
-            <ChatCircleDotsIcon size={14} />
-            Chat
-          </button>
-        )}
-
-        {/* Hidden file input — accepts images always, documents in worker mode */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={agentMode === 'worker' ? 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.md,.markdown' : 'image/*'}
-          multiple
-          style={{ display: 'none' }}
-          onChange={handleFileSelect}
-        />
-
-        <div
-          className={`agent-input-box${isCompacting ? ' agent-input-box--locked' : ''}${isStreaming ? ' agent-input-box--busy' : ''}`}
-          style={{ '--mode-color': modeColor } as React.CSSProperties}
-        >
-          {/* Live Learning notification — inside the input box so it's one unified card */}
-          {liveLearningOn && llJob !== 'idle' && !llJobDismissed && (
-            <LiveLearningNotification
-              stage={llJob}
-              gain={llGain}
-              onDismiss={() => setLlJobDismissed(true)}
-              onViewPage={() => { setLlJobDismissed(true); window.location.href = '/learning'; }}
+          );
+        if (m.type === 'sync')
+          return (
+            <SyncModal
+              agentHttp={AGENT_HTTP_BASE}
+              onClose={() => setBzHubModal(null)}
+              onSync={appId => void startSync(m.cwd, appId)}
             />
-          )}
-          {/* Attachment chips preview */}
-          {attachments.length > 0 && (
-            <div className="agent-attach-chips agent-attach-chips--input">
-              {attachments.map((att, i) => (
-                <span key={i} className={`agent-attach-chip${isDocAttachment(att) ? ' agent-attach-chip--doc' : ''}`}>
-                  {isDocAttachment(att) ? (
-                    <>
-                      <span className="agent-attach-doc-icon">📄</span>
-                      <span className="agent-attach-name">
-                        {att.loading
-                          ? `Parsing ${att.name}…`
-                          : `${att.name} · ${att.pages} page${att.pages !== 1 ? 's' : ''} · ${att.wordCount.toLocaleString()} words${att.truncated ? ' (truncated)' : ''}`
-                        }
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <img src={`data:${(att as Attachment).mediaType};base64,${(att as Attachment).data}`} alt={att.name} className="agent-attach-thumb" />
-                      <span className="agent-attach-name">{att.name}</span>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    className="agent-attach-remove"
-                    onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                    aria-label="Remove"
-                  >
-                    <XIcon size={10} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          <textarea
-            ref={textareaRef}
-            className="agent-input-textarea"
-            placeholder={isStreaming ? 'bzcode is running — click ■ to stop' : 'Ask the agent…'}
-            value={inputValue}
-            rows={1}
-            disabled={isStreaming || sessionUnavailable}
-            onChange={e => { setInputValue(e.target.value); setSlashMenuDismissed(false); setSlashMenuIdx(0); }}
-            onPaste={e => {
-              const text = e.clipboardData.getData('text/plain');
-              if (!text) return;
-              e.preventDefault();
-              const el = e.currentTarget;
-              const start = el.selectionStart ?? el.value.length;
-              const end   = el.selectionEnd   ?? el.value.length;
-              const next  = inputValue.slice(0, start) + text + inputValue.slice(end);
-              setInputValue(next);
-              setSlashMenuDismissed(false);
-              requestAnimationFrame(() => {
-                if (textareaRef.current) {
-                  textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + text.length;
-                }
-              });
-            }}
-            onKeyDown={handleKeyDown}
-          />
-
-          {/* Control row */}
-          <div className="agent-input-controls">
-            {/* Attach file */}
-            <button
-              type="button"
-              className="agent-ctrl-btn"
-              title={agentMode === 'worker' ? 'Attach image or document (PDF, DOCX, XLSX, PPTX)' : 'Attach image'}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <PaperclipIcon size={15} />
-            </button>
-            <span className="agent-ctrl-divider" />
-
-            {/* Live Learning toggle */}
-            <button
-              type="button"
-              className={`agent-ctrl-btn agent-ll-toggle${liveLearningOn ? ' agent-ll-toggle--on' : ''}`}
-              title={liveLearningOn ? 'Live Learning: ON — click to disable' : 'Live Learning: OFF — click to enable'}
-              onClick={() => {
-                const next = !liveLearningOn;
-                setLiveLearningOn(next);
-                localStorage.setItem('bz:live-learning', next ? '1' : '0');
-              }}
-            >
-              <LlBrainIcon size={14} />
-              <span className="agent-ll-label">Live Learning</span>
-            </button>
-            <span className="agent-ctrl-divider" />
-
-            {/* Token stats */}
-            {tokenUsage && (
-              <span className="agent-token-stats" title="Accumulated token usage for this session">
-                in {formatNum(tokenUsage.inputTokens)} · out {formatNum(tokenUsage.outputTokens)}
-                {tokenUsage.bzTokens ? ` · bz ${formatNum(tokenUsage.bzTokens)}` : ''}
-              </span>
-            )}
-
-            {/* Spacer */}
-            <span style={{ flex: 1 }} />
-
-            {/* Mode selector */}
-            <div className="agent-mode-wrapper">
-              <button
-                type="button"
-                className="agent-ctrl-btn agent-mode-btn"
-                onClick={() => setModeDropdownOpen(o => !o)}
-                title={`Mode: ${MODE_META[mode].label}`}
-              >
-                {mode === 'plan'  && <ListChecksIcon size={13} color={modeColor} />}
-                {mode === 'yolo'  && <LightningIcon  size={13} color={modeColor} weight="fill" />}
-                {mode === 'default' && <span className="agent-mode-dot-sm" style={{ background: modeColor }} />}
-                <span className="agent-mode-label-sm" style={{ color: modeColor }}>{MODE_META[mode].label}</span>
-                <CaretDownIcon size={10} />
-              </button>
-              {modeDropdownOpen && (
-                <ModeDropdown
-                  mode={mode}
-                  availableModes={availableModes}
-                  onSelect={handleModeChange}
-                  onClose={() => setModeDropdownOpen(false)}
-                />
-              )}
-            </div>
-
-            {/* Submit / Stop */}
-            {isStreaming ? (
-              <button
-                type="button"
-                className="agent-submit-btn agent-submit-btn--stop"
-                style={{ background: modeColor }}
-                onClick={handleAbort}
-                title="Stop (cancel running command)"
-              >
-                <SquareIcon size={14} weight="fill" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="agent-submit-btn"
-                style={{ background: (!inputValue.trim() && attachments.length === 0) ? undefined : modeColor }}
-                onClick={handleSubmit}
-                disabled={!inputValue.trim() && attachments.length === 0}
-                title="Send"
-              >
-                <ArrowUpIcon size={14} weight="bold" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      </div>{/* end agent-prompt-section */}
-
-      </div>{/* end agent-chat-col */}
-
-      {agentMode === 'widget' && (
-        <div className="agent-widget-canvas-wrap">
-          <CanvasPanel ref={canvasPanelRef} cwd={activeCwd} sessionId={activeSessionId} />
-        </div>
-      )}
-      {(agentMode === 'worker' || agentMode === 'coder') && (
-        <EditorPanel
-          cwd={activeCwd}
-          codeMode={agentMode === 'coder'}
-          refreshKey={editorRefreshKey}
-          sessionId={activeSessionId}
-        />
-      )}
-    </div>
-
-    {/* Document viewer — slides over canvas/editor when a doc path is opened */}
-    {(docViewer || docViewerLoading) && (
-      <>
-        <div className="code-drawer-backdrop" onClick={() => { setDocViewer(null); setDocViewerLoading(false); }} />
-        <div className="code-drawer doc-viewer-drawer">
-          <div className="code-drawer-header">
-            <span className="code-drawer-title">
-              📄 {docViewerLoading ? 'Loading…' : docViewer?.name}
-            </span>
-            {docViewer && !docViewerLoading && (
-              <span className="doc-viewer-meta">
-                {docViewer.docType.toUpperCase()} · {docViewer.pages} page{docViewer.pages !== 1 ? 's' : ''} · {docViewer.wordCount.toLocaleString()} words
-                {docViewer.truncated && <span className="doc-viewer-truncated"> · truncated</span>}
-              </span>
-            )}
-            <button
-              type="button"
-              className="code-drawer-apply-btn"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => { setDocViewer(null); setDocViewerLoading(false); }}
-              title="Close"
-            >
-              <XIcon size={13} />
-            </button>
-          </div>
-          <div className="doc-viewer-body">
-            {docViewerLoading && (
-              <div className="doc-viewer-loading">
-                <BoltzbitLogo size={28} className="boltzbit-logo-animate" />
-                <span>Parsing document…</span>
-              </div>
-            )}
-            {docViewer && !docViewerLoading && (
-              <div
-                className="doc-viewer-content"
-                dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(docViewer.content) }}
-              />
-            )}
-          </div>
-        </div>
-      </>
-    )}
-
-    {/* Mode selector — shown when user clicks "+" to create a new session */}
-    {(pendingNewCwd || sessionCreating || sessionCreateError) && (
-      <div className="new-session-overlay">
-        <div className="new-session-panel">
-          {sessionCreating && (
-            <>
-              <BoltzAgentMark size={36} color="#51D390" className="boltzbit-logo-animate" />
-              <div className="new-session-steps">
-                <SessionStep done={sessionCreateStep !== 'creating'} active={sessionCreateStep === 'creating'} label={sessionCreateMode === 'resume' ? 'Loading session' : 'Creating session'} />
-                <SessionStep done={sessionCreateStep === 'connecting'} active={sessionCreateStep === 'starting'} label="Starting agent" />
-                <SessionStep done={false} active={sessionCreateStep === 'connecting'} label="Connecting" />
-              </div>
-              {showApiKeyPrompt && sessionCreateMode !== 'resume' && (
-                <div style={{ width: '100%', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <p className="new-session-hint" style={{ marginTop: 0 }}>Taking too long? Enter your API key to restart:</p>
-                  <input
-                    type="password"
-                    className="conv-search-input"
-                    placeholder="Paste API key…"
-                    value={apiKeyValue}
-                    onChange={e => setApiKeyValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
-                    style={{ width: '100%', boxSizing: 'border-box' }}
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    className="new-session-cancel"
-                    disabled={apiKeySaving || !apiKeyValue.trim()}
-                    onClick={handleSaveApiKey}
-                    style={{ opacity: (!apiKeyValue.trim() || apiKeySaving) ? 0.5 : 1 }}
-                  >
-                    {apiKeySaving ? 'Saving…' : 'Save & restart'}
-                  </button>
-                </div>
-              )}
-              <button type="button" className="new-session-cancel" style={{ marginTop: 4 }} onClick={cancelSessionCreate}>Cancel</button>
-            </>
-          )}
-          {sessionCreateError && !sessionCreating && (
-            <SessionCreateErrorPanel
-              error={sessionCreateError}
-              apiKeyValue={apiKeyValue}
-              apiKeySaving={apiKeySaving}
-              onApiKeyValueChange={setApiKeyValue}
-              onSaveApiKey={handleSaveApiKey}
-              onRetry={retrySessionCreate}
-              onSignOut={handleSignOut}
-              onBack={() => { setSessionCreateError(null); setPendingNewCwd(null); }}
-            />
-          )}
-          {pendingNewCwd && !sessionCreating && !sessionCreateError && (
-            <>
-              <div className="new-session-header">
-                <span className="new-session-title">Choose a mode</span>
-                <span className="new-session-cwd">{pendingNewCwd.split('/').filter(Boolean).pop()}</span>
-              </div>
-              <p className="new-session-hint">Select how this agent should behave in the new conversation.</p>
-              <ModeSelector
-                selected={agentMode}
-                onSelect={m => {
-                  const cwd = pendingNewCwd;
-                  setPendingNewCwd(null);
-                  void startNewSession(cwd, m);
-                }}
-              />
-              <button type="button" className="new-session-cancel" onClick={() => setPendingNewCwd(null)}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    )}
-
-    {/* New-session overlay (dir picker / creating spinner) triggered from sidebar New chat */}
-    {newSessionOverlay}
-
-    {/* BoltzHub modals — rendered inside agent-page so they overlay the chat */}
-    {(() => {
-      const m = bzHubModal;
-      if (!m) return null;
-      if (m.type === 'create-app') return (
-        <CreateAppModal
-          cwd={m.cwd}
-          agentHttp={AGENT_HTTP_BASE}
-          onClose={() => setBzHubModal(null)}
-          onCreated={cfg => setBzHubModal({ type: 'release-notes', cwd: m.cwd, appId: cfg.id, appName: cfg.name })}
-        />
-      );
-      if (m.type === 'release-notes') return (
-        <ReleaseNotesModal
-          appName={m.appName}
-          appId={m.appId}
-          onClose={() => setBzHubModal(null)}
-          onPush={(notes, version) => void startPush(m.cwd, notes, version)}
-        />
-      );
-      if (m.type === 'sync') return (
-        <SyncModal
-          agentHttp={AGENT_HTTP_BASE}
-          onClose={() => setBzHubModal(null)}
-          onSync={appId => void startSync(m.cwd, appId)}
-        />
-      );
-      if (m.type === 'token-usage') return (
-        <TokenUsageModal
-          data={m}
-          onClose={() => setBzHubModal(null)}
-        />
-      );
-      return null;
-    })()}
+          );
+        if (m.type === 'token-usage')
+          return <TokenUsageModal data={m} onClose={() => setBzHubModal(null)} />;
+        return null;
+      })()}
     </div>
   );
 }

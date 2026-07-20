@@ -1,0 +1,15 @@
+{
+  "id": "prod-calendly-consulting",
+  "name": "Consulting Scheduler",
+  "description": "Professional scheduling for consulting firms — discovery calls, strategy sessions, and workshop bookings.",
+  "tags": ["consulting", "scheduling", "productivity", "meetings"],
+  "text_replacements": [
+    { "from": "Event Types", "to": "Engagement Types" },
+    { "from": "Event Type", "to": "Engagement Type" },
+    { "from": "Meetings", "to": "Engagements" },
+    { "from": "Meeting", "to": "Engagement" },
+    { "from": "Invitee", "to": "Client" },
+    { "from": "Invitees", "to": "Clients" },
+    { "from": "Workflows", "to": "Follow-ups" }
+  ]
+}

@@ -1,67 +1,183 @@
 import './WordDocToolbar.css';
-import { useEffect, useRef, useState, useCallback } from 'react';
-// @ts-expect-error - JSX component without type declarations
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ImageInsert from './ImageInsert';
-// @ts-expect-error - JSX component without type declarations
 import TablePickerTooltip from './TablePickerTooltip';
 
 // =============================================
 // STYLED COMPONENTS - Exact match to HTML design
 // =============================================
 
-const FloatingToolbar = ({children, $isDocked, $isHidden, ...p}: any) => <div className="bzt-floating-toolbar" data-docked={$isDocked ? "true" : "false"} data-hidden={$isHidden ? "true" : "false"} {...p}>{children}</div>;
+const FloatingToolbar = ({ children, $isDocked, $isHidden, ...p }: any) => (
+  <div
+    className="bzt-floating-toolbar"
+    data-docked={$isDocked ? 'true' : 'false'}
+    data-hidden={$isHidden ? 'true' : 'false'}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const DockedToolbarContainer = ({children, $active, ...p}: any) => <div className="bzt-docked-toolbar-container" data-active={$active ? "true" : "false"} {...p}>{children}</div>;
+const DockedToolbarContainer = ({ children, $active, ...p }: any) => (
+  <div className="bzt-docked-toolbar-container" data-active={$active ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const DockIndicator = ({children, $visible, ...p}: any) => <div className="bzt-dock-indicator" data-visible={$visible ? "true" : "false"} {...p}>{children}</div>;
+const DockIndicator = ({ children, $visible, ...p }: any) => (
+  <div className="bzt-dock-indicator" data-visible={$visible ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const ToolbarDragHandle = ({children, ...p}: any) => <div className="bzt-toolbar-drag-handle" {...p}>{children}</div>;
+const ToolbarDragHandle = ({ children, ...p }: any) => (
+  <div className="bzt-toolbar-drag-handle" {...p}>
+    {children}
+  </div>
+);
 
-const ToolbarDivider = ({children, ...p}: any) => <div className="bzt-toolbar-divider" {...p}>{children}</div>;
+const ToolbarDivider = ({ children, ...p }: any) => (
+  <div className="bzt-toolbar-divider" {...p}>
+    {children}
+  </div>
+);
 
-const ToolbarBtn = ({children, $active, ...p}: any) => <button className="bzt-toolbar-btn" data-active={$active ? "true" : "false"} {...p}>{children}</button>;
+const ToolbarBtn = ({ children, $active, ...p }: any) => (
+  <button className="bzt-toolbar-btn" data-active={$active ? 'true' : 'false'} {...p}>
+    {children}
+  </button>
+);
 
-const ToolbarDropdown = ({children, ...p}: any) => <div className="bzt-toolbar-dropdown" {...p}>{children}</div>;
+const ToolbarDropdown = ({ children, ...p }: any) => (
+  <div className="bzt-toolbar-dropdown" {...p}>
+    {children}
+  </div>
+);
 
-const FontDropdown = ({children, ...p}: any) => <div className="bzt-font-dropdown" {...p}>{children}</div>;
+const FontDropdown = ({ children, ...p }: any) => (
+  <div className="bzt-font-dropdown" {...p}>
+    {children}
+  </div>
+);
 
-const FontDropdownMenu = ({children, $open, ...p}: any) => <div className="bzt-font-dropdown-menu" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const FontDropdownMenu = ({ children, $open, ...p }: any) => (
+  <div className="bzt-font-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const FontOption = ({children, $active, ...p}: any) => <div className="bzt-font-option" data-active={$active ? "true" : "false"} {...p}>{children}</div>;
+const FontOption = ({ children, $active, ...p }: any) => (
+  <div className="bzt-font-option" data-active={$active ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const FontSizeDropdown = ({children, ...p}: any) => <div className="bzt-font-size-dropdown" {...p}>{children}</div>;
+const FontSizeDropdown = ({ children, ...p }: any) => (
+  <div className="bzt-font-size-dropdown" {...p}>
+    {children}
+  </div>
+);
 
-const FontSizeDropdownMenu = ({children, $open, ...p}: any) => <div className="bzt-font-size-dropdown-menu" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const FontSizeDropdownMenu = ({ children, $open, ...p }: any) => (
+  <div className="bzt-font-size-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const FontSizeOption = ({children, $active, ...p}: any) => <div className="bzt-font-size-option" data-active={$active ? "true" : "false"} {...p}>{children}</div>;
+const FontSizeOption = ({ children, $active, ...p }: any) => (
+  <div className="bzt-font-size-option" data-active={$active ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const FontSizeBtn = ({children, ...p}: any) => <button className="bzt-font-size-btn" {...p}>{children}</button>;
+const FontSizeBtn = ({ children, ...p }: any) => (
+  <button className="bzt-font-size-btn" {...p}>
+    {children}
+  </button>
+);
 
-const HeadingDropdownMenu = ({children, $open, ...p}: any) => <div className="bzt-heading-dropdown-menu" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const HeadingDropdownMenu = ({ children, $open, ...p }: any) => (
+  <div className="bzt-heading-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const HeadingOption = ({children, $variant, ...p}: any) => <div className="bzt-heading-option" data-variant={$variant} {...p}>{children}</div>;
+const HeadingOption = ({ children, $variant, ...p }: any) => (
+  <div className="bzt-heading-option" data-variant={$variant} {...p}>
+    {children}
+  </div>
+);
 
-const ColorPicker = ({children, ...p}: any) => <div className="bzt-color-picker" {...p}>{children}</div>;
+const ColorPicker = ({ children, ...p }: any) => (
+  <div className="bzt-color-picker" {...p}>
+    {children}
+  </div>
+);
 
-const ColorPickerDropdown = ({children, $open, ...p}: any) => <div className="bzt-color-picker-dropdown" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const ColorPickerDropdown = ({ children, $open, ...p }: any) => (
+  <div className="bzt-color-picker-dropdown" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const ColorPickerGrid = ({children, ...p}: any) => <div className="bzt-color-picker-grid" {...p}>{children}</div>;
+const ColorPickerGrid = ({ children, ...p }: any) => (
+  <div className="bzt-color-picker-grid" {...p}>
+    {children}
+  </div>
+);
 
-const ColorSwatch = ({children, $color, $transparent, ...p}: any) => <div className="bzt-color-swatch" style={{background: $color}} data-transparent={$transparent ? "true" : "false"} {...p}>{children}</div>;
+const ColorSwatch = ({ children, $color, $transparent, ...p }: any) => (
+  <div
+    className="bzt-color-swatch"
+    style={{ background: $color }}
+    data-transparent={$transparent ? 'true' : 'false'}
+    {...p}
+  >
+    {children}
+  </div>
+);
 
-const LineSpacingDropdown = ({children, ...p}: any) => <div className="bzt-line-spacing-dropdown" {...p}>{children}</div>;
+const LineSpacingDropdown = ({ children, ...p }: any) => (
+  <div className="bzt-line-spacing-dropdown" {...p}>
+    {children}
+  </div>
+);
 
-const LineSpacingMenu = ({children, $open, ...p}: any) => <div className="bzt-line-spacing-menu" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const LineSpacingMenu = ({ children, $open, ...p }: any) => (
+  <div className="bzt-line-spacing-menu" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const LineSpacingOption = ({children, $active, ...p}: any) => <div className="bzt-line-spacing-option" data-active={$active ? "true" : "false"} {...p}>{children}</div>;
+const LineSpacingOption = ({ children, $active, ...p }: any) => (
+  <div className="bzt-line-spacing-option" data-active={$active ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const MoreMenu = ({children, ...p}: any) => <div className="bzt-more-menu" {...p}>{children}</div>;
+const MoreMenu = ({ children, ...p }: any) => (
+  <div className="bzt-more-menu" {...p}>
+    {children}
+  </div>
+);
 
-const MoreDropdown = ({children, $open, ...p}: any) => <div className="bzt-more-dropdown" data-open={$open ? "true" : "false"} {...p}>{children}</div>;
+const MoreDropdown = ({ children, $open, ...p }: any) => (
+  <div className="bzt-more-dropdown" data-open={$open ? 'true' : 'false'} {...p}>
+    {children}
+  </div>
+);
 
-const MoreDropdownItem = ({children, ...p}: any) => <div className="bzt-more-dropdown-item" {...p}>{children}</div>;
+const MoreDropdownItem = ({ children, ...p }: any) => (
+  <div className="bzt-more-dropdown-item" {...p}>
+    {children}
+  </div>
+);
 
-const MoreDropdownDivider = ({children, ...p}: any) => <div className="bzt-more-dropdown-divider" {...p}>{children}</div>;
+const MoreDropdownDivider = ({ children, ...p }: any) => (
+  <div className="bzt-more-dropdown-divider" {...p}>
+    {children}
+  </div>
+);
 
 // =============================================
 // CONSTANTS
@@ -83,9 +199,21 @@ const FONTS = [
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72];
 
 const TEXT_COLORS = [
-  '#ffffff', '#a0a0a0', '#666666', '#333333', '#000000',
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
-  '#1473df', '#8b5cf6', '#ec4899', '#f43f5e', '#84cc16',
+  '#ffffff',
+  '#a0a0a0',
+  '#666666',
+  '#333333',
+  '#000000',
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#06b6d4',
+  '#1473df',
+  '#8b5cf6',
+  '#ec4899',
+  '#f43f5e',
+  '#84cc16',
 ];
 
 const HIGHLIGHT_COLORS = [
@@ -220,10 +348,11 @@ const WordDocToolbar = ({
   const currentFont = (() => {
     if (!fontFamily) return 'Inter';
     const lower = fontFamily.toLowerCase();
-    const matched = FONTS.find(f =>
-      f.name.toLowerCase() === lower ||
-      f.family.toLowerCase().includes(lower) ||
-      lower.includes(f.name.toLowerCase())
+    const matched = FONTS.find(
+      f =>
+        f.name.toLowerCase() === lower ||
+        f.family.toLowerCase().includes(lower) ||
+        lower.includes(f.name.toLowerCase()),
     );
     return matched ? matched.name : fontFamily;
   })();
@@ -240,7 +369,6 @@ const WordDocToolbar = ({
   useEffect(() => {
     if (fontSize != null) setCurrentFontSize(fontSize);
   }, [fontSize]);
-
 
   useEffect(() => {
     if (alignment) setCurrentAlignment(alignment);
@@ -269,69 +397,80 @@ const WordDocToolbar = ({
   }, [closeAllDropdowns]);
 
   // Drag handlers - matching HTML design exactly
-  const handleDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDragHandleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
 
-    if (isDocked) {
-      // Undock the toolbar - place it in the center of the content area
-      setIsDocked(false);
+      if (isDocked) {
+        // Undock the toolbar - place it in the center of the content area
+        setIsDocked(false);
 
-      const contentAreaWidth = window.innerWidth - sidebarWidth;
+        const contentAreaWidth = window.innerWidth - sidebarWidth;
+        const toolbarWidth = toolbarRef.current?.offsetWidth || 600;
+        const centerLeft = sidebarWidth + (contentAreaWidth - toolbarWidth) / 2;
+
+        const newX = Math.max(sidebarWidth + 20, centerLeft);
+        const newY = 180;
+
+        setPosition({ x: newX, y: newY });
+        dragOffset.current = { x: e.clientX - newX, y: e.clientY - newY };
+        setIsDragging(true);
+        setShowDockIndicator(true);
+      }
+    },
+    [isDocked, sidebarWidth],
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't start drag if clicking on buttons or dropdowns
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('button, [class*="Dropdown"], [class*="ColorPicker"], [class*="MoreMenu"]')
+      ) {
+        return;
+      }
+
+      // For the drag handle in floating mode
+      if (!isDocked) {
+        dragOffset.current = {
+          x: e.clientX - position.x,
+          y: e.clientY - position.y,
+        };
+        setIsDragging(true);
+        setShowDockIndicator(true);
+      }
+    },
+    [isDocked, position],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging) return;
+
+      let x = e.clientX - dragOffset.current.x;
+      let y = e.clientY - dragOffset.current.y;
+
+      // Boundary constraints - matching HTML design
       const toolbarWidth = toolbarRef.current?.offsetWidth || 600;
-      const centerLeft = sidebarWidth + (contentAreaWidth - toolbarWidth) / 2;
+      const toolbarHeight = toolbarRef.current?.offsetHeight || 40;
+      x = Math.max(sidebarWidth + 20, Math.min(window.innerWidth - toolbarWidth - 20, x));
+      y = Math.max(50, Math.min(window.innerHeight - toolbarHeight - 60, y));
 
-      const newX = Math.max(sidebarWidth + 20, centerLeft);
-      const newY = 180;
+      setPosition({ x, y });
 
-      setPosition({ x: newX, y: newY });
-      dragOffset.current = { x: e.clientX - newX, y: e.clientY - newY };
-      setIsDragging(true);
-      setShowDockIndicator(true);
-    }
-  }, [isDocked, sidebarWidth]);
+      // Check if near header (dock area) - matching HTML design
+      const headerRect = headerRef?.current?.getBoundingClientRect();
+      const toolbarRect = toolbarRef.current?.getBoundingClientRect();
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Don't start drag if clicking on buttons or dropdowns
-    const target = e.target as HTMLElement;
-    if (target.closest('button, [class*="Dropdown"], [class*="ColorPicker"], [class*="MoreMenu"]')) {
-      return;
-    }
-
-    // For the drag handle in floating mode
-    if (!isDocked) {
-      dragOffset.current = {
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      };
-      setIsDragging(true);
-      setShowDockIndicator(true);
-    }
-  }, [isDocked, position]);
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging) return;
-
-    let x = e.clientX - dragOffset.current.x;
-    let y = e.clientY - dragOffset.current.y;
-
-    // Boundary constraints - matching HTML design
-    const toolbarWidth = toolbarRef.current?.offsetWidth || 600;
-    const toolbarHeight = toolbarRef.current?.offsetHeight || 40;
-    x = Math.max(sidebarWidth + 20, Math.min(window.innerWidth - toolbarWidth - 20, x));
-    y = Math.max(50, Math.min(window.innerHeight - toolbarHeight - 60, y));
-
-    setPosition({ x, y });
-
-    // Check if near header (dock area) - matching HTML design
-    const headerRect = headerRef?.current?.getBoundingClientRect();
-    const toolbarRect = toolbarRef.current?.getBoundingClientRect();
-
-    if (headerRect && toolbarRect) {
-      const isNear = toolbarRect.top < headerRect.bottom + 30;
-      setNearDockZone(isNear);
-      onHeaderHighlight?.(isNear);
-    }
-  }, [isDragging, sidebarWidth, headerRef, onHeaderHighlight]);
+      if (headerRect && toolbarRect) {
+        const isNear = toolbarRect.top < headerRect.bottom + 30;
+        setNearDockZone(isNear);
+        onHeaderHighlight?.(isNear);
+      }
+    },
+    [isDragging, sidebarWidth, headerRef, onHeaderHighlight],
+  );
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
@@ -364,7 +503,7 @@ const WordDocToolbar = ({
   const increaseFontSize = () => {
     const currentIndex = FONT_SIZES.indexOf(currentFontSize);
     if (currentIndex < FONT_SIZES.length - 1) {
-      const newSize = FONT_SIZES[currentIndex + 1];
+      const newSize = FONT_SIZES[currentIndex + 1]!;
       setCurrentFontSize(newSize);
       onSetFontSize?.(newSize);
     }
@@ -373,7 +512,7 @@ const WordDocToolbar = ({
   const decreaseFontSize = () => {
     const currentIndex = FONT_SIZES.indexOf(currentFontSize);
     if (currentIndex > 0) {
-      const newSize = FONT_SIZES[currentIndex - 1];
+      const newSize = FONT_SIZES[currentIndex - 1]!;
       setCurrentFontSize(newSize);
       onSetFontSize?.(newSize);
     }
@@ -399,16 +538,29 @@ const WordDocToolbar = ({
       </ToolbarDragHandle>
 
       {/* Font Family Dropdown */}
-      <FontDropdown onClick={() => { closeAllDropdowns(); setFontDropdownOpen(!fontDropdownOpen); }}>
+      <FontDropdown
+        onClick={() => {
+          closeAllDropdowns();
+          setFontDropdownOpen(!fontDropdownOpen);
+        }}
+      >
         <span>{currentFont}</span>
-        <svg viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9" /></svg>
-        <FontDropdownMenu $open={fontDropdownOpen} onClick={e => e.stopPropagation()}>
+        <svg viewBox="0 0 24 24">
+          <polyline points="6,9 12,15 18,9" />
+        </svg>
+        <FontDropdownMenu
+          $open={fontDropdownOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           {FONTS.map(font => (
             <FontOption
               key={font.name}
               $active={currentFont === font.name}
               style={{ fontFamily: font.family }}
-              onClick={() => { onSetFontFamily?.(font.name); setFontDropdownOpen(false); }}
+              onClick={() => {
+                onSetFontFamily?.(font.name);
+                setFontDropdownOpen(false);
+              }}
             >
               {font.name}
             </FontOption>
@@ -420,14 +572,26 @@ const WordDocToolbar = ({
 
       {/* Font Size Controls */}
       <FontSizeBtn onClick={decreaseFontSize}>−</FontSizeBtn>
-      <FontSizeDropdown onClick={() => { closeAllDropdowns(); setFontSizeDropdownOpen(!fontSizeDropdownOpen); }}>
+      <FontSizeDropdown
+        onClick={() => {
+          closeAllDropdowns();
+          setFontSizeDropdownOpen(!fontSizeDropdownOpen);
+        }}
+      >
         <span>{currentFontSize}</span>
-        <FontSizeDropdownMenu $open={fontSizeDropdownOpen} onClick={e => e.stopPropagation()}>
+        <FontSizeDropdownMenu
+          $open={fontSizeDropdownOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           {FONT_SIZES.map(size => (
             <FontSizeOption
               key={size}
               $active={currentFontSize === size}
-              onClick={() => { setCurrentFontSize(size); onSetFontSize?.(size); setFontSizeDropdownOpen(false); }}
+              onClick={() => {
+                setCurrentFontSize(size);
+                onSetFontSize?.(size);
+                setFontSizeDropdownOpen(false);
+              }}
             >
               {size}
             </FontSizeOption>
@@ -439,14 +603,56 @@ const WordDocToolbar = ({
       <ToolbarDivider />
 
       {/* Heading Dropdown */}
-      <ToolbarDropdown onClick={() => { closeAllDropdowns(); setHeadingDropdownOpen(!headingDropdownOpen); }}>
+      <ToolbarDropdown
+        onClick={() => {
+          closeAllDropdowns();
+          setHeadingDropdownOpen(!headingDropdownOpen);
+        }}
+      >
         <span>{currentHeading}</span>
-        <svg viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9" /></svg>
-        <HeadingDropdownMenu $open={headingDropdownOpen} onClick={e => e.stopPropagation()}>
-          <HeadingOption $variant="h1" onClick={() => { onSetHeading?.('h1'); setHeadingDropdownOpen(false); }}>Heading 1</HeadingOption>
-          <HeadingOption $variant="h2" onClick={() => { onSetHeading?.('h2'); setHeadingDropdownOpen(false); }}>Heading 2</HeadingOption>
-          <HeadingOption $variant="h3" onClick={() => { onSetHeading?.('h3'); setHeadingDropdownOpen(false); }}>Heading 3</HeadingOption>
-          <HeadingOption $variant="body" onClick={() => { onSetHeading?.('body'); setHeadingDropdownOpen(false); }}>Body</HeadingOption>
+        <svg viewBox="0 0 24 24">
+          <polyline points="6,9 12,15 18,9" />
+        </svg>
+        <HeadingDropdownMenu
+          $open={headingDropdownOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
+          <HeadingOption
+            $variant="h1"
+            onClick={() => {
+              onSetHeading?.('h1');
+              setHeadingDropdownOpen(false);
+            }}
+          >
+            Heading 1
+          </HeadingOption>
+          <HeadingOption
+            $variant="h2"
+            onClick={() => {
+              onSetHeading?.('h2');
+              setHeadingDropdownOpen(false);
+            }}
+          >
+            Heading 2
+          </HeadingOption>
+          <HeadingOption
+            $variant="h3"
+            onClick={() => {
+              onSetHeading?.('h3');
+              setHeadingDropdownOpen(false);
+            }}
+          >
+            Heading 3
+          </HeadingOption>
+          <HeadingOption
+            $variant="body"
+            onClick={() => {
+              onSetHeading?.('body');
+              setHeadingDropdownOpen(false);
+            }}
+          >
+            Body
+          </HeadingOption>
         </HeadingDropdownMenu>
       </ToolbarDropdown>
 
@@ -454,36 +660,66 @@ const WordDocToolbar = ({
 
       {/* Text Formatting */}
       <ToolbarBtn $active={isBold} data-tooltip="Bold (⌘B)" onClick={onToggleBold}>
-        <svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" /><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" /></svg>
+        <svg viewBox="0 0 24 24">
+          <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+          <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+        </svg>
       </ToolbarBtn>
       <ToolbarBtn $active={isItalic} data-tooltip="Italic (⌘I)" onClick={onToggleItalic}>
-        <svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4" /><line x1="14" y1="20" x2="5" y2="20" /><line x1="15" y1="4" x2="9" y2="20" /></svg>
+        <svg viewBox="0 0 24 24">
+          <line x1="19" y1="4" x2="10" y2="4" />
+          <line x1="14" y1="20" x2="5" y2="20" />
+          <line x1="15" y1="4" x2="9" y2="20" />
+        </svg>
       </ToolbarBtn>
       <ToolbarBtn $active={isUnderlined} data-tooltip="Underline (⌘U)" onClick={onToggleUnderline}>
-        <svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 12 0V3" /><line x1="4" y1="21" x2="20" y2="21" /></svg>
+        <svg viewBox="0 0 24 24">
+          <path d="M6 3v7a6 6 0 0 0 12 0V3" />
+          <line x1="4" y1="21" x2="20" y2="21" />
+        </svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={isStrikethrough} data-tooltip="Strikethrough" onClick={onToggleStrikethrough}>
-        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" /><path d="M16 6C16 6 14.5 4 12 4C9.5 4 8 6 8 7.5C8 10 12 12 12 12" /><path d="M8 18C8 18 9.5 20 12 20C14.5 20 16 18 16 16.5C16 14 12 12 12 12" /></svg>
+      <ToolbarBtn
+        $active={isStrikethrough}
+        data-tooltip="Strikethrough"
+        onClick={onToggleStrikethrough}
+      >
+        <svg viewBox="0 0 24 24">
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <path d="M16 6C16 6 14.5 4 12 4C9.5 4 8 6 8 7.5C8 10 12 12 12 12" />
+          <path d="M8 18C8 18 9.5 20 12 20C14.5 20 16 18 16 16.5C16 14 12 12 12 12" />
+        </svg>
       </ToolbarBtn>
 
       <ToolbarDivider />
 
       {/* Text Color */}
       <ColorPicker>
-        <ToolbarBtn data-tooltip="Text color" onClick={() => { closeAllDropdowns(); setTextColorOpen(!textColorOpen); }}>
+        <ToolbarBtn
+          data-tooltip="Text color"
+          onClick={() => {
+            closeAllDropdowns();
+            setTextColorOpen(!textColorOpen);
+          }}
+        >
           <svg viewBox="0 0 24 24">
             <path d="M4 20h16" style={{ stroke: textColor || 'currentColor', strokeWidth: 3 }} />
             <path d="M7 15L12 5L17 15" />
             <path d="M9 11h6" />
           </svg>
         </ToolbarBtn>
-        <ColorPickerDropdown $open={textColorOpen} onClick={e => e.stopPropagation()}>
+        <ColorPickerDropdown
+          $open={textColorOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           <ColorPickerGrid>
             {TEXT_COLORS.map(color => (
               <ColorSwatch
                 key={color}
                 $color={color}
-                onClick={() => { onSetTextColor?.(color); setTextColorOpen(false); }}
+                onClick={() => {
+                  onSetTextColor?.(color);
+                  setTextColorOpen(false);
+                }}
               />
             ))}
           </ColorPickerGrid>
@@ -492,20 +728,35 @@ const WordDocToolbar = ({
 
       {/* Highlight Color */}
       <ColorPicker>
-        <ToolbarBtn data-tooltip="Highlight color" onClick={() => { closeAllDropdowns(); setHighlightColorOpen(!highlightColorOpen); }}>
+        <ToolbarBtn
+          data-tooltip="Highlight color"
+          onClick={() => {
+            closeAllDropdowns();
+            setHighlightColorOpen(!highlightColorOpen);
+          }}
+        >
           <svg viewBox="0 0 24 24">
             <path d="M19 11H5L12 4L19 11Z" />
-            <path d="M5 11V20H19V11" style={{ fill: bgColor !== 'transparent' ? bgColor : 'none' }} />
+            <path
+              d="M5 11V20H19V11"
+              style={{ fill: bgColor !== 'transparent' ? bgColor : 'none' }}
+            />
           </svg>
         </ToolbarBtn>
-        <ColorPickerDropdown $open={highlightColorOpen} onClick={e => e.stopPropagation()}>
+        <ColorPickerDropdown
+          $open={highlightColorOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           <ColorPickerGrid>
             {HIGHLIGHT_COLORS.map((color, i) => (
               <ColorSwatch
                 key={i}
                 $color={color}
                 $transparent={color === 'transparent'}
-                onClick={() => { onSetBgColor?.(color); setHighlightColorOpen(false); }}
+                onClick={() => {
+                  onSetBgColor?.(color);
+                  setHighlightColorOpen(false);
+                }}
               />
             ))}
           </ColorPickerGrid>
@@ -515,24 +766,74 @@ const WordDocToolbar = ({
       <ToolbarDivider />
 
       {/* Text Alignment */}
-      <ToolbarBtn $active={currentAlignment === 'left'} data-tooltip="Align left" onClick={() => { setCurrentAlignment('left'); onSetAlignment?.('left'); }}>
-        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" /></svg>
+      <ToolbarBtn
+        $active={currentAlignment === 'left'}
+        data-tooltip="Align left"
+        onClick={() => {
+          setCurrentAlignment('left');
+          onSetAlignment?.('left');
+        }}
+      >
+        <svg viewBox="0 0 24 24">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="15" y2="12" />
+          <line x1="3" y1="18" x2="18" y2="18" />
+        </svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'center'} data-tooltip="Align center" onClick={() => { setCurrentAlignment('center'); onSetAlignment?.('center'); }}>
-        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></svg>
+      <ToolbarBtn
+        $active={currentAlignment === 'center'}
+        data-tooltip="Align center"
+        onClick={() => {
+          setCurrentAlignment('center');
+          onSetAlignment?.('center');
+        }}
+      >
+        <svg viewBox="0 0 24 24">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="6" y1="12" x2="18" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+        </svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'right'} data-tooltip="Align right" onClick={() => { setCurrentAlignment('right'); onSetAlignment?.('right'); }}>
-        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" /></svg>
+      <ToolbarBtn
+        $active={currentAlignment === 'right'}
+        data-tooltip="Align right"
+        onClick={() => {
+          setCurrentAlignment('right');
+          onSetAlignment?.('right');
+        }}
+      >
+        <svg viewBox="0 0 24 24">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="9" y1="12" x2="21" y2="12" />
+          <line x1="6" y1="18" x2="21" y2="18" />
+        </svg>
       </ToolbarBtn>
-      <ToolbarBtn $active={currentAlignment === 'justify'} data-tooltip="Justify" onClick={() => { setCurrentAlignment('justify'); onSetAlignment?.('justify'); }}>
-        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+      <ToolbarBtn
+        $active={currentAlignment === 'justify'}
+        data-tooltip="Justify"
+        onClick={() => {
+          setCurrentAlignment('justify');
+          onSetAlignment?.('justify');
+        }}
+      >
+        <svg viewBox="0 0 24 24">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
       </ToolbarBtn>
 
       <ToolbarDivider />
 
       {/* Line Spacing */}
       <LineSpacingDropdown>
-        <ToolbarBtn data-tooltip="Line spacing" onClick={() => { closeAllDropdowns(); setLineSpacingOpen(!lineSpacingOpen); }}>
+        <ToolbarBtn
+          data-tooltip="Line spacing"
+          onClick={() => {
+            closeAllDropdowns();
+            setLineSpacingOpen(!lineSpacingOpen);
+          }}
+        >
           <svg viewBox="0 0 24 24">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="12" x2="21" y2="12" />
@@ -540,12 +841,18 @@ const WordDocToolbar = ({
             <path d="M7 3v18M7 3l-2 2M7 3l2 2M7 21l-2-2M7 21l2-2" strokeWidth="1.5" />
           </svg>
         </ToolbarBtn>
-        <LineSpacingMenu $open={lineSpacingOpen} onClick={e => e.stopPropagation()}>
+        <LineSpacingMenu
+          $open={lineSpacingOpen}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           {LINE_SPACINGS.map(spacing => (
             <LineSpacingOption
               key={spacing.value}
               $active={currentLineSpacing === spacing.value}
-              onClick={() => { onSetLineSpacing?.(parseFloat(spacing.value)); setLineSpacingOpen(false); }}
+              onClick={() => {
+                onSetLineSpacing?.(parseFloat(spacing.value));
+                setLineSpacingOpen(false);
+              }}
             >
               {spacing.label}
             </LineSpacingOption>
@@ -568,9 +875,15 @@ const WordDocToolbar = ({
       </ToolbarBtn>
       <ToolbarBtn $active={isNumbered} data-tooltip="Numbered list" onClick={onToggleNumbered}>
         <svg viewBox="0 0 24 24">
-          <text x="2" y="8" fontSize="7" fill="currentColor" stroke="none">1</text>
-          <text x="2" y="14" fontSize="7" fill="currentColor" stroke="none">2</text>
-          <text x="2" y="20" fontSize="7" fill="currentColor" stroke="none">3</text>
+          <text x="2" y="8" fontSize="7" fill="currentColor" stroke="none">
+            1
+          </text>
+          <text x="2" y="14" fontSize="7" fill="currentColor" stroke="none">
+            2
+          </text>
+          <text x="2" y="20" fontSize="7" fill="currentColor" stroke="none">
+            3
+          </text>
           <line x1="9" y1="6" x2="21" y2="6" />
           <line x1="9" y1="12" x2="21" y2="12" />
           <line x1="9" y1="18" x2="21" y2="18" />
@@ -609,14 +922,18 @@ const WordDocToolbar = ({
 
       {/* Image Insert - with dropdown for network/upload options */}
       <ImageInsert
-        onNetworkImage={onNetworkImage}
-        onUploadImage={onUploadImage}
+        onNetworkImage={onNetworkImage as unknown as () => void}
+        onUploadImage={onUploadImage as unknown as () => void}
       />
 
       {/* Table Insert - with grid picker */}
       <TablePickerTooltip
         disabled={isInTable}
-        onTableSelect={(rows: number, cols: number) => onInsertTable?.(rows, cols)}
+        onTableSelect={
+          ((rows: number, cols: number) => {
+            onInsertTable?.(rows, cols);
+          }) as unknown as () => void
+        }
         triggerIcon={
           <ToolbarBtn
             as="div"
@@ -645,30 +962,59 @@ const WordDocToolbar = ({
 
       {/* More Menu */}
       <MoreMenu>
-        <ToolbarBtn data-tooltip="More options" onClick={() => { closeAllDropdowns(); setMoreMenuOpen(!moreMenuOpen); }}>
+        <ToolbarBtn
+          data-tooltip="More options"
+          onClick={() => {
+            closeAllDropdowns();
+            setMoreMenuOpen(!moreMenuOpen);
+          }}
+        >
           <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="1" />
             <circle cx="19" cy="12" r="1" />
             <circle cx="5" cy="12" r="1" />
           </svg>
         </ToolbarBtn>
-        <MoreDropdown $open={moreMenuOpen} onClick={e => e.stopPropagation()}>
+        <MoreDropdown $open={moreMenuOpen} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24"><text x="2" y="14" fontSize="12" fill="currentColor" stroke="none">X</text><text x="12" y="18" fontSize="8" fill="currentColor" stroke="none">2</text></svg>
+            <svg viewBox="0 0 24 24">
+              <text x="2" y="14" fontSize="12" fill="currentColor" stroke="none">
+                X
+              </text>
+              <text x="12" y="18" fontSize="8" fill="currentColor" stroke="none">
+                2
+              </text>
+            </svg>
             Subscript
           </MoreDropdownItem>
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24"><text x="2" y="16" fontSize="12" fill="currentColor" stroke="none">X</text><text x="12" y="10" fontSize="8" fill="currentColor" stroke="none">2</text></svg>
+            <svg viewBox="0 0 24 24">
+              <text x="2" y="16" fontSize="12" fill="currentColor" stroke="none">
+                X
+              </text>
+              <text x="12" y="10" fontSize="8" fill="currentColor" stroke="none">
+                2
+              </text>
+            </svg>
             Superscript
           </MoreDropdownItem>
           <MoreDropdownDivider />
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" /><line x1="3" y1="21" x2="21" y2="3" strokeWidth="2" /></svg>
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7V4h16v3" />
+              <path d="M9 20h6" />
+              <path d="M12 4v16" />
+              <line x1="3" y1="21" x2="21" y2="3" strokeWidth="2" />
+            </svg>
             Clear formatting
           </MoreDropdownItem>
           <MoreDropdownDivider />
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+            <svg viewBox="0 0 24 24">
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
             Print
           </MoreDropdownItem>
         </MoreDropdown>
