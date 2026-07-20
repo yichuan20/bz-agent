@@ -267,6 +267,153 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     }
   }, [contextMenu.visible]);
 
+  // Clipboard + keyboard handlers — must be declared before the useEffect below
+  // to avoid temporal dead zone (const is not hoisted like function declarations).
+  const onCopy = e => {
+    if (!isFocussed) {
+      return;
+    }
+    e.preventDefault();
+    const [start, end] = getStartEnd(doc);
+    const selectedText = text?.slice(start, end);
+    e.clipboardData.setData('text', selectedText);
+  };
+
+  const onCut = e => {
+    if (!isFocussed) {
+      return;
+    }
+    e.preventDefault();
+    const [start, end] = getStartEnd(doc);
+    const selectedText = text?.slice(start, end);
+    e.clipboardData.setData('text', selectedText);
+
+    const newDoc = deleteText({ doc });
+    onDocChange(newDoc);
+  };
+
+  const onPaste = e => {
+    if (!isFocussed) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const textToInsert = e.clipboardData.getData('text');
+    const newDoc = insertText({ doc, textToInsert });
+    onDocChange(newDoc);
+  };
+
+  const onKeyDown = e => {
+    const hasSelection =
+      doc.selStart !== doc.selEnd || (doc.text?.length > 0 && doc.selStart !== undefined);
+    const shouldHandleKey =
+      isFocussed || (hasSelection && document?.activeElement?.tagName === 'BODY');
+
+    if (!shouldHandleKey || document?.activeElement?.tagName !== 'BODY') {
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      // select all
+      if (e?.metaKey && e.key === 'a') {
+        e.preventDefault();
+        onDocChange({ ...doc, selStart: 0, selEnd: text?.length });
+      }
+
+      return;
+    }
+
+    if (ARROW_KEYS.includes(e.key)) {
+      // Special handling when image is selected
+      if (selectedImageIndex !== null) {
+        if (e.key === 'ArrowLeft') {
+          // Move caret to position before the image (stay at imageIndex, just clear selection)
+          const newDoc = { ...doc, selStart: selectedImageIndex, selEnd: selectedImageIndex };
+          setSelectedImageIndex(null);
+          onDocChange(newDoc);
+          return;
+        } else if (e.key === 'ArrowRight') {
+          // Move caret to position after the image
+          const newCaretIndex = Math.min(doc.text?.length || 0, selectedImageIndex + 1);
+          const newDoc = { ...doc, selStart: newCaretIndex, selEnd: newCaretIndex };
+          setSelectedImageIndex(null);
+          onDocChange(newDoc);
+          return;
+        } else {
+          // For ArrowUp/ArrowDown, clear image selection first
+          setSelectedImageIndex(null);
+        }
+      }
+
+      // Check if caret is at image position and pressing ArrowRight to select image
+      const currentIndex = doc.selStart;
+      if (
+        e.key === 'ArrowRight' &&
+        currentIndex >= 0 &&
+        currentIndex < styles?.length &&
+        styles[currentIndex]?.imageUrl
+      ) {
+        // Select the image instead of moving past it
+        setSelectedImageIndex(currentIndex);
+        setIsFocussed(true);
+        return;
+      }
+
+      // Check if caret is after image and pressing ArrowLeft to select image
+      if (
+        e.key === 'ArrowLeft' &&
+        currentIndex > 0 &&
+        currentIndex <= styles?.length &&
+        styles[currentIndex - 1]?.imageUrl
+      ) {
+        // Select the image instead of moving past it
+        setSelectedImageIndex(currentIndex - 1);
+        setIsFocussed(true);
+        return;
+      }
+
+      const newDoc = moveCaret({ doc, key: e.key, xs, ys });
+
+      // Clear image selection when moving (don't auto-select images)
+      setSelectedImageIndex(null);
+
+      onDocChange(newDoc);
+      return;
+    }
+
+    // if character key
+    if (e.key.length === 1 || e.key === 'Enter') {
+      let charToInsert = e.key;
+
+      if (e.key === 'Enter') {
+        charToInsert = '\n';
+      }
+
+      const newDoc = insertText({ doc, textToInsert: charToInsert });
+      onDocChange(newDoc);
+      return;
+    }
+
+    // Delete selected image (Backspace or Delete key)
+    if ((e.key === 'Backspace' || e.key === 'Delete') && selectedImageIndex !== null) {
+      const newDoc = cloneDeep(doc);
+      const i = selectedImageIndex;
+      newDoc.text = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
+      newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
+      newDoc.selStart = i;
+      newDoc.selEnd = i;
+      setSelectedImageIndex(null);
+      onDocChange(newDoc);
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      const newDoc = deleteText({ doc });
+      onDocChange(newDoc);
+      return;
+    }
+  };
+
   // init event listeners
   useEffect(() => {
     document.addEventListener('paste', onPaste);
@@ -504,29 +651,6 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     onDocChange(newDoc);
   };
 
-  const onCopy = e => {
-    if (!isFocussed) {
-      return;
-    }
-    e.preventDefault();
-    const [start, end] = getStartEnd(doc);
-    const selectedText = text?.slice(start, end);
-    e.clipboardData.setData('text', selectedText);
-  };
-
-  const onCut = e => {
-    if (!isFocussed) {
-      return;
-    }
-    e.preventDefault();
-    const [start, end] = getStartEnd(doc);
-    const selectedText = text?.slice(start, end);
-    e.clipboardData.setData('text', selectedText);
-
-    const newDoc = deleteText({ doc });
-    onDocChange(newDoc);
-  };
-
   const onMouseUp = () => {
     setIsMouseDown(false);
   };
@@ -548,18 +672,6 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     const my = drawYToContentY(e.nativeEvent.offsetY * SF + scrollY, topMargin);
     const ind = findCursorIndex(mx, my, xs, ys);
     onDocChange({ ...doc, selEnd: clamp(ind, 0, text?.length) });
-  };
-
-  const onPaste = e => {
-    if (!isFocussed) {
-      return;
-    }
-
-    e.preventDefault();
-
-    const textToInsert = e.clipboardData.getData('text');
-    const newDoc = insertText({ doc, textToInsert });
-    onDocChange(newDoc);
   };
 
   const onWheel = e => {
@@ -683,116 +795,6 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     }
     const newDoc = deleteTable(doc, contextMenu.tableInfo);
     onDocChange(newDoc);
-  };
-
-  const onKeyDown = e => {
-    const hasSelection =
-      doc.selStart !== doc.selEnd || (doc.text?.length > 0 && doc.selStart !== undefined);
-    const shouldHandleKey =
-      isFocussed || (hasSelection && document?.activeElement?.tagName === 'BODY');
-
-    if (!shouldHandleKey || document?.activeElement?.tagName !== 'BODY') {
-      return;
-    }
-    if (e.metaKey || e.ctrlKey) {
-      // select all
-      if (e?.metaKey && e.key === 'a') {
-        e.preventDefault();
-        onDocChange({ ...doc, selStart: 0, selEnd: text?.length });
-      }
-
-      return;
-    }
-
-    if (ARROW_KEYS.includes(e.key)) {
-      // Special handling when image is selected
-      if (selectedImageIndex !== null) {
-        if (e.key === 'ArrowLeft') {
-          // Move caret to position before the image (stay at imageIndex, just clear selection)
-          const newDoc = { ...doc, selStart: selectedImageIndex, selEnd: selectedImageIndex };
-          setSelectedImageIndex(null);
-          onDocChange(newDoc);
-          return;
-        } else if (e.key === 'ArrowRight') {
-          // Move caret to position after the image
-          const newCaretIndex = Math.min(doc.text?.length || 0, selectedImageIndex + 1);
-          const newDoc = { ...doc, selStart: newCaretIndex, selEnd: newCaretIndex };
-          setSelectedImageIndex(null);
-          onDocChange(newDoc);
-          return;
-        } else {
-          // For ArrowUp/ArrowDown, clear image selection first
-          setSelectedImageIndex(null);
-        }
-      }
-
-      // Check if caret is at image position and pressing ArrowRight to select image
-      const currentIndex = doc.selStart;
-      if (
-        e.key === 'ArrowRight' &&
-        currentIndex >= 0 &&
-        currentIndex < styles?.length &&
-        styles[currentIndex]?.imageUrl
-      ) {
-        // Select the image instead of moving past it
-        setSelectedImageIndex(currentIndex);
-        setIsFocussed(true);
-        return;
-      }
-
-      // Check if caret is after image and pressing ArrowLeft to select image
-      if (
-        e.key === 'ArrowLeft' &&
-        currentIndex > 0 &&
-        currentIndex <= styles?.length &&
-        styles[currentIndex - 1]?.imageUrl
-      ) {
-        // Select the image instead of moving past it
-        setSelectedImageIndex(currentIndex - 1);
-        setIsFocussed(true);
-        return;
-      }
-
-      const newDoc = moveCaret({ doc, key: e.key, xs, ys });
-
-      // Clear image selection when moving (don't auto-select images)
-      setSelectedImageIndex(null);
-
-      onDocChange(newDoc);
-      return;
-    }
-
-    // if character key
-    if (e.key.length === 1 || e.key === 'Enter') {
-      let charToInsert = e.key;
-
-      if (e.key === 'Enter') {
-        charToInsert = '\n';
-      }
-
-      const newDoc = insertText({ doc, textToInsert: charToInsert });
-      onDocChange(newDoc);
-      return;
-    }
-
-    // Delete selected image (Backspace or Delete key)
-    if ((e.key === 'Backspace' || e.key === 'Delete') && selectedImageIndex !== null) {
-      const newDoc = cloneDeep(doc);
-      const i = selectedImageIndex;
-      newDoc.text = newDoc.text.slice(0, i) + newDoc.text.slice(i + 1);
-      newDoc.styles = [...newDoc.styles.slice(0, i), ...newDoc.styles.slice(i + 1)];
-      newDoc.selStart = i;
-      newDoc.selEnd = i;
-      setSelectedImageIndex(null);
-      onDocChange(newDoc);
-      return;
-    }
-
-    if (e.key === 'Backspace') {
-      const newDoc = deleteText({ doc });
-      onDocChange(newDoc);
-      return;
-    }
   };
 
   return (

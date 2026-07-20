@@ -2261,6 +2261,7 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
                 if s.get('align'):  api_cd['align']     = s['align']
                 if s.get('format') is not None: api_cd['dataFormatString'] = s['format']
                 if s.get('wrap') is not None:   api_cd['wrapText'] = bool(s['wrap'])
+                if s.get('fontSize') is not None: api_cd['fontSize'] = s['fontSize']
                 if api_cd:
                     api_cells[ref] = api_cd
             # Grid dimensions: prefer explicit grid field, fall back to col_widths array

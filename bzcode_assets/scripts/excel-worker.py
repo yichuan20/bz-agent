@@ -535,12 +535,13 @@ def write_workbook(sheets: list[dict], out_path: Path) -> None:
         key = tuple(sorted(s.items()))
         if key not in _fmt_cache:
             props: dict = {"border": 1}
-            if s.get("bold"):   props["bold"]       = True
-            if s.get("italic"): props["italic"]     = True
-            if s.get("bg"):     props["bg_color"]   = s["bg"]
-            if s.get("fg"):     props["font_color"] = s["fg"]
-            if s.get("format"): props["num_format"] = s["format"]
-            if s.get("wrap"):   props["text_wrap"]  = True
+            if s.get("bold"):     props["bold"]       = True
+            if s.get("italic"):   props["italic"]     = True
+            if s.get("bg"):       props["bg_color"]   = s["bg"]
+            if s.get("fg"):       props["font_color"] = s["fg"]
+            if s.get("format"):   props["num_format"] = s["format"]
+            if s.get("wrap"):     props["text_wrap"]  = True
+            if s.get("fontSize"): props["font_size"]  = s["fontSize"]
             if s.get("align"):
                 # align may be "CENTER;BOTTOM" (compound from toolbar) or plain "center"
                 parts = s["align"].split(";")

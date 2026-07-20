@@ -34,6 +34,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -3893,7 +3894,6 @@ function AgentPage() {
   // BZ_API_KEY form shown inside the session-create error panel
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [showApiKeyPrompt, setShowApiKeyPrompt] = useState(false);
   // Abort controller + params for cancel / retry
   const createAbortRef = useRef<AbortController | null>(null);
   const sessionCreatingParamsRef = useRef<{ cwd: string; mode: AgentMode } | null>(null);
@@ -4061,16 +4061,6 @@ function AgentPage() {
     }
   }, [apiKeyValue, retrySessionCreate]);
 
-  // Show API key prompt after 10s of waiting for session creation
-  useEffect(() => {
-    if (!sessionCreating) {
-      setShowApiKeyPrompt(false);
-      return;
-    }
-    const t = setTimeout(() => setShowApiKeyPrompt(true), 10_000);
-    return () => clearTimeout(t);
-  }, [sessionCreating]);
-
   // Clear batch queue from sessionStorage on mount (already loaded into state)
   useEffect(() => {
     sessionStorage.removeItem('agent:batchQueue');
@@ -4134,8 +4124,8 @@ function AgentPage() {
     }
   }, []);
 
-  // wsKey increments to force a full reconnect (e.g. after /compact)
-  const [wsKey, setWsKey] = useState(0);
+  // reconnectKey increments to force a full reconnect (e.g. after /compact or on error)
+  const [reconnectKey, setReconnectKey] = useState(0);
 
   // ── Chat state ───────────────────────────────────────────────────────────────
   const [items, setItems] = useState<DisplayItem[]>([]);
@@ -4427,17 +4417,21 @@ function AgentPage() {
   );
 
   // SSE + REST — connects via POST /api/pool/connect, streams via GET /api/pool/{id}/stream.
-  // Reconnects whenever connectParams change (new session) or wsKey increments (force reconnect).
-  const connectParams =
-    view === 'chat' && activeCwd
-      ? { cwd: activeCwd, mode: agentMode, sessionId: activeSessionId || '' }
-      : null;
+  // Reconnects whenever connectParams change (new session) or reconnectKey increments (force reconnect).
+  const connectParams = useMemo(
+    () =>
+      view === 'chat' && activeCwd
+        ? { cwd: activeCwd, mode: agentMode, sessionId: activeSessionId || '' }
+        : null,
+    [view, activeCwd, agentMode, activeSessionId],
+  );
 
   useEffect(() => {
     if (!connectParams) return;
 
-    const isNewSession = JSON.stringify(connectParams) !== prevWsUrlRef.current;
-    prevWsUrlRef.current = JSON.stringify(connectParams);
+    const stateKey = JSON.stringify({ ...connectParams, _r: reconnectKey });
+    const isNewSession = stateKey !== prevWsUrlRef.current;
+    prevWsUrlRef.current = stateKey;
 
     if (isNewSession) {
       setItems([]);
@@ -4641,7 +4635,7 @@ function AgentPage() {
               : 'Context compacted';
             setCompactDoneMsg(summaryText);
             setTimeout(() => setCompactDoneMsg(null), 5000);
-            setTimeout(() => setWsKey(k => k + 1), 800);
+            setTimeout(() => setReconnectKey(k => k + 1), 800);
           }
         }
       } else if (type === 'delta') {
@@ -4897,7 +4891,7 @@ function AgentPage() {
         reconnectAttemptsRef.current = attempt + 1;
         const delay = Math.min(2_000 * 2 ** attempt, 30_000);
         reconnectTimer = setTimeout(() => {
-          if (!cancelled) setWsKey(k => k + 1);
+          if (!cancelled) setReconnectKey(k => k + 1);
         }, delay);
       }
     };
@@ -4909,7 +4903,7 @@ function AgentPage() {
       if (abortController) abortController.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [activeCwd, agentMode, connectParams, items.findLast]);
+  }, [connectParams, reconnectKey, items.findLast, activeCwd, agentMode]);
 
   // Close model dropdown on outside click
   useEffect(() => {
@@ -5314,41 +5308,6 @@ function AgentPage() {
                   label="Connecting"
                 />
               </div>
-              {showApiKeyPrompt && (
-                <div
-                  style={{
-                    width: '100%',
-                    marginTop: 12,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                  }}
-                >
-                  <p className="new-session-hint" style={{ marginTop: 0 }}>
-                    Taking too long? Enter your API key to restart:
-                  </p>
-                  <input
-                    type="password"
-                    className="conv-search-input"
-                    placeholder="Paste API key…"
-                    value={apiKeyValue}
-                    onChange={e => setApiKeyValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleSaveApiKey();
-                    }}
-                    style={{ width: '100%', boxSizing: 'border-box' }}
-                  />
-                  <button
-                    type="button"
-                    className="new-session-cancel"
-                    disabled={apiKeySaving || !apiKeyValue.trim()}
-                    onClick={handleSaveApiKey}
-                    style={{ opacity: !apiKeyValue.trim() || apiKeySaving ? 0.5 : 1 }}
-                  >
-                    {apiKeySaving ? 'Saving…' : 'Save & restart'}
-                  </button>
-                </div>
-              )}
               <button
                 type="button"
                 className="new-session-cancel"
@@ -5916,7 +5875,7 @@ function AgentPage() {
                   {connStatus === 'connecting' && (
                     <>
                       <BoltzbitLogo
-                        key={activeSessionId || wsKey}
+                        key={activeSessionId || reconnectKey}
                         size={40}
                         className="boltzbit-logo-animate"
                       />
@@ -5928,7 +5887,7 @@ function AgentPage() {
                   {connStatus === 'connected' ? (
                     <>
                       <BoltzbitLogo
-                        key={activeSessionId || wsKey}
+                        key={activeSessionId || reconnectKey}
                         size={40}
                         className="boltzbit-logo-animate-settling"
                       />
@@ -6720,41 +6679,6 @@ function AgentPage() {
                     label="Connecting"
                   />
                 </div>
-                {showApiKeyPrompt && sessionCreateMode !== 'resume' && (
-                  <div
-                    style={{
-                      width: '100%',
-                      marginTop: 12,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
-                    <p className="new-session-hint" style={{ marginTop: 0 }}>
-                      Taking too long? Enter your API key to restart:
-                    </p>
-                    <input
-                      type="password"
-                      className="conv-search-input"
-                      placeholder="Paste API key…"
-                      value={apiKeyValue}
-                      onChange={e => setApiKeyValue(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleSaveApiKey();
-                      }}
-                      style={{ width: '100%', boxSizing: 'border-box' }}
-                    />
-                    <button
-                      type="button"
-                      className="new-session-cancel"
-                      disabled={apiKeySaving || !apiKeyValue.trim()}
-                      onClick={handleSaveApiKey}
-                      style={{ opacity: !apiKeyValue.trim() || apiKeySaving ? 0.5 : 1 }}
-                    >
-                      {apiKeySaving ? 'Saving…' : 'Save & restart'}
-                    </button>
-                  </div>
-                )}
                 <button
                   type="button"
                   className="new-session-cancel"

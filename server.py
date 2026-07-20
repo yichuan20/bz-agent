@@ -1035,18 +1035,26 @@ class AgentPoolEntry:
             drain_bzcode_stderr(self.proc, self._out_queue))
         self._dispatcher_task = asyncio.create_task(self._dispatch_stdout())
 
-        # Wait for bzcode's initial session message before sending setMode,
-        # otherwise the mode change is lost during bzcode's startup.
+        # Send setMode once bzcode emits its session-ready message. Done as a
+        # background task so start() (and POST /api/pool/connect) returns as soon
+        # as the process is spawned — not after bzcode finishes restoring history.
         entry = _mode_entry(self.mode)
         session_mode = (entry.get("settings") or {}).get("mode", "")
         if session_mode:
-            try:
-                await asyncio.wait_for(self._ready_event.wait(), timeout=15)
-            except asyncio.TimeoutError:
-                pass
-            self.proc.stdin.write(json.dumps({"type": "setMode", "mode": session_mode}).encode() + b"\n")
-            await self.proc.stdin.drain()
-            print(f"[pool] sent setMode={session_mode} to {self.session_id}", file=sys.stderr)
+            _sid = self.session_id
+            _proc = self.proc
+            _evt = self._ready_event
+            _sm = session_mode
+            async def _send_mode_once_ready() -> None:
+                try:
+                    await asyncio.wait_for(_evt.wait(), timeout=30)
+                except asyncio.TimeoutError:
+                    pass
+                if _proc.returncode is None:
+                    _proc.stdin.write(json.dumps({"type": "setMode", "mode": _sm}).encode() + b"\n")
+                    await _proc.stdin.drain()
+                    print(f"[pool] sent setMode={_sm} to {_sid}", file=sys.stderr)
+            asyncio.create_task(_send_mode_once_ready())
 
     async def _dispatch_stdout(self) -> None:
         """Read from _out_queue, track agent state, auto-approve in yolo, fan out."""

@@ -251,9 +251,10 @@ const recalculateRowHeightsForGrid = ({
 
     const currentHeight = grid?.rowIndexToHeight?.[rowIndex] ?? DEFAULT_CELL_HEIGHT;
 
-    // Allow both increase and decrease, but ensure minimum height
+    // Only grow heights, never shrink — this preserves manually-set row heights
+    // across auto-recalculation triggered by cell edits or page load.
     const newHeight = Math.max(requiredHeight, DEFAULT_CELL_HEIGHT);
-    if (Math.abs(newHeight - currentHeight) > 1) {
+    if (newHeight > currentHeight + 1) {
       updatedRowHeights[rowIndex] = Math.ceil(newHeight);
       hasChanges = true;
     }
@@ -2114,6 +2115,109 @@ const ExcelViewSheetArea = ({
     onNewImagesToPatch,
   ]);
 
+  // Must be declared before the useEffect below to avoid temporal dead zone (const is not hoisted).
+  const onKeyDown = e => {
+    // Don't intercept keypresses that belong to other inputs (e.g. chat prompt)
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl !== document.body && !rootRef.current?.contains(activeEl)) {
+      return;
+    }
+
+    if (isEditing && e.key === 'Escape') {
+      setIsEditing(false);
+      return;
+    }
+
+    if (e.key.length === 1 && !isEditing && selectedCellLocation) {
+      setIsEditing(true);
+      return;
+    }
+
+    // Delete selected image with Backspace or Delete key
+    if (!isEditing && (e.key === 'Backspace' || e.key === 'Delete') && selectedImageId) {
+      e.preventDefault();
+      const updatedImages = images.filter(img => img.id !== selectedImageId);
+      onNewImagesToPatch(updatedImages);
+      setSelectedImageId(null);
+      return;
+    }
+
+    if (!isEditing && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault();
+      let cellLocations = [selectedCellLocation];
+      if (dragEndLocation !== '') {
+        cellLocations = getArrayOfCellLocationsFromSelection(
+          `${dragStartLocation}:${dragEndLocation}`,
+        );
+      }
+      const body = {};
+      cellLocations.forEach(cellLocation => {
+        body[cellLocation] = {
+          value: '',
+          formula: '',
+          dataType: 'STRING',
+        };
+      });
+      onNewCellToPatch(body);
+      // Clear selection after delete
+      setDragEndLocation('');
+      return;
+    }
+
+    if (
+      !CONTROL_KEYS.includes(e.key) ||
+      !selectedCellLocation ||
+      (isEditing && e.key !== 'Enter')
+    ) {
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      if (isPatching) {
+        return;
+      }
+
+      if (isEditing) {
+        const valueToEditToPatch = valueToEdit;
+        // if (isInMiddleOfFormula(valueToEdit)) {
+        //   valueToEditToPatch = `${valueToEdit})`;
+        // }
+        const cellLocationToNewCell = {
+          [selectedCellLocation]: getUpdatedCellFromInputValue(
+            valueToEditToPatch,
+            cells?.[selectedCellLocation],
+          ),
+        };
+        onNewCellToPatch(cellLocationToNewCell);
+        setIsEditing(false);
+        // Clear drag selection when exiting edit mode
+        setDragStartLocation('');
+        setDragEndLocation('');
+      }
+    }
+
+    e.preventDefault();
+
+    let rowIndex = selectedCellLocation?.match(/\d+/)?.[0] - 1;
+    let columnIndex = ALPHABET_EXTENDED.indexOf(selectedCellLocation?.match(/[A-Z]+/)?.[0]);
+
+    if (e.key === 'ArrowUp') {
+      rowIndex--;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      rowIndex++;
+    }
+    if (e.key === 'ArrowLeft') {
+      columnIndex--;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'Tab') {
+      columnIndex++;
+    }
+
+    const newSelectedCellLocation = `${ALPHABET_EXTENDED[columnIndex]}${rowIndex + 1}`;
+    setSelectedCellLocation(newSelectedCellLocation);
+  };
+
   useEffect(() => {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -2539,108 +2643,6 @@ const ExcelViewSheetArea = ({
       viewWindow,
     );
     setDragEndLocation(mouseLocation);
-  };
-
-  const onKeyDown = e => {
-    // Don't intercept keypresses that belong to other inputs (e.g. chat prompt)
-    const activeEl = document.activeElement;
-    if (activeEl && activeEl !== document.body && !rootRef.current?.contains(activeEl)) {
-      return;
-    }
-
-    if (isEditing && e.key === 'Escape') {
-      setIsEditing(false);
-      return;
-    }
-
-    if (e.key.length === 1 && !isEditing && selectedCellLocation) {
-      setIsEditing(true);
-      return;
-    }
-
-    // Delete selected image with Backspace or Delete key
-    if (!isEditing && (e.key === 'Backspace' || e.key === 'Delete') && selectedImageId) {
-      e.preventDefault();
-      const updatedImages = images.filter(img => img.id !== selectedImageId);
-      onNewImagesToPatch(updatedImages);
-      setSelectedImageId(null);
-      return;
-    }
-
-    if (!isEditing && (e.key === 'Backspace' || e.key === 'Delete')) {
-      e.preventDefault();
-      let cellLocations = [selectedCellLocation];
-      if (dragEndLocation !== '') {
-        cellLocations = getArrayOfCellLocationsFromSelection(
-          `${dragStartLocation}:${dragEndLocation}`,
-        );
-      }
-      const body = {};
-      cellLocations.forEach(cellLocation => {
-        body[cellLocation] = {
-          value: '',
-          formula: '',
-          dataType: 'STRING',
-        };
-      });
-      onNewCellToPatch(body);
-      // Clear selection after delete
-      setDragEndLocation('');
-      return;
-    }
-
-    if (
-      !CONTROL_KEYS.includes(e.key) ||
-      !selectedCellLocation ||
-      (isEditing && e.key !== 'Enter')
-    ) {
-      return;
-    }
-
-    if (e.key === 'Enter') {
-      if (isPatching) {
-        return;
-      }
-
-      if (isEditing) {
-        const valueToEditToPatch = valueToEdit;
-        // if (isInMiddleOfFormula(valueToEdit)) {
-        //   valueToEditToPatch = `${valueToEdit})`;
-        // }
-        const cellLocationToNewCell = {
-          [selectedCellLocation]: getUpdatedCellFromInputValue(
-            valueToEditToPatch,
-            cells?.[selectedCellLocation],
-          ),
-        };
-        onNewCellToPatch(cellLocationToNewCell);
-        setIsEditing(false);
-        // Clear drag selection when exiting edit mode
-        setDragStartLocation('');
-        setDragEndLocation('');
-      }
-    }
-
-    e.preventDefault();
-
-    let rowIndex = selectedCellLocation?.match(/\d+/)?.[0] - 1;
-    let columnIndex = ALPHABET_EXTENDED.indexOf(selectedCellLocation?.match(/[A-Z]+/)?.[0]);
-
-    if (e.key === 'ArrowUp') {
-      rowIndex--;
-    }
-    if (e.key === 'ArrowDown' || e.key === 'Enter') {
-      rowIndex++;
-    }
-    if (e.key === 'ArrowLeft') {
-      columnIndex--;
-    }
-    if (e.key === 'ArrowRight' || e.key === 'Tab') {
-      columnIndex++;
-    }
-
-    const newSelectedCellLocation = `${ALPHABET_EXTENDED[columnIndex]}${rowIndex + 1}`;
-    setSelectedCellLocation(newSelectedCellLocation);
   };
 
   const updateAndPatchSelectedCell = fieldsToUpdateOrCallback => {

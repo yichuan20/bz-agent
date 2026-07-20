@@ -110,6 +110,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         if (cd.align !== undefined) style.align = cd.align;
         if (cd.dataFormatString !== undefined) style.format = cd.dataFormatString;
         if (cd.wrapText !== undefined) style.wrap = cd.wrapText;
+        if (cd.fontSize !== undefined) style.fontSize = cd.fontSize;
         if (Object.keys(style).length) sc.s = style;
         sidecarCells[ref] = sc;
       }
