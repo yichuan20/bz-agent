@@ -1765,13 +1765,24 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
 
         # Accept full message JSON (type, content, subtype, etc.) or legacy {message} field
         if "type" in body:
-            payload = json.dumps(body) + "\n"
+            msg = body
         else:
             message = body.get("message", "")
             if not message:
                 raise HTTPException(400, "message or type is required")
-            payload = json.dumps({"type": "user", "content": message}) + "\n"
+            msg = {"type": "user", "content": message}
 
+        # Seed the SSE replay buffer with a new user prompt so a client that connects
+        # or reconnects mid-turn can render it (it isn't in the .jsonl transcript yet
+        # and bzcode doesn't echo it on stdout). Skip permission/input replies — those
+        # are mid-turn responses, not the start of a new turn. The buffered/echoed copy
+        # keeps the client's `clientId` so the sender can dedup its optimistic bubble.
+        if msg.get("type") == "user" and not msg.get("subtype"):
+            entry.seed_user_turn(json.dumps(msg))
+
+        # bzcode never sees the client-only clientId field.
+        stdin_msg = {k: v for k, v in msg.items() if k != "clientId"}
+        payload = json.dumps(stdin_msg) + "\n"
         entry.proc.stdin.write(payload.encode())
         await entry.proc.stdin.drain()
         return {"ok": True, "pid": entry.proc.pid, "sessionId": session_id}

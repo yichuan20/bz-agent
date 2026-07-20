@@ -4198,6 +4198,7 @@ function AgentPage() {
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
   const pendingAutoSendRef = useRef<string | null>(null);
+  const pendingAutoSendOnIdleRef = useRef<(() => void) | null>(null);
   const isCompactingRef = useRef(false);
   const streamingBlocksRef = useRef<StreamingBlocks>(new Map());
   const reconnectAttemptsRef = useRef(0);
@@ -4447,6 +4448,7 @@ function AgentPage() {
 
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
     let abortController: AbortController | null = null;
 
     // Helper: restore history from messages array (same logic as before)
@@ -4596,6 +4598,51 @@ function AgentPage() {
           setAvailableCommands(
             msg.commands as Array<{ name: string; description: string; aliases?: string[] }>,
           );
+      } else if (type === 'user') {
+        // User prompt echoed on the stream — the server publishes it on /send
+        // (seed_user_turn) so it renders on every path, including a mid-turn connect/
+        // reconnect before it lands in the .jsonl transcript. Permission/input replies
+        // carry a subtype and aren't display messages.
+        if (msg.subtype) return;
+        const content = msg.content;
+        let text = '';
+        let attachments: AnyAttachment[] | undefined;
+        if (typeof content === 'string') {
+          text = content;
+        } else if (Array.isArray(content)) {
+          const blocks = content as Array<Record<string, unknown>>;
+          text = blocks
+            .filter(b => b.type === 'text')
+            .map(b => String(b.text ?? ''))
+            .join('');
+          const imgBlocks = blocks.filter(b => b.type === 'image');
+          if (imgBlocks.length) {
+            attachments = imgBlocks.map(b => {
+              const src = b.source as Record<string, unknown> | undefined;
+              return {
+                data: String(src?.data ?? ''),
+                mediaType: String(src?.mediaType ?? 'image/png'),
+                name: 'image',
+              } as AnyAttachment;
+            });
+          }
+        }
+        const trimmed = text.trimStart();
+        if (trimmed.startsWith('<system-reminder>') || trimmed.startsWith('<context-summary>'))
+          return;
+        if (!text && !attachments?.length) return;
+        const clientId = typeof msg.clientId === 'string' ? msg.clientId : undefined;
+        setItems(prev => {
+          // Messages this client sent are added optimistically (item id === clientId)
+          // so the bubble shows instantly and — for docs/attachments — with the typed
+          // text rather than the model-inlined content. Skip the echo in that case.
+          // On a reconnect the optimistic item is gone, so the echo renders instead.
+          if (clientId && prev.some(i => i.id === clientId)) return prev;
+          return [
+            ...prev,
+            { id: clientId ?? uid(), kind: 'user' as const, text: text || '(image)', attachments },
+          ];
+        });
       } else if (type === 'status') {
         const s = msg.status as string;
         // Track current model from bzcode status messages (only if user hasn't explicitly chosen one)
@@ -4616,6 +4663,15 @@ function AgentPage() {
           streamingBlocksRef.current.clear();
           setStreamingBlocks([]);
         } else {
+          // Agent became idle — fire the deferred auto-send if one is waiting.
+          // This covers the case where /connect returned agentStatus:'starting'
+          // (bzcode was still restoring history when the page loaded).
+          const deferred = pendingAutoSendOnIdleRef.current;
+          if (deferred) {
+            pendingAutoSendOnIdleRef.current = null;
+            pendingAutoSendRef.current = null;
+            deferred();
+          }
           const wasCompacting = isCompactingRef.current;
           setIsStreaming(false);
           setIsCompacting(false);
@@ -4787,6 +4843,7 @@ function AgentPage() {
           cwd: string;
           mode: string;
           sessionMode?: string;
+          agentStatus?: string;
           modes?: SessionMode[];
           commands?: Array<{ name: string; description: string; aliases?: string[] }>;
         };
@@ -4798,6 +4855,10 @@ function AgentPage() {
         }
         localStorage.setItem(modeLSKey(sid), connData.mode || agentMode);
         if (connData.messages?.length) restoreHistory(connData.messages);
+        // Reflect the server's current turn state so a refresh mid-stream shows the
+        // streaming indicator / frozen composer right away (the replayed turn events
+        // that follow keep it in sync).
+        if (connData.agentStatus === 'running') setIsStreaming(true);
         // Set the bzcode runtime mode (e.g. "yolo") from the server
         if (connData.sessionMode && connData.sessionMode !== 'default') {
           const sm = connData.sessionMode as SessionMode;
@@ -4819,20 +4880,6 @@ function AgentPage() {
           .catch(() => null);
         setConnStatus('connected');
         reconnectAttemptsRef.current = 0;
-
-        // Auto-send pending message
-        if (pendingAutoSendRef.current) {
-          const text = pendingAutoSendRef.current;
-          pendingAutoSendRef.current = null;
-          setItems(prev => [...prev, { id: uid(), kind: 'user' as const, text }]);
-          setTimeout(() => {
-            fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ type: 'user', content: text }),
-            }).catch(() => null);
-          }, 200);
-        }
 
         // Load title
         fetch(`${HTTP_BASE}/sessions?cwd=${encodeURIComponent(activeCwd)}`)
@@ -4856,12 +4903,54 @@ function AgentPage() {
         const decoder = new TextDecoder();
         let buffer = '';
 
+        // Auto-send the pending initial prompt once the agent is ready.
+        // If /connect reported agentStatus:'idle' the agent is already ready, so we
+        // can send immediately (deferred one macrotask so reader.read() is parked
+        // before the agent's first output arrives). If it's still 'starting' (bzcode
+        // is restoring history), we wait for the first status:idle on the stream
+        // before sending — the stream is the correct signal, no polling needed.
+        if (pendingAutoSendRef.current && !cancelled) {
+          const text = pendingAutoSendRef.current;
+          pendingAutoSendRef.current = null;
+          const doSend = () => {
+            if (cancelled) return;
+            fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'user', content: text }),
+            }).catch(() => null);
+          };
+          if (connData.agentStatus === 'idle') {
+            autoSendTimer = setTimeout(doSend, 0);
+          } else {
+            // Agent is starting — mark that we're waiting; doSend will fire
+            // when the first status:idle arrives in the read loop below.
+            pendingAutoSendRef.current = text; // put it back
+            pendingAutoSendOnIdleRef.current = doSend;
+          }
+        }
+
+        let isFirstRead = true;
         while (!cancelled) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const chunks = buffer.split('\n\n');
           buffer = chunks.pop() ?? '';
+          if (isFirstRead) {
+            isFirstRead = false;
+            console.log(
+              '[stream] first chunk types:',
+              chunks.map(c => {
+                const l = c.split('\n').find(l => l.startsWith('data: '));
+                try {
+                  return l ? JSON.parse(l.slice(6)).type : '?';
+                } catch {
+                  return '?';
+                }
+              }),
+            );
+          }
           for (const chunk of chunks) {
             const line = chunk.split('\n').find(l => l.startsWith('data: '));
             if (!line) continue;
@@ -4902,6 +4991,7 @@ function AgentPage() {
       cancelled = true;
       if (abortController) abortController.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (autoSendTimer) clearTimeout(autoSendTimer);
     };
   }, [connectParams, reconnectKey, items.findLast, activeCwd, agentMode]);
 
@@ -5068,9 +5158,13 @@ function AgentPage() {
     const snapshotAttachments = attachments;
     setAttachments([]);
 
+    // Add the bubble optimistically (instant, and shows the typed text rather than
+    // the model-inlined doc content). clientId ties it to the server's stream echo
+    // so the echo is deduped live but still renders on a reconnect.
+    const clientId = uid();
     setItems(prev => [
       ...prev,
-      { id: uid(), kind: 'user', text: text || '(image)', attachments: snapshotAttachments },
+      { id: clientId, kind: 'user', text: text || '(image)', attachments: snapshotAttachments },
     ]);
 
     // Build content blocks — images as base64, docs as inline text blocks
@@ -5078,7 +5172,7 @@ function AgentPage() {
     const docAtts = snapshotAttachments.filter(isDocAttachment);
 
     if (imgAtts.length === 0 && docAtts.length === 0) {
-      sendRaw({ type: 'user', content: text });
+      sendRaw({ type: 'user', content: text, clientId });
     } else {
       const blocks: unknown[] = [];
       // User text first
@@ -5095,7 +5189,7 @@ function AgentPage() {
           source: { type: 'base64', mediaType: att.mediaType, data: att.data },
         });
       }
-      sendRaw({ type: 'user', content: blocks });
+      sendRaw({ type: 'user', content: blocks, clientId });
     }
   }, [
     inputValue,
@@ -5115,12 +5209,13 @@ function AgentPage() {
       setSlashMenuIdx(0);
       setInputValue('');
       const text = `/${name}`;
-      setItems(prev => [...prev, { id: uid(), kind: 'user', text }]);
+      const clientId = uid();
+      setItems(prev => [...prev, { id: clientId, kind: 'user', text }]);
       if (name === 'compact') {
         setIsCompacting(true);
         isCompactingRef.current = true;
       }
-      sendRaw({ type: 'user', content: text });
+      sendRaw({ type: 'user', content: text, clientId });
     },
     [sendRaw],
   );
@@ -5730,8 +5825,12 @@ function AgentPage() {
                       setModelDropdownOpen(false);
                       // Send as a /model slash command so bzcode switches immediately
                       const cmd = `/model ${m.id}`;
-                      setItems(prev => [...prev, { id: uid(), kind: 'user' as const, text: cmd }]);
-                      sendRaw({ type: 'user', content: cmd });
+                      const clientId = uid();
+                      setItems(prev => [
+                        ...prev,
+                        { id: clientId, kind: 'user' as const, text: cmd },
+                      ]);
+                      sendRaw({ type: 'user', content: cmd, clientId });
                     }}
                   >
                     <span className="agent-model-dropdown-option-name">{m.displayName}</span>

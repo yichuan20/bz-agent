@@ -7,14 +7,13 @@ Unified server:
   http://localhost:8766/search    — SerpAPI proxy
 """
 
-BACKEND_VERSION = "0.6.1"
+BACKEND_VERSION = "0.6.2"
 
 import asyncio
 import json
 import os
 import re
 import sys
-import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
@@ -38,16 +37,19 @@ except ImportError:
 
 _MODES_CONFIG_FILE = Path(__file__).parent / "agent_modes.json"
 
+
 def _load_mode_config() -> dict:
     try:
         return json.loads(_MODES_CONFIG_FILE.read_text())
     except Exception:
         return {"default": "general", "modes": {}}
 
+
 def _mode_entry(mode: str) -> dict:
     cfg = _load_mode_config()
     modes = cfg.get("modes", {})
     return modes.get(mode) or modes.get(cfg.get("default", "general"), {}) or {}
+
 
 def _build_widget_template_table() -> str:
     """Build a markdown table of widget templates from server_data/widgets/index.json.
@@ -59,13 +61,12 @@ def _build_widget_template_table() -> str:
     except Exception:
         return "(template index unavailable)"
 
-    lines = ["| Template | Matches requests like… | Default size |",
-             "|---|---|---|"]
+    lines = ["| Template | Matches requests like… | Default size |", "|---|---|---|"]
     for w in widgets:
-        name     = w.get("id", "")
-        label    = w.get("label", name)
+        name = w.get("id", "")
+        label = w.get("label", name)
         keywords = ", ".join(w.get("keywords", [])[:6])
-        dw, dh   = w.get("defaultW", 380), w.get("defaultH", 280)
+        dw, dh = w.get("defaultW", 380), w.get("defaultH", 280)
         lines.append(f"| `{name}` | {label}: {keywords} | {dw}×{dh} |")
     return "\n".join(lines)
 
@@ -73,6 +74,7 @@ def _build_widget_template_table() -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 # § 4 · SESSION MANAGEMENT
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _write_session_config(session_id: str, mode: str, working_dir: str = "", model_name: str = "") -> None:
     """Write IDENTITY.md, SOUL.md, settings.json, and meta.json into the session
@@ -92,8 +94,19 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
     # Purge sub-agent session files/dirs that bzcode's Agent tool leaves inside
     # the config dir (e.g. cozy-hopping-comet.jsonl, tool-results/).  They are
     # not part of our config and prevent bzcode from resuming cleanly.
-    _OWNED_NAMES = {"meta.json", "IDENTITY.md", "SOUL.md", "AGENTS.md", "settings.json", "skills", "scripts",
-                    "templates", "custom_widgets", "widget_data", ".bzcanvas.json"}
+    _OWNED_NAMES = {
+        "meta.json",
+        "IDENTITY.md",
+        "SOUL.md",
+        "AGENTS.md",
+        "settings.json",
+        "skills",
+        "scripts",
+        "templates",
+        "custom_widgets",
+        "widget_data",
+        ".bzcanvas.json",
+    }
     for item in list(cfg_dir.iterdir()):
         if item.name not in _OWNED_NAMES:
             if item.is_dir():
@@ -112,8 +125,11 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
     _variant = "boltzbit" if is_boltzbit else "generic"
     _prev_variant = "boltzbit" if (not _prev_model or _prev_model.lower().startswith("boltzbit")) else "generic"
     if model_name and _prev_model and _prev_model != model_name:
-        print(f"[session] {session_id} model changed: {_prev_model!r} → {model_name!r} "
-              f"({_prev_variant} → {_variant} assets)", file=sys.stderr)
+        print(
+            f"[session] {session_id} model changed: {_prev_model!r} → {model_name!r} "
+            f"({_prev_variant} → {_variant} assets)",
+            file=sys.stderr,
+        )
     elif not _prev_model and model_name:
         print(f"[session] {session_id} model set to {model_name!r} — using {_variant} assets", file=sys.stderr)
 
@@ -140,6 +156,7 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
     # Copy agent scripts — variant chosen by model (boltzbit vs generic).
     _server_dir = Path(__file__).resolve().parent
     import shutil as _sh
+
     _scripts_folder = f"scripts{_asset_suffix}"
     src_scripts = _server_dir / "bzcode_assets" / _scripts_folder
     if not src_scripts.is_dir():
@@ -156,15 +173,20 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
                 if _cwd_candidate2.is_dir():
                     src_scripts = _cwd_candidate2
                 else:
-                    print(f"[session] WARNING: bzcode_assets/scripts not found — agent scripts unavailable",
-                          file=sys.stderr)
+                    print(
+                        "[session] WARNING: bzcode_assets/scripts not found — agent scripts unavailable",
+                        file=sys.stderr,
+                    )
     dst_scripts = cfg_dir / "scripts"
     dst_scripts.mkdir(exist_ok=True)
     for script in src_scripts.glob("*.py"):
         dest = dst_scripts / script.name
         if not dest.exists() or script.stat().st_mtime > dest.stat().st_mtime:
             _sh.copy2(script, dest)
-    print(f"[session] scripts ({_scripts_folder}): {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)", file=sys.stderr)
+    print(
+        f"[session] scripts ({_scripts_folder}): {src_scripts} → {dst_scripts} ({len(list(dst_scripts.glob('*.py')))} files)",
+        file=sys.stderr,
+    )
 
     # Copy templates — variant chosen by model.
     _templates_folder = f"templates{_asset_suffix}"
@@ -185,18 +207,18 @@ def _write_session_config(session_id: str, mode: str, working_dir: str = "", mod
         _sh.copytree(src_templates, dst_templates)
         print(f"[session] templates ({_templates_folder}): {src_templates} → {dst_templates}", file=sys.stderr)
     else:
-        print(f"[session] WARNING: bzcode_assets/templates not found", file=sys.stderr)
+        print("[session] WARNING: bzcode_assets/templates not found", file=sys.stderr)
 
     # {scripts_path} resolves to the session-local scripts directory.
     # Using the session config dir means no absolute paths leak into templates.
     _session_scripts = str(dst_scripts)
 
     def _resolve(text: str) -> str:
-        return (text
-            .replace("{server_data_path}", str(SERVER_DATA_DIR))
-            .replace("{scripts_path}",     _session_scripts)
-            .replace("{session_dir}",      str(cfg_dir))
-            .replace("{working_dir}",      working_dir)
+        return (
+            text.replace("{server_data_path}", str(SERVER_DATA_DIR))
+            .replace("{scripts_path}", _session_scripts)
+            .replace("{session_dir}", str(cfg_dir))
+            .replace("{working_dir}", working_dir)
             .replace("{widget_template_table}", _build_widget_template_table())
         )
 
@@ -245,56 +267,58 @@ SESSIONS_DIR = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expandus
 # the agent cats credential files or prints env vars.
 
 _SECRET_KEY_RE = re.compile(
-    r'(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
-    r'|accessToken|refreshToken|access_token|refresh_token'
-    r'|api_key|apikey|apiKey)',
+    r"(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY"
+    r"|accessToken|refreshToken|access_token|refresh_token"
+    r"|api_key|apikey|apiKey)",
     re.IGNORECASE,
 )
 
 # JSON double-quoted value:  "KEY": "VALUE{16+}"
 _JSON_SECRET_RE = re.compile(
     r'(?i)(")(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
-    r'|accessToken|refreshToken|access_token|refresh_token'
+    r"|accessToken|refreshToken|access_token|refresh_token"
     r'|api_?key|apiKey)(")\s*:\s*"([^"]{16,})"',
 )
 # Env-var / plain  KEY=VALUE  or  KEY: VALUE  (unquoted values)
 _PLAIN_SECRET_RE = re.compile(
-    r'(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY'
-    r'|access_?token|refresh_?token|api_?key|apiKey)\s*[=:]\s*([A-Za-z0-9._~+/\-]{16,})',
+    r"(?i)\b(BZ_API_KEY|DYNAS_API_KEY|DPYES_API_KEY|ANKSY_API_KEY"
+    r"|access_?token|refresh_?token|api_?key|apiKey)\s*[=:]\s*([A-Za-z0-9._~+/\-]{16,})",
 )
 # BoltzBit API key literal (always safe to redact wherever it appears)
-_BZ_KEY_RE   = re.compile(r'bz_[A-Za-z0-9]{15,}')
+_BZ_KEY_RE = re.compile(r"bz_[A-Za-z0-9]{15,}")
 # Bearer / Basic auth headers
-_BEARER_RE   = re.compile(r'(?i)(Bearer|Basic)\s+[A-Za-z0-9._~+/\-]{16,}=*')
+_BEARER_RE = re.compile(r"(?i)(Bearer|Basic)\s+[A-Za-z0-9._~+/\-]{16,}=*")
 
 
 def _redact(raw: str) -> str:
-    raw = _BZ_KEY_RE.sub('[REDACTED]', raw)
+    raw = _BZ_KEY_RE.sub("[REDACTED]", raw)
     raw = _JSON_SECRET_RE.sub(lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)}: "[REDACTED]"', raw)
-    raw = _PLAIN_SECRET_RE.sub(lambda m: f'{m.group(1)}=[REDACTED]', raw)
-    raw = _BEARER_RE.sub(lambda m: f'{m.group(1)} [REDACTED]', raw)
+    raw = _PLAIN_SECRET_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", raw)
+    raw = _BEARER_RE.sub(lambda m: f"{m.group(1)} [REDACTED]", raw)
     return raw
+
 
 # Per-file cursor positions: abs_path -> {selStart, selEnd}
 # Stored in-memory (survives tab switches, cleared on server restart).
 _cursor_store: dict = {}
 
 # Tracks session IDs with an active WebSocket / bzcode process
-_active_sessions  = set()  # type: ignore[var-annotated]
+_active_sessions = set()  # type: ignore[var-annotated]
 # Tracks session IDs where bzcode is actively processing a request (status: running)
 _running_sessions = set()  # type: ignore[var-annotated]
-_TITLES_FILE   = SESSIONS_DIR / "_titles.json"
+_TITLES_FILE = SESSIONS_DIR / "_titles.json"
 _DEFAULTS_FILE = SESSIONS_DIR / "_defaults.json"  # cwd -> sessionId
 
 # Accumulated token usage since server start (counts every result message)
 _token_stats: dict = {"input": 0, "output": 0, "total": 0}
 
+
 def _add_tokens(usage: dict) -> None:
     inp = int(usage.get("inputTokens", 0) or 0)
     out = int(usage.get("outputTokens", 0) or 0)
-    _token_stats["input"]  += inp
+    _token_stats["input"] += inp
     _token_stats["output"] += out
-    _token_stats["total"]  += inp + out
+    _token_stats["total"] += inp + out
 
 
 def _load_titles() -> dict:
@@ -330,8 +354,9 @@ def _clear_default(cwd: str) -> None:
     defaults.pop(cwd, None)
     _DEFAULTS_FILE.write_text(json.dumps(defaults, indent=2))
 
+
 # Server-local data — lives alongside server.py so it travels with the project
-SERVER_DATA_DIR = (Path(__file__).resolve().parent / "server_data")
+SERVER_DATA_DIR = Path(__file__).resolve().parent / "server_data"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 10 · CANVAS & CUSTOM WIDGETS
@@ -350,6 +375,7 @@ def _custom_widgets_dir(session_id: str) -> Path:
 
 
 # ── Session reader ────────────────────────────────────────────────────────────
+
 
 def _read_session_file(path: Path) -> Optional[dict]:
     """Parse a session JSONL and return metadata.  Handles two formats:
@@ -370,34 +396,34 @@ def _read_session_file(path: Path) -> Optional[dict]:
 
         # Detect format from first line
         first = json.loads(lines[0])
-        session_id  = path.stem
+        session_id = path.stem
         working_dir = ""
-        created     = ""
+        created = ""
 
         if first.get("type") == "session":
             # ── Old format: first line is the session header ──────────────────
             working_dir = first.get("workingDir", "")
-            session_id  = first.get("sessionId", path.stem)
-            created     = first.get("created", "")
-            msg_lines   = lines[1:]
+            session_id = first.get("sessionId", path.stem)
+            created = first.get("created", "")
+            msg_lines = lines[1:]
         else:
             # ── New format: no header, look up our meta.json ──────────────────
             meta_file = SESSIONS_DIR / session_id / "meta.json"
             if meta_file.exists():
                 try:
-                    meta        = json.loads(meta_file.read_text())
+                    meta = json.loads(meta_file.read_text())
                     working_dir = meta.get("workingDir", "")
-                    session_id  = meta.get("sessionId", session_id)
+                    session_id = meta.get("sessionId", session_id)
                 except Exception:
                     pass
             if not working_dir:
-                return None   # can't place this session in any project
+                return None  # can't place this session in any project
             msg_lines = lines
 
         # Walk messages to extract title and last preview
-        title        = ""
+        title = ""
         last_preview = ""
-        msg_count    = 0
+        msg_count = 0
         for line in msg_lines:
             try:
                 msg = json.loads(line)
@@ -413,9 +439,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
                                 text = block.get("text", "")
                                 break
                     _t = text.strip()
-                    if (not title and _t
-                            and _t != "Hi, hand shake, say yes"
-                            and not _t.startswith("<system-reminder>")):
+                    if not title and _t and _t != "Hi, hand shake, say yes" and not _t.startswith("<system-reminder>"):
                         title = _t[:60]
                     if text:
                         last_preview = text[:150]
@@ -431,18 +455,18 @@ def _read_session_file(path: Path) -> Optional[dict]:
             except Exception:
                 pass
 
-        stat          = path.stat()
+        stat = path.stat()
         custom_titles = _load_titles()
         return {
-            "sessionId":    session_id,
-            "workingDir":   working_dir,
-            "dirName":      Path(working_dir).name if working_dir else "Unknown",
+            "sessionId": session_id,
+            "workingDir": working_dir,
+            "dirName": Path(working_dir).name if working_dir else "Unknown",
             "messageCount": msg_count,
-            "title":        custom_titles.get(session_id) or title or "(empty)",
-            "lastMessage":  last_preview,
+            "title": custom_titles.get(session_id) or title or "(empty)",
+            "lastMessage": last_preview,
             "lastModified": stat.st_mtime,
-            "created":      created,
-            "mode":         agent_mode,
+            "created": created,
+            "mode": agent_mode,
         }
     except Exception:
         return None
@@ -453,7 +477,7 @@ def _read_session_file(path: Path) -> Optional[dict]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 CORS_HEADERS = {
-    "Access-Control-Allow-Origin":  "*",
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "*",
 }
@@ -466,7 +490,7 @@ def _write_bzcode_credentials(
     auth_url: str = "https://boltzhub.com",
 ) -> None:
     """Write access token to $BZ_HOME/credentials.json in the format bzcode expects."""
-    creds_dir  = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
+    creds_dir = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
     creds_file = creds_dir / "credentials.json"
     creds_dir.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
@@ -487,6 +511,7 @@ def _write_bzcode_credentials(
     if expires_at is None:
         try:
             import base64 as _b64
+
             seg = access_token.split(".")[1]
             seg += "=" * (4 - len(seg) % 4)
             payload = json.loads(_b64.b64decode(seg.replace("-", "+").replace("_", "/")))
@@ -534,7 +559,7 @@ def _read_api_keys() -> dict:
 #
 # This keeps the search index lean and lets code files be edited directly.
 
-WIDGETS_DIR   = SERVER_DATA_DIR / "widgets"
+WIDGETS_DIR = SERVER_DATA_DIR / "widgets"
 WIDGETS_INDEX = WIDGETS_DIR / "index.json"
 
 
@@ -591,7 +616,7 @@ def _load_creds() -> dict:
         return {}
 
 
-_PLACEHOLDER_RE = re.compile(r'\{\{(\w+)\}\}')
+_PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 
 
 def _resolve(text: str, creds: dict) -> str:
@@ -641,20 +666,24 @@ class _WASess:
     """Persistent bzcode process for one WhatsApp contact."""
 
     def __init__(self, phone: str, bzcode_path: str, cwd: str):
-        self.phone      = phone
+        self.phone = phone
         self.bzcode_path = bzcode_path
-        self.cwd        = cwd
+        self.cwd = cwd
         self.proc: Optional[asyncio.subprocess.Process] = None
-        self._buf: list  = []
-        self._done       = asyncio.Event()
-        self._msg_lock   = asyncio.Lock()
+        self._buf: list = []
+        self._done = asyncio.Event()
+        self._msg_lock = asyncio.Lock()
         import hashlib as _hl
+
         self.session_id = f"wa-{_hl.md5(phone.encode()).hexdigest()[:12]}"
 
     async def _start(self) -> None:
         """Spawn (or restart) the bzcode process."""
         self.proc = await asyncio.create_subprocess_exec(
-            self.bzcode_path, "--stdio", "--resume", self.session_id,
+            self.bzcode_path,
+            "--stdio",
+            "--resume",
+            self.session_id,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -711,14 +740,14 @@ class _WASess:
 
 async def _send_whatsapp(to: str, body: str, creds: dict) -> None:
     """Send a WhatsApp message back via Twilio REST API."""
-    sid   = creds.get("TWILIO_ACCOUNT_SID", "")
-    token = creds.get("TWILIO_AUTH_TOKEN",  "")
-    from_ = creds.get("TWILIO_FROM",        "")
+    sid = creds.get("TWILIO_ACCOUNT_SID", "")
+    token = creds.get("TWILIO_AUTH_TOKEN", "")
+    from_ = creds.get("TWILIO_FROM", "")
     if not (sid and token and from_):
         print("[whatsapp] missing Twilio credentials", file=sys.stderr)
         return
-    url  = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
-    data = {"From": from_, "To": to, "Body": body[:1500]}   # WhatsApp 1600-char limit
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    data = {"From": from_, "To": to, "Body": body[:1500]}  # WhatsApp 1600-char limit
     connector = aiohttp.TCPConnector(ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
         async with session.post(url, data=data, auth=aiohttp.BasicAuth(sid, token)) as resp:
@@ -731,10 +760,10 @@ async def _send_whatsapp(to: str, body: str, creds: dict) -> None:
 # § 13 · BOLTZHUB INTEGRATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-BOLTZHUB_API   = "https://boltzhub.com/bz-appstore-api"
-BOLTZHUB_AUTH  = "https://boltzhub.com"
+BOLTZHUB_API = "https://boltzhub.com/bz-appstore-api"
+BOLTZHUB_AUTH = "https://boltzhub.com"
 # Matches what the VS Code plugin excludes — build output (dist/) is intentionally included
-_PUSH_EXCLUDE  = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "venv"}
+_PUSH_EXCLUDE = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "venv"}
 
 
 def _boltzhub_token() -> Optional[str]:
@@ -747,6 +776,7 @@ def _boltzhub_token() -> Optional[str]:
     # Fallback: OAuth JWT from credentials.json (can expire)
     try:
         import json as _json
+
         bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
         creds = _json.loads((bz_home / "credentials.json").read_text())
         tok = creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
@@ -760,6 +790,7 @@ def _boltzhub_token() -> Optional[str]:
 def _credentials_valid() -> Tuple[bool, str]:
     """Return (ok, reason). Accepts BZ_API_KEY in api_keys.json or a valid credentials.json."""
     import time as _time
+
     bz_home = Path(os.environ.get("BZ_HOME") or "/usr/local/boltzbit").expanduser()
     # BZ_API_KEY is sufficient — no OAuth credentials needed
     api_keys = _read_api_keys()
@@ -840,35 +871,34 @@ def _bz_auth(token: str) -> dict:
 # § 15 · BATCH EXECUTION
 # ══════════════════════════════════════════════════════════════════════════════
 
-import uuid as _uuid_mod
 
-_batch_store: dict = {}   # batchId -> {"items": [...], "created": float}
+_batch_store: dict = {}  # batchId -> {"items": [...], "created": float}
 
 
 class _BatchItem:
     """Runs a single bzcode process in YOLO mode and collects the response."""
 
     def __init__(self, cwd: str, bzcode_path: str, resume_session_id: str = "") -> None:
-        self.cwd                = cwd
-        self.dir_name           = Path(cwd).name
-        self.bzcode_path        = bzcode_path
-        self.resume_session_id  = resume_session_id  # if set, resume this session
-        self.status             = "pending"   # pending | running | done | error
-        self.output             = ""
-        self.error_msg          = ""
-        self.session_id         = resume_session_id  # filled/confirmed from bzcode's session message
-        self._buf: list         = []
-        self._done              = asyncio.Event()
-        self._proc              = None
-        self._msg_sent          = False       # True once the user message has been written to stdin
+        self.cwd = cwd
+        self.dir_name = Path(cwd).name
+        self.bzcode_path = bzcode_path
+        self.resume_session_id = resume_session_id  # if set, resume this session
+        self.status = "pending"  # pending | running | done | error
+        self.output = ""
+        self.error_msg = ""
+        self.session_id = resume_session_id  # filled/confirmed from bzcode's session message
+        self._buf: list = []
+        self._done = asyncio.Event()
+        self._proc = None
+        self._msg_sent = False  # True once the user message has been written to stdin
 
     def to_dict(self) -> dict:
         return {
-            "cwd":       self.cwd,
-            "dirName":   self.dir_name,
-            "status":    self.status,
-            "output":    self.output,
-            "error":     self.error_msg,
+            "cwd": self.cwd,
+            "dirName": self.dir_name,
+            "status": self.status,
+            "output": self.output,
+            "error": self.error_msg,
             "sessionId": self.session_id,
         }
 
@@ -878,6 +908,7 @@ class _BatchItem:
         try:
             if not self.resume_session_id:
                 import secrets as _sec
+
                 self.resume_session_id = f"bz-{_sec.token_hex(6)}"
                 self.session_id = self.resume_session_id
             cmd = [self.bzcode_path, "--stdio", "--resume", self.resume_session_id]
@@ -901,7 +932,7 @@ class _BatchItem:
             payload = json.dumps({"type": "user", "content": message}) + "\n"
             self._proc.stdin.write(payload.encode())
             await self._proc.stdin.drain()
-            self._msg_sent = True      # now it's safe to honour status: idle
+            self._msg_sent = True  # now it's safe to honour status: idle
             # Wait up to 3 minutes for completion
             await asyncio.wait_for(self._done.wait(), timeout=180)
             self.output = "\n\n".join(self._buf).strip()
@@ -909,10 +940,10 @@ class _BatchItem:
             # Give bzcode a moment to finish writing the session file to disk
             await asyncio.sleep(0.5)
         except asyncio.TimeoutError:
-            self.status    = "error"
+            self.status = "error"
             self.error_msg = "Timed out after 3 minutes"
         except Exception as exc:
-            self.status    = "error"
+            self.status = "error"
             self.error_msg = str(exc)
         finally:
             _running_sessions.discard(self.resume_session_id or self.session_id)
@@ -925,8 +956,10 @@ class _BatchItem:
                 except asyncio.TimeoutError:
                     self._proc.kill()
                 except Exception:
-                    try: self._proc.kill()
-                    except Exception: pass
+                    try:
+                        self._proc.kill()
+                    except Exception:
+                        pass
 
     async def _read_loop(self) -> None:
         assert self._proc and self._proc.stdout
@@ -939,7 +972,7 @@ class _BatchItem:
                 continue
             try:
                 msg = json.loads(raw)
-                t   = msg.get("type")
+                t = msg.get("type")
                 if t == "session":
                     self.session_id = msg.get("sessionId", "")
                 elif t == "assistant":
@@ -980,8 +1013,8 @@ class AgentPoolEntry:
         self.proc: Optional[asyncio.subprocess.Process] = None
 
         # Per-agent state tracked from bzcode stdout messages
-        self.agent_status = "starting"   # starting | idle | running | waiting_permission | waiting_input
-        self.session_mode = "default"    # runtime mode from bzcode: default | yolo | plan
+        self.agent_status = "starting"  # starting | idle | running | waiting_permission | waiting_input
+        self.session_mode = "default"  # runtime mode from bzcode: default | yolo | plan
         self.model_info: dict = {}
         self._pending_request_id: Optional[str] = None
 
@@ -1029,10 +1062,11 @@ class AgentPoolEntry:
             env=env,
         )
         self._stdout_task = asyncio.create_task(
-            read_bzcode_stdout(self.proc, self._out_queue, self._ready_event,
-                               session_id=self.session_id, mode=self.mode))
-        self._stderr_task = asyncio.create_task(
-            drain_bzcode_stderr(self.proc, self._out_queue))
+            read_bzcode_stdout(
+                self.proc, self._out_queue, self._ready_event, session_id=self.session_id, mode=self.mode
+            )
+        )
+        self._stderr_task = asyncio.create_task(drain_bzcode_stderr(self.proc, self._out_queue))
         self._dispatcher_task = asyncio.create_task(self._dispatch_stdout())
 
         # Send setMode once bzcode emits its session-ready message. Done as a
@@ -1045,6 +1079,7 @@ class AgentPoolEntry:
             _proc = self.proc
             _evt = self._ready_event
             _sm = session_mode
+
             async def _send_mode_once_ready() -> None:
                 try:
                     await asyncio.wait_for(_evt.wait(), timeout=30)
@@ -1054,6 +1089,7 @@ class AgentPoolEntry:
                     _proc.stdin.write(json.dumps({"type": "setMode", "mode": _sm}).encode() + b"\n")
                     await _proc.stdin.drain()
                     print(f"[pool] sent setMode={_sm} to {_sid}", file=sys.stderr)
+
             asyncio.create_task(_send_mode_once_ready())
 
     async def _dispatch_stdout(self) -> None:
@@ -1071,6 +1107,7 @@ class AgentPoolEntry:
                 break
 
             forward = True  # whether to fan out to subscribers
+            _was_running = self.agent_status == "running"  # snapshot before any update
 
             if raw and raw[0] == "{":
                 try:
@@ -1087,8 +1124,14 @@ class AgentPoolEntry:
                     elif _t == "status":
                         _s = _msg.get("status", "")
                         if _s == "running":
+                            # Don't reset the replay buffer here. A turn's buffer is
+                            # seeded with the user prompt when the message is sent
+                            # (seed_user_turn), so it must span the whole turn —
+                            # including the prompt and any intra-turn "running"
+                            # re-emissions (tool calls, permission/input replies).
+                            # Clearing on "running" would drop the start of the turn
+                            # (prompt + early output) on a mid-turn reconnect.
                             self.agent_status = "running"
-                            self._turn_buffer.clear()
                         elif _s == "idle":
                             self.agent_status = "idle"
                         if _msg.get("mode"):
@@ -1107,10 +1150,17 @@ class AgentPoolEntry:
                             if self.session_mode == "yolo":
                                 # Auto-approve: write directly to stdin, skip frontend
                                 self.agent_status = "running"
-                                _resp = json.dumps({
-                                    "type": "user", "subtype": "permission",
-                                    "requestId": _rid, "behavior": "always",
-                                }) + "\n"
+                                _resp = (
+                                    json.dumps(
+                                        {
+                                            "type": "user",
+                                            "subtype": "permission",
+                                            "requestId": _rid,
+                                            "behavior": "always",
+                                        }
+                                    )
+                                    + "\n"
+                                )
                                 self.proc.stdin.write(_resp.encode())
                                 asyncio.ensure_future(self.proc.stdin.drain())
                                 print(f"[{self.session_id}] auto-approved {_msg.get('tool', '?')}", file=sys.stderr)
@@ -1126,7 +1176,7 @@ class AgentPoolEntry:
                         pass
                     elif _t == "assistant":
                         _preview = ""
-                        for _b in (_msg.get("content") or []):
+                        for _b in _msg.get("content") or []:
                             if isinstance(_b, dict) and _b.get("type") == "text":
                                 _preview = str(_b.get("text", ""))[:120]
                                 break
@@ -1145,13 +1195,22 @@ class AgentPoolEntry:
                         q.put_nowait(raw)
                     except asyncio.QueueFull:
                         pass
-                # Clear buffer after appending idle/result (turn complete, .jsonl saved)
-                if self.agent_status == "idle":
+                # Clear buffer only after a complete turn (running → idle/result).
+                # Spurious idle events (e.g. bzcode acking setMode between turns)
+                # must not wipe a freshly-seeded user message from the buffer.
+                if self.agent_status == "idle" and _was_running:
                     self._turn_buffer.clear()
 
     def subscribe(self, replay: bool = False) -> asyncio.Queue:
         """Add a subscriber queue. If replay=True, pre-fill with current turn's buffered messages."""
         q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        if replay:
+            import sys as _sys
+            _types = []
+            for _m in self._turn_buffer:
+                try: _types.append(json.loads(_m).get("type", "?"))
+                except Exception: _types.append("?")
+            print(f"[{self.session_id}] subscribe replay buffer ({len(self._turn_buffer)} msgs): {_types}", file=_sys.stderr)
         if replay:
             still_waiting = self.agent_status in ("waiting_input", "waiting_permission")
             for msg in self._turn_buffer:
@@ -1176,6 +1235,23 @@ class AgentPoolEntry:
         self._subscribers.discard(q)
         if not self._subscribers and self._ws is None:
             self._last_ws_detach_at = _time.monotonic()
+
+    def seed_user_turn(self, raw: str) -> None:
+        """Publish the user's prompt to the SSE stream at the start of a turn.
+
+        The prompt is written to bzcode's stdin and isn't echoed on stdout, and it
+        isn't in the .jsonl transcript until the turn completes. So we inject it into
+        the stream ourselves: it becomes the first entry of the turn's replay buffer
+        (so a later reconnect/refresh replays it) AND is fanned out to any already
+        connected subscribers (so the live client renders it). The buffer is cleared
+        again when the turn finishes (agent_status == "idle", see _dispatch_stdout).
+        """
+        self._turn_buffer = [raw]
+        for q in list(self._subscribers):
+            try:
+                q.put_nowait(raw)
+            except asyncio.QueueFull:
+                pass
 
     def _read_session_messages(self) -> list:
         """Read .jsonl transcript and return messages list (timestamps stripped)."""
@@ -1220,21 +1296,21 @@ class AgentPoolEntry:
             # On reattach, send conversation history since bzcode won't re-emit it
             if is_reattach:
                 messages = self._read_session_messages()
-                session_msg = json.dumps({
-                    "type": "session",
-                    "sessionId": self.session_id,
-                    "messages": messages,
-                })
+                session_msg = json.dumps(
+                    {
+                        "type": "session",
+                        "sessionId": self.session_id,
+                        "messages": messages,
+                    }
+                )
                 try:
                     await ws.send_str(session_msg)
                 except Exception:
                     pass
 
             # Start WS-facing tasks
-            self._ws_send_task = asyncio.create_task(
-                send_to_client(self._ws_fwd_queue, ws))
-            self._ws_relay_task = asyncio.create_task(
-                relay_client_messages(self.proc, ws, self._ready_event))
+            self._ws_send_task = asyncio.create_task(send_to_client(self._ws_fwd_queue, ws))
+            self._ws_relay_task = asyncio.create_task(relay_client_messages(self.proc, ws, self._ready_event))
 
             return self._ws_send_task, self._ws_relay_task
 
@@ -1274,8 +1350,10 @@ class AgentPoolEntry:
         if self._shutting_down:
             return
         self._shutting_down = True
-        print(f"[pool] shutting down {self.session_id} reason={reason} pid={self.proc.pid if self.proc else '?'}",
-              file=sys.stderr)
+        print(
+            f"[pool] shutting down {self.session_id} reason={reason} pid={self.proc.pid if self.proc else '?'}",
+            file=sys.stderr,
+        )
         await self.detach_ws()
         # Close stdin — signals bzcode to save session and exit
         if self.proc and self.proc.stdin:
@@ -1348,8 +1426,13 @@ class AgentPool:
         print("[pool] stopped — all agents shut down", file=sys.stderr)
 
     async def get_or_create(
-        self, session_id: str, cwd: str, mode: str,
-        bzcode_path: str, cmd: list, env: dict,
+        self,
+        session_id: str,
+        cwd: str,
+        mode: str,
+        bzcode_path: str,
+        cmd: list,
+        env: dict,
     ) -> AgentPoolEntry:
         """Return existing entry for session_id, or create a new one."""
         if session_id.startswith("bz-probe-"):
@@ -1406,10 +1489,12 @@ class AgentPool:
                     if entry.is_dead:
                         to_remove.append(sid)
                         continue
-                    if (not entry.has_clients
-                            and entry._last_ws_detach_at is not None
-                            and (now - entry._last_ws_detach_at) > self._idle_timeout
-                            and entry.agent_status == "idle"):
+                    if (
+                        not entry.has_clients
+                        and entry._last_ws_detach_at is not None
+                        and (now - entry._last_ws_detach_at) > self._idle_timeout
+                        and entry.agent_status == "idle"
+                    ):
                         to_remove.append(sid)
 
                 for sid in to_remove:
@@ -1420,24 +1505,25 @@ class AgentPool:
     def status(self) -> list:
         """Return pool status for monitoring."""
         now = _time.monotonic()
-        return [{
-            "sessionId": sid,
-            "cwd": e.cwd,
-            "mode": e.mode,
-            "pid": e.proc.pid if e.proc else None,
-            "alive": e.proc is not None and e.proc.returncode is None,
-            "agent_status": e.agent_status,
-            "session_mode": e.session_mode,
-            "model": e.model_info.get("displayName") or e.model_info.get("name"),
-            "ws_attached": e._ws is not None,
-            "subscribers": len(e._subscribers),
-            "idle_seconds": round(now - e._last_ws_detach_at, 1) if e._last_ws_detach_at else None,
-        } for sid, e in self._entries.items()]
+        return [
+            {
+                "sessionId": sid,
+                "cwd": e.cwd,
+                "mode": e.mode,
+                "pid": e.proc.pid if e.proc else None,
+                "alive": e.proc is not None and e.proc.returncode is None,
+                "agent_status": e.agent_status,
+                "session_mode": e.session_mode,
+                "model": e.model_info.get("displayName") or e.model_info.get("name"),
+                "ws_attached": e._ws is not None,
+                "subscribers": len(e._subscribers),
+                "idle_seconds": round(now - e._last_ws_detach_at, 1) if e._last_ws_detach_at else None,
+            }
+            for sid, e in self._entries.items()
+        ]
 
 
-agent_pool = AgentPool(
-    idle_timeout=float(os.environ.get("AGENT_IDLE_TIMEOUT", "300"))
-)
+agent_pool = AgentPool(idle_timeout=float(os.environ.get("AGENT_IDLE_TIMEOUT", "300")))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1464,9 +1550,9 @@ agent_pool = AgentPool(
 import re as _re
 import threading as _threading
 
-_CANVAS_ID_RE = _re.compile(r'^[a-z0-9][a-z0-9-]{3,63}$')
+_CANVAS_ID_RE = _re.compile(r"^[a-z0-9][a-z0-9-]{3,63}$")
 WIDGET_DATA_DIR = SERVER_DATA_DIR / "widget_data"
-_widget_locks: dict = {}   # per-canvasId write locks
+_widget_locks: dict = {}  # per-canvasId write locks
 _widget_locks_meta = _threading.Lock()
 
 
@@ -1529,10 +1615,14 @@ _MAX_DOC_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # ── DOCX ↔ Block JSON conversion (bz-office format) ─────────────────────────
 
+
 def _docx_to_blocks(data: bytes) -> list:
     """Convert DOCX binary → Block[] in bz-office JSON format."""
+    import base64
+    import io
+    import secrets
+
     import docx as _docx
-    import io, secrets, base64
     from docx.oxml.ns import qn
 
     doc = _docx.Document(io.BytesIO(data))
@@ -1541,34 +1631,42 @@ def _docx_to_blocks(data: bytes) -> list:
     # Resolve major/minor theme fonts once for the whole document
     _major_font = _minor_font = None
     try:
-        import zipfile as _zf, xml.etree.ElementTree as _ET
+        import xml.etree.ElementTree as _ET
+        import zipfile as _zf
+
         with _zf.ZipFile(io.BytesIO(data)) as _z:
-            _theme_names = [n for n in _z.namelist() if n.lower().endswith('theme1.xml') and 'theme' in n.lower()]
+            _theme_names = [n for n in _z.namelist() if n.lower().endswith("theme1.xml") and "theme" in n.lower()]
             if _theme_names:
                 _theme_xml = _z.read(_theme_names[0])
                 _theme_root = _ET.fromstring(_theme_xml)
-                _ans = 'http://schemas.openxmlformats.org/drawingml/2006/main'
-                _fs = _theme_root.find(f'.//{{{_ans}}}fontScheme')
+                _ans = "http://schemas.openxmlformats.org/drawingml/2006/main"
+                _fs = _theme_root.find(f".//{{{_ans}}}fontScheme")
                 if _fs is not None:
-                    _mj = _fs.find(f'{{{_ans}}}majorFont/{{{_ans}}}latin')
-                    _mn = _fs.find(f'{{{_ans}}}minorFont/{{{_ans}}}latin')
-                    if _mj is not None: _major_font = _mj.get('typeface')
-                    if _mn is not None: _minor_font = _mn.get('typeface')
+                    _mj = _fs.find(f"{{{_ans}}}majorFont/{{{_ans}}}latin")
+                    _mn = _fs.find(f"{{{_ans}}}minorFont/{{{_ans}}}latin")
+                    if _mj is not None:
+                        _major_font = _mj.get("typeface")
+                    if _mn is not None:
+                        _minor_font = _mn.get("typeface")
     except Exception:
         pass
 
     # Resolve document-default font (Normal style or docDefaults)
     # Note: _resolve_font is defined below; inline the theme-ref logic here
     def _resolve_theme(name):
-        if not name: return None
-        if name in ('+mn-lt', '+Body'): return _minor_font
-        if name in ('+mj-lt', '+Heading'): return _major_font
-        if name.startswith('+'): return None
+        if not name:
+            return None
+        if name in ("+mn-lt", "+Body"):
+            return _minor_font
+        if name in ("+mj-lt", "+Heading"):
+            return _major_font
+        if name.startswith("+"):
+            return None
         return name
 
     _default_font = None
     try:
-        v = doc.styles['Normal'].font.name
+        v = doc.styles["Normal"].font.name
         _default_font = _resolve_theme(v) or v or None
     except Exception:
         pass
@@ -1576,33 +1674,35 @@ def _docx_to_blocks(data: bytes) -> list:
     # Resolve the document-default body font size (from Normal style or docDefaults).
     _default_font_size_pt = None
     try:
-        sz = doc.styles['Normal'].font.size
-        if sz: _default_font_size_pt = int(sz.pt)
+        sz = doc.styles["Normal"].font.size
+        if sz:
+            _default_font_size_pt = int(sz.pt)
     except Exception:
         pass
     if not _default_font_size_pt:
         try:
-            _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+            _wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             # docDefaults lives in the styles XML part, NOT in doc.element (body)
             styles_el = doc.part.styles._element
-            defs = styles_el.find(f'{{{_wns}}}docDefaults')
+            defs = styles_el.find(f"{{{_wns}}}docDefaults")
             if defs is not None:
-                rPr = defs.find(f'{{{_wns}}}rPrDefault/{{{_wns}}}rPr')
+                rPr = defs.find(f"{{{_wns}}}rPrDefault/{{{_wns}}}rPr")
                 if rPr is not None:
-                    sz_el = rPr.find(f'{{{_wns}}}sz')
+                    sz_el = rPr.find(f"{{{_wns}}}sz")
                     if sz_el is not None:
-                        val = sz_el.get(qn('w:val'))
-                        if val: _default_font_size_pt = int(val) // 2  # half-points
+                        val = sz_el.get(qn("w:val"))
+                        if val:
+                            _default_font_size_pt = int(val) // 2  # half-points
         except Exception:
             pass
     if not _default_font:
         try:
-            _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-            defs = doc.element.find(f'.//{{{_wns}}}docDefaults')
+            _wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            defs = doc.element.find(f".//{{{_wns}}}docDefaults")
             if defs is not None:
-                rFonts = defs.find(f'.//{{{_wns}}}rFonts')
+                rFonts = defs.find(f".//{{{_wns}}}rFonts")
                 if rFonts is not None:
-                    raw = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
+                    raw = rFonts.get(qn("w:ascii")) or rFonts.get(qn("w:hAnsi"))
                     _default_font = _resolve_theme(raw)
         except Exception:
             pass
@@ -1611,18 +1711,23 @@ def _docx_to_blocks(data: bytes) -> list:
         """Resolve a font name, including theme references."""
         if not name:
             return None
-        if name in ('+mj-lt', '+Heading'): return _major_font
-        if name in ('+mn-lt', '+Body'):    return _minor_font
+        if name in ("+mj-lt", "+Heading"):
+            return _major_font
+        if name in ("+mn-lt", "+Body"):
+            return _minor_font
         # w:asciiTheme / w:hAnsiTheme values like "majorHAnsi", "minorHAnsi"
         nl = name.lower()
-        if nl.startswith('major'): return _major_font
-        if nl.startswith('minor'): return _minor_font
-        if name.startswith('+'): return None   # unknown theme slot
+        if nl.startswith("major"):
+            return _major_font
+        if nl.startswith("minor"):
+            return _minor_font
+        if name.startswith("+"):
+            return None  # unknown theme slot
         return name
 
     def _rFonts_font(rFonts):
         """Extract resolved font from an rFonts element, checking all relevant attrs."""
-        for attr in (qn('w:ascii'), qn('w:hAnsi'), qn('w:asciiTheme'), qn('w:hAnsiTheme'), qn('w:cs')):
+        for attr in (qn("w:ascii"), qn("w:hAnsi"), qn("w:asciiTheme"), qn("w:hAnsiTheme"), qn("w:cs")):
             v = _resolve_font(rFonts.get(attr))
             if v:
                 return v
@@ -1634,30 +1739,33 @@ def _docx_to_blocks(data: bytes) -> list:
         try:
             rPr = run._r.rPr
             if rPr is not None:
-                rFonts = rPr.find(qn('w:rFonts'))
+                rFonts = rPr.find(qn("w:rFonts"))
                 if rFonts is not None:
                     v = _rFonts_font(rFonts)
-                    if v: return v
+                    if v:
+                        return v
         except Exception:
             pass
         # 2. Paragraph style's character rPr (for runs that inherit from the para style)
         if para is not None:
             try:
-                _wns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                _wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
                 style_el = para.style.element if para.style else None
                 if style_el is not None:
-                    style_rPr = style_el.find(f'.//{{{_wns}}}rPr')
+                    style_rPr = style_el.find(f".//{{{_wns}}}rPr")
                     if style_rPr is not None:
-                        rFonts = style_rPr.find(qn('w:rFonts'))
+                        rFonts = style_rPr.find(qn("w:rFonts"))
                         if rFonts is not None:
                             v = _rFonts_font(rFonts)
-                            if v: return v
+                            if v:
+                                return v
             except Exception:
                 pass
         # 3. python-docx high-level accessor
         try:
             v = _resolve_font(run.font.name)
-            if v: return v
+            if v:
+                return v
         except Exception:
             pass
         # 4. Document default font (minor/body theme font preferred for body text)
@@ -1688,32 +1796,43 @@ def _docx_to_blocks(data: bytes) -> list:
         for run in para.runs:
             n = len(run.text)
             if not n:
-                pos += n; continue
+                pos += n
+                continue
             sr = {"start": pos, "end": pos + n}
-            if run.bold:        sr["isBold"] = True
-            if run.italic:      sr["isItalic"] = True
-            if run.underline:   sr["isUnderlined"] = True
-            if getattr(run.font, "strike", None): sr["isStrikethrough"] = True
+            if run.bold:
+                sr["isBold"] = True
+            if run.italic:
+                sr["isItalic"] = True
+            if run.underline:
+                sr["isUnderlined"] = True
+            if getattr(run.font, "strike", None):
+                sr["isStrikethrough"] = True
             eff_size = _effective_font_size_pt(run, para)
-            if eff_size:        sr["fontSize"] = eff_size
+            if eff_size:
+                sr["fontSize"] = eff_size
             if run.font.color and run.font.color.type is not None:
-                try: sr["textColor"] = f"#{run.font.color.rgb}"
-                except Exception: pass
+                try:
+                    sr["textColor"] = f"#{run.font.color.rgb}"
+                except Exception:
+                    pass
             fname = _get_run_font(run, para)
             if fname:
                 sr["fontFamily"] = fname
-            if len(sr) > 2: styles.append(sr)
+            if len(sr) > 2:
+                styles.append(sr)
             pos += n
         return styles
 
     # Pre-read full heading properties (size, bold, italic, color) by walking the style chain.
-    _H_WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    _H_WNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
     _FALLBACK_HEADING_SIZES = {"1": 24, "2": 20, "3": 18, "4": 16}
 
     def _resolve_style_size_pt(style_name: str):
         visited: set = set()
-        try: s = doc.styles[style_name]
-        except Exception: return None
+        try:
+            s = doc.styles[style_name]
+        except Exception:
+            return None
         while s is not None and s.name not in visited:
             visited.add(s.name)
             if s.font.size:
@@ -1725,16 +1844,19 @@ def _docx_to_blocks(data: bytes) -> list:
     for _level in ("1", "2", "3", "4"):
         _props: dict = {}
         _sz = _resolve_style_size_pt(f"Heading {_level}")
-        if _sz: _props["fontSize"] = _sz
+        if _sz:
+            _props["fontSize"] = _sz
         try:
             _hs = doc.styles[f"Heading {_level}"]
-            if _hs.font.bold:   _props["isBold"]   = True
-            if _hs.font.italic: _props["isItalic"] = True
-            _rPr = _hs._element.find(f'{{{_H_WNS}}}rPr')
-            _col = _rPr.find(f'{{{_H_WNS}}}color') if _rPr is not None else None
+            if _hs.font.bold:
+                _props["isBold"] = True
+            if _hs.font.italic:
+                _props["isItalic"] = True
+            _rPr = _hs._element.find(f"{{{_H_WNS}}}rPr")
+            _col = _rPr.find(f"{{{_H_WNS}}}color") if _rPr is not None else None
             if _col is not None:
-                _cv = _col.get(qn('w:val'))
-                if _cv and _cv.lower() != 'auto':
+                _cv = _col.get(qn("w:val"))
+                if _cv and _cv.lower() != "auto":
                     _props["textColor"] = f"#{_cv.upper()}"
         except Exception:
             pass
@@ -1749,10 +1871,11 @@ def _docx_to_blocks(data: bytes) -> list:
     _ALIGN_MAP = {}
     try:
         from docx.enum.text import WD_ALIGN_PARAGRAPH as _WAP
+
         _ALIGN_MAP = {
-            _WAP.CENTER: 'center',
-            _WAP.RIGHT: 'right',
-            _WAP.JUSTIFY: 'justify',
+            _WAP.CENTER: "center",
+            _WAP.RIGHT: "right",
+            _WAP.JUSTIFY: "justify",
         }
     except Exception:
         pass
@@ -1760,76 +1883,84 @@ def _docx_to_blocks(data: bytes) -> list:
     def _extract_drawing_style(drawing, para):
         """Extract image data and dimensions from a <w:drawing> element."""
         try:
-            _wp = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
-            _a  = 'http://schemas.openxmlformats.org/drawingml/2006/main'
-            _r  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
-            container = drawing.find(f'{{{_wp}}}inline') or drawing.find(f'{{{_wp}}}anchor')
-            if container is None: return None
-            extent = container.find(f'{{{_wp}}}extent')
-            cx = int(extent.get('cx', 0)) if extent is not None else 0
-            cy = int(extent.get('cy', 0)) if extent is not None else 0
-            width_px  = max(1, round(cx / 9525))
+            _wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+            _a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+            _r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            container = drawing.find(f"{{{_wp}}}inline") or drawing.find(f"{{{_wp}}}anchor")
+            if container is None:
+                return None
+            extent = container.find(f"{{{_wp}}}extent")
+            cx = int(extent.get("cx", 0)) if extent is not None else 0
+            cy = int(extent.get("cy", 0)) if extent is not None else 0
+            width_px = max(1, round(cx / 9525))
             height_px = max(1, round(cy / 9525))
-            blip = container.find(f'.//{{{_a}}}blip')
-            if blip is None: return None
-            r_id = blip.get(f'{{{_r}}}embed')
-            if not r_id: return None
+            blip = container.find(f".//{{{_a}}}blip")
+            if blip is None:
+                return None
+            r_id = blip.get(f"{{{_r}}}embed")
+            if not r_id:
+                return None
             image_part = para.part.related_parts[r_id]
-            b64 = base64.b64encode(image_part.blob).decode('ascii')
+            b64 = base64.b64encode(image_part.blob).decode("ascii")
             data_url = f"data:{image_part.content_type};base64,{b64}"
             return {"imageUrl": data_url, "imageWidth": width_px, "imageHeight": height_px}
         except Exception:
             return None
 
     def _para_to_block(para) -> dict:
-        text   = para.text
+        text = para.text
         styles = _run_styles(para)
-        block  = {"text": text, "styles": styles}
+        block = {"text": text, "styles": styles}
 
         # Scan ALL <w:r> elements in the paragraph XML, not just para.runs —
         # python-docx omits drawing-only runs (no <w:t>) from .runs, so image runs
         # would be silently skipped if we used that property.
         pos = 0
         insertions = []
-        for run_el in para._p.findall(qn('w:r')):
-            drawing = run_el.find(qn('w:drawing'))
+        for run_el in para._p.findall(qn("w:r")):
+            drawing = run_el.find(qn("w:drawing"))
             if drawing is not None:
                 img = _extract_drawing_style(drawing, para)
                 if img:
                     insertions.append((pos, img))
-            t_el = run_el.find(qn('w:t'))
-            pos += len(t_el.text if t_el is not None and t_el.text else '')
+            t_el = run_el.find(qn("w:t"))
+            pos += len(t_el.text if t_el is not None and t_el.text else "")
 
         if insertions:
             chars = list(block["text"])
             cur_styles = list(block["styles"])
             for ins_pos, img_style in sorted(insertions, key=lambda x: -x[0]):
-                chars.insert(ins_pos, ' ')
+                chars.insert(ins_pos, " ")
                 shifted = []
                 for sr in cur_styles:
                     nr = dict(sr)
                     if nr["start"] >= ins_pos:
-                        nr["start"] += 1; nr["end"] += 1
+                        nr["start"] += 1
+                        nr["end"] += 1
                     elif nr["end"] > ins_pos:
                         nr["end"] += 1
                     shifted.append(nr)
                 shifted.append({"start": ins_pos, "end": ins_pos + 1, **img_style})
                 cur_styles = sorted(shifted, key=lambda s: s["start"])
-            block["text"]   = ''.join(chars)
+            block["text"] = "".join(chars)
             block["styles"] = cur_styles
 
         # Heading → override styles with properties from the document's heading style
         sname = para.style.name if para.style else ""
-        size  = _heading_size(sname)
+        size = _heading_size(sname)
         if size:
             level_key = sname.split()[-1] if sname.startswith("Heading ") else None
             props = _heading_props.get(level_key, {}) if level_key else {}
             heading_font = _major_font or _minor_font or None
             heading_style: dict = {"start": 0, "end": len(block["text"]), "fontSize": size}
-            if props.get("isBold", True):   heading_style["isBold"]   = True
-            if props.get("isItalic"):       heading_style["isItalic"] = True
-            if props.get("textColor"):      heading_style["textColor"] = props["textColor"]
-            if heading_font:                heading_style["fontFamily"] = heading_font
+            if props.get("isBold", True):
+                heading_style["isBold"] = True
+            if props.get("isItalic"):
+                heading_style["isItalic"] = True
+            if props.get("textColor"):
+                heading_style["textColor"] = props["textColor"]
+            if heading_font:
+                heading_style["fontFamily"] = heading_font
             block["styles"] = [heading_style]
             block["headingLevel"] = int(level_key) if level_key else None
 
@@ -1855,7 +1986,8 @@ def _docx_to_blocks(data: bytes) -> list:
         if tag == "p":
             try:
                 from docx.text.paragraph import Paragraph
-                para  = Paragraph(child, doc)
+
+                para = Paragraph(child, doc)
                 block = _para_to_block(para)
                 if block["text"].strip() or not blocks:
                     blocks.append(block)
@@ -1865,36 +1997,41 @@ def _docx_to_blocks(data: bytes) -> list:
         elif tag == "tbl":
             try:
                 from docx.table import Table
-                table  = Table(child, doc)
-                tid    = secrets.token_hex(8)
+
+                table = Table(child, doc)
+                tid = secrets.token_hex(8)
                 n_rows = len(table.rows)
                 n_cols = max((len(r.cells) for r in table.rows), default=0)
                 for r_idx, row in enumerate(table.rows):
                     for c_idx, cell in enumerate(row.cells):
                         # Build per-cell styles by walking each paragraph's runs
-                        cell_text   = ""
+                        cell_text = ""
                         cell_styles = []
                         for p_idx, para in enumerate(cell.paragraphs):
                             if p_idx > 0:
                                 cell_text += "\n"
                             offset = len(cell_text)
                             for sr in _run_styles(para):
-                                cell_styles.append({
-                                    **sr,
-                                    "start": sr["start"] + offset,
-                                    "end":   sr["end"]   + offset,
-                                })
+                                cell_styles.append(
+                                    {
+                                        **sr,
+                                        "start": sr["start"] + offset,
+                                        "end": sr["end"] + offset,
+                                    }
+                                )
                             cell_text += para.text
-                        blocks.append({
-                            "text":            cell_text,
-                            "styles":          cell_styles,
-                            "isTableCell":     True,
-                            "tableId":         tid,
-                            "rowIndex":        r_idx,
-                            "columnIndex":     c_idx,
-                            "numberOfRows":    n_rows,
-                            "numberOfColumns": n_cols,
-                        })
+                        blocks.append(
+                            {
+                                "text": cell_text,
+                                "styles": cell_styles,
+                                "isTableCell": True,
+                                "tableId": tid,
+                                "rowIndex": r_idx,
+                                "columnIndex": c_idx,
+                                "numberOfRows": n_rows,
+                                "numberOfColumns": n_cols,
+                            }
+                        )
             except Exception:
                 pass
 
@@ -1904,38 +2041,41 @@ def _docx_to_blocks(data: bytes) -> list:
 
 def _blocks_to_docx(blocks: list) -> bytes:
     """Convert Block[] (bz-office format) → DOCX binary."""
+    import base64
+    import io
+
     import docx as _docx
-    import io, base64
-    from docx.shared import Pt, RGBColor, Emu
     from docx.oxml.ns import qn
+    from docx.shared import Emu, Pt, RGBColor
     from lxml import etree
 
     PX_TO_EMU = 9525  # 1 CSS px at 96 DPI
-    WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
-    A  = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+    A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
     def _make_float(run, wrap, placed_x_css):
         """Convert the inline picture in `run` to a floating wp:anchor element."""
-        drawing = run._r.find(qn('w:drawing'))
-        if drawing is None: return
-        inline = drawing.find(f'{{{WP}}}inline')
-        if inline is None: return
+        drawing = run._r.find(qn("w:drawing"))
+        if drawing is None:
+            return
+        inline = drawing.find(f"{{{WP}}}inline")
+        if inline is None:
+            return
 
-        extent  = inline.find(f'{{{WP}}}extent')
-        cx = extent.get('cx', '0') if extent is not None else '0'
-        cy = extent.get('cy', '0') if extent is not None else '0'
+        extent = inline.find(f"{{{WP}}}extent")
+        cx = extent.get("cx", "0") if extent is not None else "0"
+        cy = extent.get("cy", "0") if extent is not None else "0"
 
-        behind  = '1' if wrap == 'behind' else '0'
+        behind = "1" if wrap == "behind" else "0"
         # imagePlacedX is from the canvas/page left edge; DOCX column-relative
         # coordinates start at the text column left (~100 CSS px into the canvas).
         CANVAS_LEFT_CSS = 100  # matches bz-agent START_X / SF
-        COLUMN_W_CSS    = 621  # matches bz-agent (END_X - START_X) / SF
-        col_x   = max(0, (placed_x_css or 0) - CANVAS_LEFT_CSS)
-        pos_x   = int(col_x * PX_TO_EMU)
+        COLUMN_W_CSS = 621  # matches bz-agent (END_X - START_X) / SF
+        col_x = max(0, (placed_x_css or 0) - CANVAS_LEFT_CSS)
+        pos_x = int(col_x * PX_TO_EMU)
         # Float direction: image in left half → text wraps right; right half → text wraps left
-        wrap_side = 'right' if col_x < COLUMN_W_CSS / 2 else 'left'
-        wrap_el = ('<wp:wrapBehindDoc/>' if wrap == 'behind'
-                   else f'<wp:wrapSquare wrapText="{wrap_side}"/>')
+        wrap_side = "right" if col_x < COLUMN_W_CSS / 2 else "left"
+        wrap_el = "<wp:wrapBehindDoc/>" if wrap == "behind" else f'<wp:wrapSquare wrapText="{wrap_side}"/>'
 
         anchor = etree.fromstring(
             f'<wp:anchor xmlns:wp="{WP}"'
@@ -1947,11 +2087,11 @@ def _blocks_to_docx(blocks: list) -> bytes:
             f'<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
             f'<wp:extent cx="{cx}" cy="{cy}"/>'
             f'<wp:effectExtent l="0" t="0" r="0" b="0"/>'
-            f'{wrap_el}'
-            f'</wp:anchor>'
+            f"{wrap_el}"
+            f"</wp:anchor>"
         )
         # Move docPr, cNvGraphicFramePr, graphic from inline → anchor
-        for tag in (f'{{{WP}}}docPr', f'{{{WP}}}cNvGraphicFramePr', f'{{{A}}}graphic'):
+        for tag in (f"{{{WP}}}docPr", f"{{{WP}}}cNvGraphicFramePr", f"{{{A}}}graphic"):
             child = inline.find(tag)
             if child is not None:
                 anchor.append(child)
@@ -1988,7 +2128,7 @@ def _blocks_to_docx(blocks: list) -> bytes:
             continue
 
         # Regular paragraph
-        text   = b.get("text", "")
+        text = b.get("text", "")
         styles = b.get("styles", [])
         prefix = b.get("prefix", "")
         indent = b.get("indent", 0)
@@ -2024,23 +2164,24 @@ def _blocks_to_docx(blocks: list) -> bytes:
                                 img_bytes = base64.b64decode(b64_data)
                             else:
                                 import urllib.request as _req
+
                                 with _req.urlopen(data_url, timeout=10) as resp:
                                     img_bytes = resp.read()
-                            wrap  = sr.get("imageWrap", "inline")
+                            wrap = sr.get("imageWrap", "inline")
                             img_run = para.add_run()
-                            w_emu = sr.get("imageWidth",  64) * PX_TO_EMU
+                            w_emu = sr.get("imageWidth", 64) * PX_TO_EMU
                             h_emu = sr.get("imageHeight", 64) * PX_TO_EMU
                             img_run.add_picture(io.BytesIO(img_bytes), width=Emu(w_emu), height=Emu(h_emu))
-                            if wrap in ('square', 'behind'):
+                            if wrap in ("square", "behind"):
                                 _make_float(img_run, wrap, sr.get("imagePlacedX"))
                         except Exception:
                             para.add_run(text[s:e])
                     else:
                         run = para.add_run(text[s:e])
-                        run.bold            = sr.get("isBold", False)
-                        run.italic          = sr.get("isItalic", False)
-                        run.underline       = sr.get("isUnderlined", False)
-                        run.font.strike     = sr.get("isStrikethrough", False) or None
+                        run.bold = sr.get("isBold", False)
+                        run.italic = sr.get("isItalic", False)
+                        run.underline = sr.get("isUnderlined", False)
+                        run.font.strike = sr.get("isStrikethrough", False) or None
                         if sr.get("fontFamily"):
                             run.font.name = sr["fontFamily"]
                         if sr.get("fontSize"):
@@ -2059,6 +2200,7 @@ def _blocks_to_docx(blocks: list) -> bytes:
 
         if indent and not heading_size:
             from docx.shared import Inches
+
             para.paragraph_format.left_indent = Inches(indent * 0.25)
 
         i += 1
@@ -2068,9 +2210,11 @@ def _blocks_to_docx(blocks: list) -> bytes:
     return buf.getvalue()
 
 
-def _parse_pdf(data: bytes) :
-    import pypdf
+def _parse_pdf(data: bytes):
     import io
+
+    import pypdf
+
     reader = pypdf.PdfReader(io.BytesIO(data))
     pages = len(reader.pages)
     parts = []
@@ -2080,18 +2224,21 @@ def _parse_pdf(data: bytes) :
             parts.append(f"# Page {i}\n\n{text.strip()}")
     return pages, "\n\n".join(parts)
 
-def _parse_docx(data: bytes) :
-    import docx
+
+def _parse_docx(data: bytes):
     import io
+
+    import docx
+
     doc = docx.Document(io.BytesIO(data))
     parts = []
     heading_map = {1: "#", 2: "##", 3: "###", 4: "####"}
     for para in doc.paragraphs:
         style = para.style.name if para.style else ""
-        text  = para.text.strip()
+        text = para.text.strip()
         if not text:
             continue
-        level = next((int(s) for s in ("1","2","3","4") if style == f"Heading {s}"), None)
+        level = next((int(s) for s in ("1", "2", "3", "4") if style == f"Heading {s}"), None)
         if level:
             parts.append(f"{heading_map[level]} {text}")
         else:
@@ -2107,9 +2254,12 @@ def _parse_docx(data: bytes) :
     page_count = max(1, len(parts) // 10)  # approximate
     return page_count, "\n\n".join(parts)
 
-def _parse_xlsx(data: bytes) :
-    import openpyxl
+
+def _parse_xlsx(data: bytes):
     import io
+
+    import openpyxl
+
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
     parts = []
     for sheet_name in wb.sheetnames:
@@ -2128,9 +2278,12 @@ def _parse_xlsx(data: bytes) :
             parts.append("| " + " | ".join(str(c) if c is not None else "" for c in row) + " |")
     return len(wb.sheetnames), "\n\n".join(parts)
 
-def _parse_pptx(data: bytes) :
-    from pptx import Presentation
+
+def _parse_pptx(data: bytes):
     import io
+
+    from pptx import Presentation
+
     prs = Presentation(io.BytesIO(data))
     parts = []
     for i, slide in enumerate(prs.slides, 1):
@@ -2155,7 +2308,9 @@ def _parse_pptx(data: bytes) :
         parts.append(header + ("\n" + "\n".join(body_lines) if body_lines else ""))
     return len(prs.slides), "\n\n".join(parts)
 
+
 _DOCX_EXTS = {".docx", ".doc"}
+
 
 def _detect_and_parse(filename: str, data: bytes) -> dict:
     ext = Path(filename).suffix.lower()
@@ -2165,25 +2320,25 @@ def _detect_and_parse(filename: str, data: bytes) -> dict:
 
     # DOCX/DOC → return Block[] (bz-office format); other formats → markdown text
     if ext in _DOCX_EXTS:
-        result     = _docx_to_blocks(data)
-        blocks     = result["blocks"]
+        result = _docx_to_blocks(data)
+        blocks = result["blocks"]
         word_count = sum(len(b.get("text", "").split()) for b in blocks)
         return {
-            "filename":    filename,
-            "type":        fmt,
-            "pages":       max(1, len([b for b in blocks if not b.get("isTableCell")]) // 30),
-            "wordCount":   word_count,
-            "truncated":   False,
-            "blocks":      blocks,
+            "filename": filename,
+            "type": fmt,
+            "pages": max(1, len([b for b in blocks if not b.get("isTableCell")]) // 30),
+            "wordCount": word_count,
+            "truncated": False,
+            "blocks": blocks,
             "defaultFont": result.get("defaultFont"),
         }
 
     parsers = {
-        ".pdf":  _parse_pdf,
+        ".pdf": _parse_pdf,
         ".xlsx": _parse_xlsx,
-        ".xls":  _parse_xlsx,
+        ".xls": _parse_xlsx,
         ".pptx": _parse_pptx,
-        ".ppt":  _parse_pptx,
+        ".ppt": _parse_pptx,
     }
     if ext not in parsers:
         raise ValueError(f"unsupported format: {ext or '(no extension)'}")
@@ -2192,12 +2347,12 @@ def _detect_and_parse(filename: str, data: bytes) -> dict:
     if truncated:
         content = content[:_MAX_DOC_CHARS]
     return {
-        "filename":  filename,
-        "type":      fmt,
-        "pages":     pages,
+        "filename": filename,
+        "type": fmt,
+        "pages": pages,
         "wordCount": len(content.split()),
         "truncated": truncated,
-        "content":   content,
+        "content": content,
     }
 
 
@@ -2209,7 +2364,8 @@ def _detect_and_parse(filename: str, data: bytes) -> dict:
 def _eval_excel_formula(formula: str, cells: dict) -> object:
     """Evaluate common Excel formulas against a cell dict {cell_id: {value: ...}}."""
     import re as _re
-    if not formula.startswith('='):
+
+    if not formula.startswith("="):
         return None
     expr = formula[1:].strip()
 
@@ -2217,52 +2373,62 @@ def _eval_excel_formula(formula: str, cells: dict) -> object:
         cid = cid.upper()
         cd = cells.get(cid, {})
         v = cd.get("value")
-        if v is None: return 0
-        try: return float(v)
-        except: return 0
+        if v is None:
+            return 0
+        try:
+            return float(v)
+        except:
+            return 0
 
     def expand_range(r):
         """Expand A1:A10 to list of cell ids."""
-        m = _re.match(r'^([A-Z]+)(\d+):([A-Z]+)(\d+)$', r.upper())
-        if not m: return [r.upper()]
+        m = _re.match(r"^([A-Z]+)(\d+):([A-Z]+)(\d+)$", r.upper())
+        if not m:
+            return [r.upper()]
         import openpyxl.utils as _ou
+
         c1 = _ou.column_index_from_string(m.group(1))
         r1 = int(m.group(2))
         c2 = _ou.column_index_from_string(m.group(3))
         r2 = int(m.group(4))
-        return [f"{_ou.get_column_letter(c)}{r}" for r in range(r1, r2+1) for c in range(c1, c2+1)]
+        return [f"{_ou.get_column_letter(c)}{r}" for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)]
 
     try:
         # Handle SUM(range)
-        m = _re.fullmatch(r'SUM\(([^)]+)\)', expr, _re.I)
+        m = _re.fullmatch(r"SUM\(([^)]+)\)", expr, _re.I)
         if m:
             vals = [cell_val(cid) for cid in expand_range(m.group(1).strip())]
             return sum(vals)
 
         # Handle AVERAGE(range)
-        m = _re.fullmatch(r'AVERAGE\(([^)]+)\)', expr, _re.I)
+        m = _re.fullmatch(r"AVERAGE\(([^)]+)\)", expr, _re.I)
         if m:
             vals = [cell_val(cid) for cid in expand_range(m.group(1).strip())]
-            return sum(vals)/len(vals) if vals else 0
+            return sum(vals) / len(vals) if vals else 0
 
         # Handle COUNT(range)
-        m = _re.fullmatch(r'COUNT\(([^)]+)\)', expr, _re.I)
+        m = _re.fullmatch(r"COUNT\(([^)]+)\)", expr, _re.I)
         if m:
-            vals = [1 for cid in expand_range(m.group(1).strip()) if cells.get(cid.upper(), {}).get("value") not in (None, '')]
+            vals = [
+                1
+                for cid in expand_range(m.group(1).strip())
+                if cells.get(cid.upper(), {}).get("value") not in (None, "")
+            ]
             return sum(vals)
 
         # Handle MIN/MAX(range)
-        m = _re.fullmatch(r'(MIN|MAX)\(([^)]+)\)', expr, _re.I)
+        m = _re.fullmatch(r"(MIN|MAX)\(([^)]+)\)", expr, _re.I)
         if m:
             vals = [cell_val(cid) for cid in expand_range(m.group(2).strip())]
-            return min(vals) if m.group(1).upper() == 'MIN' else max(vals)
+            return min(vals) if m.group(1).upper() == "MIN" else max(vals)
 
         # Replace cell references in arithmetic expression (e.g. A1+B2*C3)
         def repl_cell(m2):
             return str(cell_val(m2.group(0)))
-        arith = _re.sub(r'[A-Z]+\d+', repl_cell, expr.upper())
+
+        arith = _re.sub(r"[A-Z]+\d+", repl_cell, expr.upper())
         # Only evaluate if it's a simple arithmetic expression
-        if _re.fullmatch(r'[\d\s\.\+\-\*\/\(\)]+', arith):
+        if _re.fullmatch(r"[\d\s\.\+\-\*\/\(\)]+", arith):
             result = eval(arith, {"__builtins__": {}})  # nosec — restricted input
             return result
     except Exception:
@@ -2281,19 +2447,21 @@ def _eval_excel_formula(formula: str, cells: dict) -> object:
 # Runs `pnpm dev` (or npm/yarn) in the project cwd and exposes the URL.
 # Only one dev server per cwd is tracked; a second start call returns the URL.
 
-import asyncio as _asyncio
-_dev_servers: dict = {}   # cwd → { proc, url }
+_dev_servers: dict = {}  # cwd → { proc, url }
+
 
 async def _find_free_port() -> int:
     import socket as _socket
+
     with _socket.socket() as s:
-        s.bind(('', 0))
+        s.bind(("", 0))
         return s.getsockname()[1]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 17 · AGENT WEBSOCKET BRIDGE
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 async def read_bzcode_stdout(
     proc: asyncio.subprocess.Process,
@@ -2323,18 +2491,21 @@ async def read_bzcode_stdout(
             await out_queue.put(raw)
             if raw[0] == "{":
                 try:
-                    msg     = json.loads(raw)
-                    mtype   = msg.get("type")
+                    msg = json.loads(raw)
+                    mtype = msg.get("type")
                     mstatus = msg.get("status")
                     if mtype == "status" and mstatus == "running":
                         ready_event.clear()
-                        if session_id: _running_sessions.add(session_id)
+                        if session_id:
+                            _running_sessions.add(session_id)
                     elif mtype == "status" and mstatus == "idle":
                         ready_event.set()
-                        if session_id: _running_sessions.discard(session_id)
+                        if session_id:
+                            _running_sessions.discard(session_id)
                     elif mtype == "result":
                         ready_event.set()
-                        if session_id: _running_sessions.discard(session_id)
+                        if session_id:
+                            _running_sessions.discard(session_id)
                         if msg.get("usage"):
                             _add_tokens(msg["usage"])
                 except Exception:
@@ -2342,7 +2513,8 @@ async def read_bzcode_stdout(
     finally:
         await out_queue.put(None)
         ready_event.set()
-        if session_id: _running_sessions.discard(session_id)
+        if session_id:
+            _running_sessions.discard(session_id)
 
 
 async def send_to_client(queue: asyncio.Queue, ws: "web.WebSocketResponse") -> None:
@@ -2363,8 +2535,14 @@ async def drain_bzcode_stderr(
     out_queue: "asyncio.Queue | None" = None,
 ) -> None:
     """Read bzcode stderr, log it, and forward auth errors to the client."""
-    _AUTH_KEYWORDS = ("token is expired", "Token refresh failed", "invalid authentication token",
-                      "invalid_token", "unauthorized", "401")
+    _AUTH_KEYWORDS = (
+        "token is expired",
+        "Token refresh failed",
+        "invalid authentication token",
+        "invalid_token",
+        "unauthorized",
+        "401",
+    )
     while True:
         line = await proc.stderr.readline()
         if not line:
@@ -2373,11 +2551,13 @@ async def drain_bzcode_stderr(
         print(f"[bzcode] {text}", file=sys.stderr)
         # Forward authentication errors so the frontend can prompt re-login
         if out_queue and any(k.lower() in text.lower() for k in _AUTH_KEYWORDS):
-            msg = json.dumps({
-                "type":    "system",
-                "event":   "auth-error",
-                "message": "Your authentication token has expired. Please sign in again.",
-            })
+            msg = json.dumps(
+                {
+                    "type": "system",
+                    "event": "auth-error",
+                    "message": "Your authentication token has expired. Please sign in again.",
+                }
+            )
             try:
                 out_queue.put_nowait(msg)
             except Exception:
@@ -2415,7 +2595,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     params = request.rel_url.query
 
     req_session_id = params.get("sessionId") or None
-    req_cwd        = params.get("cwd") or default_cwd
+    req_cwd = params.get("cwd") or default_cwd
 
     # Validate cwd; fall back to default if the path doesn't exist
     effective_cwd = req_cwd if os.path.isdir(req_cwd) else default_cwd
@@ -2426,6 +2606,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
     # Generate a session ID if none was provided — bzcode accepts any ID.
     if not req_session_id:
         import secrets as _secrets
+
         req_session_id = f"bz-{_secrets.token_hex(6)}"
         print(f"[ws] generated new sessionId={req_session_id}", file=sys.stderr)
 
@@ -2451,14 +2632,19 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
             limit=16 * 1024 * 1024,  # 16 MB — large sessions can emit long lines
         )
     except FileNotFoundError:
-        await ws.send_str(json.dumps({
-            "type": "result", "status": "error",
-            "error": f"bzcode not found: {bzcode_path}",
-        }))
+        await ws.send_str(
+            json.dumps(
+                {
+                    "type": "result",
+                    "status": "error",
+                    "error": f"bzcode not found: {bzcode_path}",
+                }
+            )
+        )
         await ws.close()
         return ws
 
-    out_queue   = asyncio.Queue()
+    out_queue = asyncio.Queue()
     ready_event = asyncio.Event()
 
     _entry_cfg = _mode_entry(req_mode)
@@ -2469,8 +2655,7 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
 
     try:
         await asyncio.gather(
-            read_bzcode_stdout(proc, out_queue, ready_event,
-                               session_id=req_session_id, mode=req_mode),
+            read_bzcode_stdout(proc, out_queue, ready_event, session_id=req_session_id, mode=req_mode),
             send_to_client(out_queue, ws),
             drain_bzcode_stderr(proc, out_queue),
             relay_client_messages(proc, ws, ready_event),
@@ -2486,10 +2671,14 @@ async def handle_ws_client(request: web.Request, bzcode_path: str, default_cwd: 
         if exit_code not in (None, 0):
             print(f"[ws] bzcode exited with code {exit_code}  pid={proc.pid}", file=sys.stderr)
             try:
-                await ws.send_str(json.dumps({
-                    "type": "system",
-                    "message": f"⚠ bzcode process exited unexpectedly (code {exit_code}). Reconnecting…",
-                }))
+                await ws.send_str(
+                    json.dumps(
+                        {
+                            "type": "system",
+                            "message": f"⚠ bzcode process exited unexpectedly (code {exit_code}). Reconnecting…",
+                        }
+                    )
+                )
             except Exception:
                 pass
         else:
