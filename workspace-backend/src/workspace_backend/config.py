@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # Path to (or name of) the bzcode binary. Resolved against PATH at spawn time.
     bzcode_path: str = Field(default="bzcode", alias="BZCODE_PATH")
 
+    # Directory holding agent_modes.json, bzcode_assets/, and server_data/. Defaults
+    # to the repo root (four parents up from this file); override in deployment.
+    data_root: Path = Field(
+        default=Path(__file__).resolve().parents[3],
+        alias="BZ_DATA_ROOT",
+    )
+
     # HTTP + SSE port.
     port: int = Field(default=18789, alias="PORT")
 
@@ -55,7 +62,7 @@ class Settings(BaseSettings):
     # Logging level name (DEBUG/INFO/WARNING/ERROR).
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    @field_validator("bzcode_cwd", "bz_home", mode="before")
+    @field_validator("bzcode_cwd", "bz_home", "data_root", mode="before")
     @classmethod
     def _expand(cls, v: object) -> object:
         """Expand ``~`` and env vars in path settings so ``BZ_HOME=~/x`` works."""

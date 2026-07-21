@@ -28,7 +28,6 @@ def _make_pool(
     tmp_path: Path,
     *,
     idle_timeout: float = 300.0,
-    session_mode_for: Callable[[str], SessionMode] | None = None,
     usage_sink: list[dict] | None = None,
 ) -> AgentPool:
     """Build a pool that spawns the fake bzcode stub for every agent."""
@@ -44,7 +43,6 @@ def _make_pool(
         build_command=build_command,
         build_env=build_env,
         idle_timeout=idle_timeout,
-        session_mode_for=session_mode_for,
         on_usage=(usage_sink.append if usage_sink is not None else None),
     )
 
@@ -124,10 +122,10 @@ async def test_usage_callback_fires(tmp_path: Path) -> None:
 
 
 async def test_yolo_auto_approves_permission(tmp_path: Path) -> None:
-    p = _make_pool(tmp_path, session_mode_for=lambda _m: SessionMode.YOLO)
+    p = _make_pool(tmp_path)
     await p.start()
     try:
-        rt = await p.get_or_create("bz-yolo", str(tmp_path), "widget")
+        rt = await p.get_or_create("bz-yolo", str(tmp_path), "widget", session_mode=SessionMode.YOLO)
         # Force yolo state directly (setMode ack from the stub is fire-and-forget).
         rt.state.session_mode = SessionMode.YOLO
         q = rt.subscribe()

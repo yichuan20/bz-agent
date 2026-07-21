@@ -16,10 +16,36 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
+
 from workspace_backend.domain.models import SessionMode
 from workspace_backend.domain.ports import ModeConfigStore
+from workspace_backend.logging import get_logger
+
+log = get_logger(__name__)
 
 _DEFAULT_MODE = "general"
+
+# The four base modes the classifier routes into.
+_CLASSIFY_MODES = ("general", "widget", "worker", "coder")
+_CLASSIFY_URL = "https://flow.boltzbit.com/bz-api/v1/ai/messages"
+_CLASSIFY_MODEL = "anthropic-claude-4.5-sonnet"
+_CLASSIFY_SYSTEM = """\
+You are a routing classifier for an AI agent. Given the user request, output the \
+single best mode id.
+
+Modes — pick the most specific match, use "general" only as a last resort:
+
+widget  → building something visual and interactive: a clock, timer, calculator,
+          to-do list, game, chart, form, canvas mini-app, or any self-contained UI
+worker  → file or document tasks: create/edit Excel, CSV, PDF, Word; extract,
+          compare, or summarise document content; data processing or automation
+coder   → software development on an existing project: write, debug, refactor code;
+          build APIs, backends, CLIs, services, or deploy applications
+general → everything else: open-ended questions, explanations, research, writing
+
+Reply with ONLY one word: widget, worker, coder, or general.\
+"""
 
 
 @dataclass(slots=True)
@@ -39,8 +65,9 @@ class CompiledConfig:
 class ModeService:
     """Loads mode config and compiles a mode into a :class:`CompiledConfig`."""
 
-    def __init__(self, store: ModeConfigStore) -> None:
+    def __init__(self, store: ModeConfigStore, http_client: httpx.AsyncClient | None = None) -> None:
         self._store = store
+        self._http = http_client
 
     async def load_config(self) -> dict[str, Any]:
         """Return the raw mode config (``{"default", "modes"}``)."""
@@ -49,6 +76,46 @@ class ModeService:
     async def default_mode(self) -> str:
         cfg = await self._store.load()
         return str(cfg.get("default", _DEFAULT_MODE))
+
+    async def session_mode_for(self, mode: str) -> SessionMode:
+        """Return the bzcode runtime mode (yolo/plan/default) a mode's settings imply."""
+        entry = await self.resolve_entry(mode)
+        return self._session_mode(entry.get("settings"))
+
+    async def classify(self, message: str, api_key: str) -> str:
+        """Classify a free-text request into one of the four base modes.
+
+        Falls back to ``"general"`` on empty input, no key, or any API failure —
+        classification is a convenience, never a hard dependency.
+        """
+        message = message.strip()
+        if not message or not api_key or self._http is None:
+            return _DEFAULT_MODE
+        payload = {
+            "model": _CLASSIFY_MODEL,
+            "messages": [{"role": "user", "content": message}],
+            "stream": False,
+            "system": _CLASSIFY_SYSTEM,
+            "genOptions": {"maxTokens": 10, "temperature": 0},
+        }
+        try:
+            resp = await self._http.post(
+                _CLASSIFY_URL,
+                headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+                json=payload,
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            log.warning("[classify] request failed: %s", exc)
+            return _DEFAULT_MODE
+        if resp.status_code != 200:
+            return _DEFAULT_MODE
+        text = ""
+        for block in resp.json().get("content", []):
+            if block.get("type") == "text":
+                text = block.get("text", "").strip().lower()
+                break
+        return text if text in _CLASSIFY_MODES else _DEFAULT_MODE
 
     async def resolve_entry(self, mode: str) -> dict[str, Any]:
         """Return the mode entry, following ``baseMode`` and falling back to default."""

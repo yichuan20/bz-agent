@@ -24,8 +24,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from workspace_backend.api.deps import AppContext
-from workspace_backend.api.routes import health, version
+from workspace_backend.api.context import build_context, close_context
+from workspace_backend.api.exception_handlers import register_exception_handlers
+from workspace_backend.api.routes import agents, auth, files, health, modes, version
 from workspace_backend.config import Settings, get_settings
 from workspace_backend.logging import configure_logging, get_logger
 
@@ -53,19 +54,24 @@ endpoints are added in later milestones.
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Assemble singletons on startup, tear them down on shutdown.
 
-    Phase 1: only :class:`Settings`. Later phases add ``pool.start()/stop()`` and a
-    shared ``httpx.AsyncClient`` here.
+    Builds the full object graph (httpx client, stores, services, pool) via
+    ``build_context`` and starts the pool's idle sweeper; closes both on shutdown.
     """
     settings: Settings = app.state.settings
-    app.state.ctx = AppContext(settings=settings)
+    ctx = await build_context(settings)
+    app.state.ctx = ctx
+    await ctx.pool.start()
     log.info(
         "workspace-backend starting: cwd=%s bz_home=%s port=%s",
         settings.bzcode_cwd,
         settings.bz_home,
         settings.port,
     )
-    yield
-    log.info("workspace-backend shutting down")
+    try:
+        yield
+    finally:
+        await close_context(ctx)
+        log.info("workspace-backend shutting down")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -84,7 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description=_DESCRIPTION,
         lifespan=lifespan,
     )
-    # Stash settings before lifespan runs so the context can read them.
+    # Stash settings before lifespan runs so the context builder can read them.
     app.state.settings = settings
 
     # CORS: permissive for now (local-first / behind the workspace gateway). Tighten
@@ -96,8 +102,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_exception_handlers(app)
+
     app.include_router(health.router)
     app.include_router(version.router)
+    app.include_router(agents.router)
+    app.include_router(auth.router)
+    app.include_router(modes.router)
+    app.include_router(files.router)
 
     return app
 

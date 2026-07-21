@@ -16,6 +16,7 @@ from workspace_backend.domain.models import Agent
 from workspace_backend.domain.ports import AgentStore, DefaultsStore, TitleStore, TranscriptStore
 from workspace_backend.runtime_state import RuntimeState
 from workspace_backend.services.config_writer import ConfigWriter
+from workspace_backend.services.mode_service import CompiledConfig
 
 _ID_PREFIX = "bz-"
 
@@ -76,6 +77,15 @@ class AgentService:
 
     async def delete(self, agent_id: str) -> bool:
         return await self._agents.delete(agent_id)
+
+    async def write_config(self, agent_id: str, mode: str, *, working_dir: str, model_name: str = "") -> CompiledConfig:
+        """(Re)write an agent's session config; returns the compiled config.
+
+        Called on connect so bzcode picks up the current identity/soul/settings on
+        ``--resume``. Returns the :class:`CompiledConfig` (its ``session_mode`` is what
+        the pool applies via setMode).
+        """
+        return await self._config.write(agent_id, mode, working_dir=working_dir, model_name=model_name)
 
     async def set_title(self, agent_id: str, title: str) -> None:
         await self._titles.set(agent_id, title[:100])

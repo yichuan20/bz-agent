@@ -47,7 +47,6 @@ class AgentPool:
         build_command: CommandBuilder,
         build_env: EnvBuilder,
         idle_timeout: float = 300.0,
-        session_mode_for: Callable[[str], SessionMode] | None = None,
         on_usage: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._runtimes: dict[str, AgentRuntime] = {}
@@ -56,7 +55,6 @@ class AgentPool:
         self._spawn = spawn
         self._build_command = build_command
         self._build_env = build_env
-        self._session_mode_for = session_mode_for or (lambda _mode: SessionMode.DEFAULT)
         self._on_usage = on_usage
         self._sweeper_task: asyncio.Task[None] | None = None
 
@@ -88,11 +86,20 @@ class AgentPool:
         """Return the live runtime for ``agent_id``, or ``None`` if not pooled."""
         return self._runtimes.get(agent_id)
 
-    async def get_or_create(self, agent_id: str, cwd: str, mode: str) -> AgentRuntime:
+    async def get_or_create(
+        self,
+        agent_id: str,
+        cwd: str,
+        mode: str,
+        *,
+        session_mode: SessionMode = SessionMode.DEFAULT,
+    ) -> AgentRuntime:
         """Return the existing runtime for ``agent_id`` or spawn a new one.
 
-        Dead or shutting-down entries are replaced. Probe sessions are rejected so
-        they never enter the pool.
+        ``session_mode`` is the bzcode runtime mode (yolo/plan/default) applied via
+        setMode once the fresh process is ready; it's ignored when reusing a live
+        runtime. Dead entries are replaced. Probe sessions are rejected so they never
+        enter the pool.
         """
         if agent_id.startswith(_PROBE_PREFIX):
             raise ProbeSessionRejected(f"probe session {agent_id!r} must not enter the pool")
@@ -110,7 +117,7 @@ class AgentPool:
                 agent_id,
                 cwd,
                 mode,
-                session_mode=self._session_mode_for(mode),
+                session_mode=session_mode,
                 on_usage=self._on_usage,
             )
             cmd = self._build_command(agent_id)
