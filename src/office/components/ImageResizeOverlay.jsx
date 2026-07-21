@@ -85,16 +85,31 @@ const ImageResizeOverlay = ({
   const [resizeHandle, setResizeHandle] = useState(null);
   const resizeStartPosRef = useRef({ x: 0, y: 0 });
   const resizeStartSizeRef = useRef({ width: 0, height: 0 });
+  // Refs for values that change during an active resize/drag — avoids tearing down
+  // document listeners on every mousemove (which causes mouseup to land in the gap).
+  const currentSizeRef = useRef({ width: 0, height: 0 });
+  const onResizeCompleteRef = useRef(onResizeComplete);
+  const onMoveRef = useRef(onMove);
+  // Fixed edges captured at drag start — the opposite corner from the active handle stays anchored.
+  const resizeAnchorRef = useRef({ left: 0, top: 0, right: 0, bottom: 0 });
   // drag start: client XY + overlay origin in container-relative CSS px
   const dragStartRef = useRef({ clientX: 0, clientY: 0, originLeft: 0, originTop: 0 });
   const ghostPosRef = useRef(null); // readable from the mouseup closure without stale state
 
+  // Keep callback refs in sync with props so event handlers always call the latest version
+  // without needing to be in effect dependency arrays (which would tear down listeners on every render).
+  useEffect(() => {
+    onResizeCompleteRef.current = onResizeComplete;
+  }, [onResizeComplete]);
+  useEffect(() => {
+    onMoveRef.current = onMove;
+  }, [onMove]);
+
   useEffect(() => {
     if (imageStyle?.imageUrl && imageIndex !== null) {
-      setCurrentSize({
-        width: imageStyle.imageWidth || 64,
-        height: imageStyle.imageHeight || 64,
-      });
+      const next = { width: imageStyle.imageWidth || 64, height: imageStyle.imageHeight || 64 };
+      setCurrentSize(next);
+      currentSizeRef.current = next;
     }
   }, [imageStyle, imageIndex]);
 
@@ -111,11 +126,14 @@ const ImageResizeOverlay = ({
       if (h.includes('l')) newW = Math.max(20, newW - dx);
       if (h.includes('b')) newH = Math.max(20, newH + dy);
       if (h.includes('t')) newH = Math.max(20, newH - dy);
-      setCurrentSize({ width: Math.round(newW), height: Math.round(newH) });
+      const next = { width: Math.round(newW), height: Math.round(newH) };
+      currentSizeRef.current = next;
+      setCurrentSize(next);
     };
 
     const handleMouseUp = () => {
-      onResizeComplete?.({ width: currentSize.width, height: currentSize.height });
+      // Read from ref — the state value would be stale if React batched the last setCurrentSize
+      onResizeCompleteRef.current?.({ ...currentSizeRef.current });
       setIsResizing(false);
       setResizeHandle(null);
     };
@@ -126,7 +144,7 @@ const ImageResizeOverlay = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing, resizeHandle, currentSize, onResizeComplete]);
+  }, [isResizing, resizeHandle]); // currentSize and onResizeComplete intentionally excluded — use refs
 
   // Ghost-drag effect: during drag we only move a dashed outline (ghostPos).
   // onMove is called ONCE on mouseup with the final position, avoiding live text reflow
@@ -165,11 +183,11 @@ const ImageResizeOverlay = ({
 
       // Y: ghost.top is container-relative CSS px (top-left of image).
       // Convert bottom of image to absolute draw-space canvas px, then to content-space.
-      const imgBottomCSS = ghost.top - canvasOffsetY + currentSize.height;
+      const imgBottomCSS = ghost.top - canvasOffsetY + currentSizeRef.current.height;
       const imgBottomDrawPx = imgBottomCSS * SF + scrollY;
       const newY = Math.round(drawYToContentY(imgBottomDrawPx, topMargin) / SF);
 
-      onMove?.({ x: newX, y: newY });
+      onMoveRef.current?.({ x: newX, y: newY });
       setGhostPos(null);
       ghostPosRef.current = null;
     };
@@ -180,7 +198,7 @@ const ImageResizeOverlay = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, canvasRef, scrollY, topMargin, onMove, currentSize]);
+  }, [isDragging, canvasRef, scrollY, topMargin]); // onMove and currentSize intentionally excluded — use refs
 
   const handleMoveStart = e => {
     e.stopPropagation();
@@ -204,11 +222,20 @@ const ImageResizeOverlay = ({
     if (!imageStyle?.imageUrl) return;
     resizeStartPosRef.current = { x: e.clientX, y: e.clientY };
     resizeStartSizeRef.current = { width: currentSize.width, height: currentSize.height };
+    // Capture all four edges before resize begins — the opposite corner from the handle is the anchor.
+    const style = getOverlayStyleFromDoc();
+    resizeAnchorRef.current = {
+      left: style.left,
+      top: style.top,
+      right: style.left + currentSize.width,
+      bottom: style.top + currentSize.height,
+    };
     setResizeHandle(handle);
     setIsResizing(true);
   };
 
-  const getOverlayStyle = () => {
+  // Compute overlay position from document coordinates (xs/ys). Used when not resizing.
+  const getOverlayStyleFromDoc = () => {
     if (imageIndex === null || !xs?.[imageIndex] || !ys?.[imageIndex] || !imageStyle?.imageUrl) {
       return { display: 'none' };
     }
@@ -221,9 +248,9 @@ const ImageResizeOverlay = ({
     const imgW = currentSize.width || imageStyle.imageWidth || 64;
     const imgH = currentSize.height || imageStyle.imageHeight || 64;
 
-    // ys[] is content-space; convert to canvas draw-space, then subtract scrollY
+    // ys[] is content-space bottom of image; convert to canvas draw-space, then subtract scrollY
     const drawY = contentYToDrawY(ys[imageIndex], topMargin) - scrollY;
-    const canvasTop = drawY - imgH * SF; // top-left of image in canvas px
+    const canvasTop = drawY - imgH * SF; // top of image in canvas px
 
     const canvasRect = canvas.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
@@ -241,6 +268,21 @@ const ImageResizeOverlay = ({
       height: imgH,
       pointerEvents: 'none',
     };
+  };
+
+  // During resize, derive position from the fixed anchor edges so the correct corner stays put.
+  // The handle name encodes which edges MOVE: 'l' moves left edge, 'r' moves right, etc.
+  // The OPPOSITE edges are anchored.
+  const getOverlayStyle = () => {
+    if (!isResizing || !resizeHandle) return getOverlayStyleFromDoc();
+    const { left: aLeft, top: aTop, right: aRight, bottom: aBottom } = resizeAnchorRef.current;
+    const w = currentSize.width;
+    const h = currentSize.height;
+    // left-side handles: right edge is anchored, left moves
+    const left = resizeHandle.includes('l') ? aRight - w : aLeft;
+    // top handles: bottom edge is anchored, top moves
+    const top = resizeHandle.includes('t') ? aBottom - h : aTop;
+    return { position: 'absolute', left, top, width: w, height: h, pointerEvents: 'none' };
   };
 
   if (imageIndex === null || !imageStyle?.imageUrl) return null;
