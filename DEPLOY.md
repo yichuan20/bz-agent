@@ -56,9 +56,7 @@ All server files live under `/opt/boltzagent/` by convention:
 │   ├── widgets/            ← Widget JSON definitions
 │   └── credentials.json    ← API keys & secrets (never commit, set manually on server)
 ├── scripts/
-│   ├── boltzagent.service  ← systemd unit (copy to /etc/systemd/system/)
-│   ├── build-deploy.sh     ← Local helper: build + zip for upload
-│   └── build-and-serve.sh  ← Local dev helper (not used in production)
+│   └── boltzagent.service  ← systemd unit (copy to /etc/systemd/system/)
 └── .venv/                  ← Python virtualenv (created on the server, not synced)
 
 /usr/local/bin/bzcode       ← bzcode binary (installed separately — see §3d)
@@ -88,20 +86,47 @@ mkdir -p /opt/boltzagent
 
 ### 3c. Upload the deployment package
 
-Build and zip locally first:
+#### Version compatibility
+
+| Version format | Rule |
+|---|---|
+| `xx.xx.xx` | Release version — frontend and backend **must match exactly** |
+| `xx.xx.xx.yy` | Dev version — frontend and backend may differ; `yy` is an independent per-side dev counter |
+
+The version string is printed at startup and served by `GET /api/version`. Always confirm both sides are on compatible versions after a deploy.
+
+#### Package contents
+
+`deploy.sh` produces `bz-agent-v<VERSION>.zip` containing:
+
+| Path | Description |
+|---|---|
+| `app.py` | FastAPI entry point |
+| `server.py` | Business logic, routes, WebSocket bridge |
+| `requirements.txt` | Python dependency list |
+| `agent_modes.json` | Agent mode definitions |
+| `dist/` | Built frontend SPA (compiled locally before zipping) |
+| `bzcode_assets/scripts/` | Python helper scripts called by bzcode |
+| `bzcode_assets/templates/` | Document and slide templates |
+| `server_data/widgets/` | Widget JSON definitions |
+
+**Not included** (set manually on the server):
+- `server_data/credentials.json` — API keys and secrets
+- `.venv/` — Python virtualenv (created on the server)
+
+#### Build and upload
 
 ```bash
 # On your local machine — inside bz-agent/
-./scripts/build-deploy.sh          # produces deploy.zip
-# or with a version label:
-./scripts/build-deploy.sh bz-agent-v1.3
+./deploy.sh              # auto-detects version from server.py → bz-agent-v<VERSION>.zip
+./deploy.sh 0.6.2        # override version explicitly
 ```
 
 Then copy to the server:
 
 ```bash
-scp deploy.zip ubuntu@<server-ip>:/opt/boltzagent/
-ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o deploy.zip"
+scp bz-agent-v<VERSION>.zip ubuntu@<server-ip>:/opt/boltzagent/
+ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o bz-agent-v<VERSION>.zip"
 ```
 
 ### 3d. Install the bzcode binary
@@ -310,11 +335,11 @@ continues without it (logs a warning). Add it manually if you need DB persistenc
 
 ```bash
 # 1. Build + zip locally
-./scripts/build-deploy.sh
+./deploy.sh              # produces bz-agent-v<VERSION>.zip
 
 # 2. Upload and extract
-scp deploy.zip ubuntu@<server-ip>:/opt/boltzagent/
-ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o deploy.zip"
+scp bz-agent-v<VERSION>.zip ubuntu@<server-ip>:/opt/boltzagent/
+ssh ubuntu@<server-ip> "cd /opt/boltzagent && unzip -o bz-agent-v<VERSION>.zip"
 
 # 3. Reinstall Python deps if requirements.txt changed
 ssh ubuntu@<server-ip> "cd /opt/boltzagent && .venv/bin/pip install -r requirements.txt -q"
@@ -328,7 +353,7 @@ ssh ubuntu@<server-ip> "systemctl restart boltzagent"
 ## 10. Verification
 
 ```bash
-# Health check — returns {"backend": "0.1.0"}
+# Health check — returns {"backend": "x.y.z"} (or "x.y.z.yy" for dev builds)
 curl http://<server-ip>:18789/api/version
 
 # Agent modes list
