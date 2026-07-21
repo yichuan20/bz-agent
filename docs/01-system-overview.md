@@ -13,66 +13,35 @@
 
 ## The `bzcode` relationship
 
-`bzcode` ("Boltzbit Code") is a **standalone terminal coding agent** — a
-TypeScript/Bun program that streams LLM responses, runs tools (Bash, file
-read/edit/write), and loops until a task is done, against Boltzbit backends.
-Credentials live in `~/.boltzbit/credentials.json` (or `$BZ_HOME`).
+`bzcode` ("Boltzbit Code") is a **standalone terminal coding agent** — a TypeScript/Bun program that streams LLM responses, runs tools (Bash, file read/edit/write), and loops until a task is done, against Boltzbit backends. Credentials live in `~/.boltzbit/credentials.json` (or `$BZ_HOME`).
 
 **`bz-agent` is the product layer that wraps and orchestrates `bzcode`.** It:
 
-1. Generates per-session config from `agent_modes.json` and writes it into the
-   session directory (`IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `settings.json`,
-   skills).
+1. Generates per-session config from `agent_modes.json` and writes it into the session directory (`IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `settings.json`, skills).
 2. Spawns `bzcode` as a subprocess in the user's working directory.
 3. Bridges the agent's stdio to the browser (over SSE, or legacy WebSocket).
-4. Supplies the `bzcode_assets/scripts/*.py` helpers as the agent's tools and
-   serves the endpoints those tools call back into (`/proxy`, `/files`,
-   `/widgets`, `/credentials`, …).
+4. Supplies the `bzcode_assets/scripts/*.py` helpers as the agent's tools and serves the endpoints those tools call back into (`/proxy`, `/files`, `/widgets`, `/credentials`, …).
 5. Adds a web UI, document editors, and a widget canvas around it.
 
-`bzcode` is the generic engine; `bz-agent` is the opinionated product built on
-top of it.
+`bzcode` is the generic engine; `bz-agent` is the opinionated product built on top of it.
 
 ## Request / connection flow (the live agent)
 
-The shipping UI ([`src/routes/_app/agent.tsx`](../src/routes/_app/agent.tsx))
-connects over **SSE + REST**, keyed on `{cwd, mode, sessionId}`:
+The shipping UI ([`src/routes/_app/agent.tsx`](../src/routes/_app/agent.tsx)) connects over **SSE + REST**, keyed on `{cwd, mode, sessionId}`:
 
-1. **`POST /api/pool/connect`** `{cwd, mode, sessionId}` → the server writes the
-   session config, gets-or-creates an `AgentPoolEntry` (spawning `bzcode` if
-   needed), and returns `{sessionId, messages, agentStatus, modes, commands,
-   sessionMode}`. History is restored here.
-2. **`GET /api/pool/{id}/stream`** → a Server-Sent-Events stream. The client
-   reads it via `fetch` + `ReadableStream`, splitting on `\n\n` and parsing
-   `data:` lines into the [stdio-bridge protocol](../stdio-bridge-protocol.md)
-   message types (`session`, `status`, `delta`, `assistant`, `tool`, `prompt`,
-   `result`, `system`, `user`).
+1. **`POST /api/pool/connect`** `{cwd, mode, sessionId}` → the server writes the session config, gets-or-creates an `AgentPoolEntry` (spawning `bzcode` if needed), and returns `{sessionId, messages, agentStatus, modes, commands, sessionMode}`. History is restored here.
+2. **`GET /api/pool/{id}/stream`** → a Server-Sent-Events stream. The client reads it via `fetch` + `ReadableStream`, splitting on `\n\n` and parsing `data:` lines into the [stdio-bridge protocol](../stdio-bridge-protocol.md) message types (`session`, `status`, `delta`, `assistant`, `tool`, `prompt`, `result`, `system`, `user`).
 3. **`POST /api/pool/{id}/send`** → outbound user messages / permission replies.
-4. **Reconnect** uses exponential backoff `min(2000·2^n, 30000)`, max 5
-   attempts, then marks the session unavailable.
+4. **Reconnect** uses exponential backoff `min(2000·2^n, 30000)`, max 5 attempts, then marks the session unavailable.
 
-The **legacy WebSocket path** (`GET /ws?cwd=&sessionId=&mode=`, hook
-`useBzcodeChat.ts`) does the same job through one socket with ping/pong
-keepalive, but the current UI does not use it. See
-[04 — Frontend](./04-frontend.md).
+The **legacy WebSocket path** (`GET /ws?cwd=&sessionId=&mode=`, hook `useBzcodeChat.ts`) does the same job through one socket with ping/pong keepalive, but the current UI does not use it. See [04 — Frontend](./04-frontend.md).
 
 ## Process & state model
 
-- **Single process, single worker.** The server holds all state in memory
-  (`AgentPool._entries`, `_active_sessions`, `_token_stats`, `_batch_store`,
-  `_whatsapp_sessions`, `_dev_servers`, `_cursor_store`). It **must not** run
-  with `--workers N` or behind a multi-worker gunicorn — state is not shared.
-- **The AgentPool decouples process lifetime from connection lifetime.** A
-  `bzcode` process (`AgentPoolEntry`) outlives any single browser connection:
-  you can disconnect and reconnect to the same `sessionId` and the process is
-  still there with its context. Idle processes (no clients, `idle` status) are
-  reaped after `AGENT_IDLE_TIMEOUT` (default 300s) by a background sweeper.
-- **Fan-out to multiple subscribers.** Each entry maintains a set of subscriber
-  queues, so both SSE and WS clients (and reconnects) can attach to the same
-  live agent.
-- **Sessions persist on disk**, in-memory stats do not. Session transcripts and
-  config live under `$BZ_HOME/sessions/` (default `/usr/local/boltzbit/sessions`);
-  token stats / cursor positions / active-session sets are lost on restart.
+- **Single process, single worker.** The server holds all state in memory (`AgentPool._entries`, `_active_sessions`, `_token_stats`, `_batch_store`, `_whatsapp_sessions`, `_dev_servers`, `_cursor_store`). It **must not** run with `--workers N` or behind a multi-worker gunicorn — state is not shared.
+- **The AgentPool decouples process lifetime from connection lifetime.** A `bzcode` process (`AgentPoolEntry`) outlives any single browser connection: you can disconnect and reconnect to the same `sessionId` and the process is still there with its context. Idle processes (no clients, `idle` status) are reaped after `AGENT_IDLE_TIMEOUT` (default 300s) by a background sweeper.
+- **Fan-out to multiple subscribers.** Each entry maintains a set of subscriber queues, so both SSE and WS clients (and reconnects) can attach to the same live agent.
+- **Sessions persist on disk**, in-memory stats do not. Session transcripts and config live under `$BZ_HOME/sessions/` (default `/usr/local/boltzbit/sessions`); token stats / cursor positions / active-session sets are lost on restart.
 
 ## On-disk layout (runtime)
 
@@ -102,11 +71,8 @@ $BZ_HOME (default /usr/local/boltzbit)
 
 ## Key entry points to read first
 
-- Backend bootstrap: `app.py` bottom (`app = create_app(...)`, ~line 4166) and
-  the `create_app` factory (line 744).
+- Backend bootstrap: `app.py` bottom (`app = create_app(...)`, ~line 4166) and the `create_app` factory (line 744).
 - The bridge: `app.py:794` (`ws_endpoint`) and the pool routes `app.py:1749–1933`.
-- The pool: `server.py:1012` (`AgentPoolEntry`), `server.py:1410` (`AgentPool`),
-  singleton at `server.py:1538`.
+- The pool: `server.py:1012` (`AgentPoolEntry`), `server.py:1410` (`AgentPool`), singleton at `server.py:1538`.
 - Session config generation: `server.py:79` (`_write_session_config`).
-- Frontend: `src/routes/_app/agent.tsx` (connect `:5049`, SSE `:5122`,
-  message handler `:4801`).
+- Frontend: `src/routes/_app/agent.tsx` (connect `:5049`, SSE `:5122`, message handler `:4801`).

@@ -28,6 +28,7 @@ build-backend = "hatchling.build"
 packages = ["src/workspace_backend"]
 
 [tool.pytest.ini_options]
+addopts = "-v"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]

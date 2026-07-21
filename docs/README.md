@@ -1,30 +1,17 @@
 # BoltzAgent (`bz-agent`) — Architecture & Code Review
 
-> Written 2026-07-21 as a hand-over review of the repo. It documents **what the
-> code actually does today** (version 0.6.4), not what the boilerplate README
-> claims. Where the two disagree, this doc is the source of truth.
+> Written 2026-07-21 as a hand-over review of the repo. It documents **what the code actually does today** (version 0.6.4), not what the boilerplate README claims. Where the two disagree, this doc is the source of truth.
 
 ## What this repo is
 
-`bz-agent` (product name **BoltzAgent**) is a **single-process backend service
-with a bundled web UI** that wraps the [`bzcode`](../../Repos/bzcode) terminal
-coding agent so that one server can **create and manage many agent sessions** on
-a remote machine. Each session is a long-lived `bzcode` subprocess driven over
-stdio; the server exposes those sessions to a browser (or mobile / WhatsApp)
-client and layers a large amount of product functionality on top:
+`bz-agent` (product name **BoltzAgent**) is a **single-process backend service with a bundled web UI** that wraps the [`bzcode`](../../Repos/bzcode) terminal coding agent so that one server can **create and manage many agent sessions** on a remote machine. Each session is a long-lived `bzcode` subprocess driven over stdio; the server exposes those sessions to a browser (or mobile / WhatsApp) client and layers a large amount of product functionality on top:
 
-- **Agent modes / personas** — 24 named modes (4 base + 20 professional
-  profiles) that reconfigure each session's identity, behaviour, and tools.
-- **A document workbench** — server-side parse/edit/save of Word, Excel,
-  PowerPoint and PDF, with matching rich WYSIWYG editors in the frontend.
-- **A widget canvas** — sandboxed vanilla-JS "widgets" the agent can generate
-  and place on a per-session dashboard.
-- **BoltzHub app-building** — the agent can scaffold, provision (database, API
-  gateway, remote-python), and deploy full apps to Boltzbit's cloud.
+- **Agent modes / personas** — 24 named modes (4 base + 20 professional profiles) that reconfigure each session's identity, behaviour, and tools.
+- **A document workbench** — server-side parse/edit/save of Word, Excel, PowerPoint and PDF, with matching rich WYSIWYG editors in the frontend.
+- **A widget canvas** — sandboxed vanilla-JS "widgets" the agent can generate and place on a per-session dashboard.
+- **BoltzHub app-building** — the agent can scaffold, provision (database, API gateway, remote-python), and deploy full apps to Boltzbit's cloud.
 
-It is deployed as **one FastAPI/uvicorn process on one port (default 18789)**
-that serves the API, the agent bridge, and the built SPA together. No Docker,
-no nginx, no multi-worker.
+It is deployed as **one FastAPI/uvicorn process on one port (default 18789)** that serves the API, the agent bridge, and the built SPA together. No Docker, no nginx, no multi-worker.
 
 ```
 Browser SPA  ──HTTP + SSE──►  FastAPI (app.py)  ──stdio──►  bzcode subprocess (per session)
@@ -54,25 +41,11 @@ Browser SPA  ──HTTP + SSE──►  FastAPI (app.py)  ──stdio──►  
 
 ## The 60-second orientation
 
-- **Two Python files hold ~90% of the backend:** `app.py` (4,182 lines,
-  FastAPI routing + document rendering) and `server.py` (2,717 lines, all
-  business logic + the `AgentPool`). `app.py` imports ~50 symbols from
-  `server.py`. `server.py` is *not* runnable on its own.
-- **The heart of the frontend is one 6,992-line file:**
-  [`src/routes/_app/agent.tsx`](../src/routes/_app/agent.tsx). It contains the
-  entire live-agent experience (connection state machine, chat, canvas, editor).
-- **The production chat transport is SSE + REST**, not WebSocket. The
-  `/ws` WebSocket endpoint and the `useBzcodeChat` hook still exist but are the
-  **legacy path**; the shipping UI uses `POST /api/pool/connect` →
-  `GET /api/pool/{id}/stream` (SSE) → `POST /api/pool/{id}/send`.
-- **There is no real database.** `asyncpg` is in `requirements.txt` and there's
-  a `docker-compose.yml` for Postgres, but the server never connects —
-  `app.state.db` is always `None`, `/db/health` always 503, and the "database"
-  is per-widget JSON files on disk.
-- **The boilerplate `README.md` is inaccurate.** It was inherited from
-  `bz-app-template` and describes a `docs/` structure, OAuth flow, and packages
-  (`@boltzbit/pebble`, etc.) that don't reflect this repo. Trust *this* `docs/`
-  and [`DEPLOY.md`](../DEPLOY.md) instead.
+- **Two Python files hold ~90% of the backend:** `app.py` (4,182 lines, FastAPI routing + document rendering) and `server.py` (2,717 lines, all business logic + the `AgentPool`). `app.py` imports ~50 symbols from `server.py`. `server.py` is *not* runnable on its own.
+- **The heart of the frontend is one 6,992-line file:** [`src/routes/_app/agent.tsx`](../src/routes/_app/agent.tsx). It contains the entire live-agent experience (connection state machine, chat, canvas, editor).
+- **The production chat transport is SSE + REST**, not WebSocket. The `/ws` WebSocket endpoint and the `useBzcodeChat` hook still exist but are the **legacy path**; the shipping UI uses `POST /api/pool/connect` → `GET /api/pool/{id}/stream` (SSE) → `POST /api/pool/{id}/send`.
+- **There is no real database.** `asyncpg` is in `requirements.txt` and there's a `docker-compose.yml` for Postgres, but the server never connects — `app.state.db` is always `None`, `/db/health` always 503, and the "database" is per-widget JSON files on disk.
+- **The boilerplate `README.md` is inaccurate.** It was inherited from `bz-app-template` and describes a `docs/` structure, OAuth flow, and packages (`@boltzbit/pebble`, etc.) that don't reflect this repo. Trust *this* `docs/` and [`DEPLOY.md`](../DEPLOY.md) instead.
 
 ## Known-good references already in the repo
 
@@ -80,8 +53,5 @@ These existing files are accurate and worth reading alongside this review:
 
 - [`DEPLOY.md`](../DEPLOY.md) — the real, detailed remote-deployment guide.
 - [`CHANGELOG.md`](../CHANGELOG.md) — accurate history of backend changes.
-- [`stdio-bridge-protocol.md`](../stdio-bridge-protocol.md) — the NDJSON
-  message protocol between the client and `bzcode --stdio` (the thing the
-  SSE/WS bridge wraps).
-- [`agent_mode_profiles.md`](../agent_mode_profiles.md) — narrative description
-  of the 20 professional personas.
+- [`stdio-bridge-protocol.md`](../stdio-bridge-protocol.md) — the NDJSON message protocol between the client and `bzcode --stdio` (the thing the SSE/WS bridge wraps).
+- [`agent_mode_profiles.md`](../agent_mode_profiles.md) — narrative description of the 20 professional personas.
