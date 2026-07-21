@@ -62,10 +62,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ctx = ctx
     await ctx.pool.start()
     log.info(
-        "workspace-backend starting: cwd=%s bz_home=%s port=%s",
+        "workspace-backend starting: cwd=%s bz_home=%s data_root=%s",
         settings.bzcode_cwd,
         settings.bz_home,
-        settings.port,
+        settings.data_root,
     )
     try:
         yield

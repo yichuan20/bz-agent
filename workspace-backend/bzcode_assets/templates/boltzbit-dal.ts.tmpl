@@ -1,0 +1,93 @@
+// Template: boltzbit-dal.ts.tmpl
+// Usage: Copy to src/lib/{domain}/{domain}-dal.ts and fill in {Domain}/{domain}/{tableName}.
+// Pattern: dynasClient wrapping Dynas REST API + row mapper (snake_case → camelCase).
+// Requires: @boltzbit/dynas-client installed, dynasClient imported from ../../auth (adjust path).
+// Requires: VITE_DYNAS_APP_ID in .env
+
+import type { {Domain}, Create{Domain}Input } from '../../mocks/{domain}.mock';
+import { dynasClient } from '../../auth'; // adjust import path to match project
+
+const APP_ID = import.meta.env.VITE_DYNAS_APP_ID as string;
+const TABLE = '{tableName}' as const; // snake_case table name in Dynas
+
+// ── Row mapper ────────────────────────────────────────────────────────────────
+// Convert Dynas snake_case row → camelCase TS type.
+// JSON-type columns arrive as strings — parse them.
+function rowTo{Domain}(row: Record<string, unknown>): {Domain} {
+  return {
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    status: (row.status as {Domain}['status']) ?? 'active',
+    // Map additional fields here, e.g.:
+    // description: String(row.description ?? ''),
+    // amount: Number(row.amount ?? 0),
+    // tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags as string[] ?? []),
+    createdAt: String(row.created_at ?? row.createdAt ?? ''),
+    updatedAt: String(row.updated_at ?? row.updatedAt ?? ''),
+  };
+}
+
+// ── Read ──────────────────────────────────────────────────────────────────────
+
+export async function fetch{Domain}s(filter?: Record<string, unknown>[]): Promise<{Domain}[]> {
+  const { data, error } = await dynasClient.GET(
+    '/v1/apps/{appId}/tables/{tableName}/records' as never,
+    {
+      params: {
+        path: { appId: APP_ID, tableName: TABLE },
+        query: filter ? { filter: JSON.stringify(filter) } : {},
+      },
+    } as never
+  );
+  if (error) throw new Error(JSON.stringify(error));
+  const rows = (data as { records?: Record<string, unknown>[] })?.records ?? [];
+  return rows.map(rowTo{Domain});
+}
+
+export async function fetch{Domain}ById(id: string): Promise<{Domain} | null> {
+  const { data, error } = await dynasClient.GET(
+    '/v1/apps/{appId}/tables/{tableName}/records/{id}' as never,
+    { params: { path: { appId: APP_ID, tableName: TABLE, id } } } as never
+  );
+  if (error) return null;
+  return rowTo{Domain}(data as Record<string, unknown>);
+}
+
+// ── Write ─────────────────────────────────────────────────────────────────────
+
+export async function create{Domain}(input: Create{Domain}Input): Promise<{Domain}> {
+  const body: Record<string, unknown> = {
+    name: input.name,
+    status: input.status ?? 'active',
+    // Map create input fields to snake_case for Dynas, e.g.:
+    // description: input.description,
+    // tags: JSON.stringify(input.tags ?? []),  ← json columns need JSON.stringify
+  };
+  const { data, error } = await dynasClient.POST(
+    '/v1/apps/{appId}/tables/{tableName}/records' as never,
+    { params: { path: { appId: APP_ID, tableName: TABLE } }, body } as never
+  );
+  if (error) throw new Error(JSON.stringify(error));
+  return rowTo{Domain}(data as Record<string, unknown>);
+}
+
+export async function update{Domain}(id: string, patch: Partial<{Domain}>): Promise<{Domain}> {
+  const body: Record<string, unknown> = {};
+  if (patch.name !== undefined) body.name = patch.name;
+  if (patch.status !== undefined) body.status = patch.status;
+  // Map additional patch fields here
+  const { data, error } = await dynasClient.PATCH(
+    '/v1/apps/{appId}/tables/{tableName}/records/{id}' as never,
+    { params: { path: { appId: APP_ID, tableName: TABLE, id } }, body } as never
+  );
+  if (error) throw new Error(JSON.stringify(error));
+  return rowTo{Domain}(data as Record<string, unknown>);
+}
+
+export async function delete{Domain}(id: string): Promise<void> {
+  const { error } = await dynasClient.DELETE(
+    '/v1/apps/{appId}/tables/{tableName}/records/{id}' as never,
+    { params: { path: { appId: APP_ID, tableName: TABLE, id } } } as never
+  );
+  if (error) throw new Error(JSON.stringify(error));
+}

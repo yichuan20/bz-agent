@@ -44,17 +44,12 @@ class Settings(BaseSettings):
     bzcode_path: str = Field(default="bzcode", alias="BZCODE_PATH")
 
     # Directory holding agent_modes.json, bzcode_assets/, and server_data/. Defaults
-    # to the repo root (four parents up from this file); override in deployment.
+    # to the workspace-backend package root (where those assets are vendored); override
+    # in deployment (e.g. /opt/boltzagent).
     data_root: Path = Field(
-        default=Path(__file__).resolve().parents[3],
+        default=Path(__file__).resolve().parents[2],
         alias="BZ_DATA_ROOT",
     )
-
-    # HTTP + SSE port.
-    port: int = Field(default=18789, alias="PORT")
-
-    # Bind host.
-    host: str = Field(default="0.0.0.0", alias="HOST")
 
     # Seconds an idle (no-client) agent runtime lives before the sweeper reaps it.
     agent_idle_timeout: float = Field(default=300.0, alias="AGENT_IDLE_TIMEOUT")

@@ -33,6 +33,7 @@ from workspace_backend.services.credential_service import CredentialService
 from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
+from workspace_backend.services.widget_catalog import WidgetCatalog
 
 log = get_logger(__name__)
 
@@ -57,12 +58,14 @@ async def build_context(settings: Settings) -> AppContext:
 
     runtime_state = RuntimeState()
 
+    widget_catalog = WidgetCatalog(server_data / "widgets" / "index.json")
     mode_service = ModeService(mode_config_store, http_client)
     config_writer = ConfigWriter(
         mode_service,
         agent_store,
         assets_root=assets_root,
         server_data_dir=server_data,
+        widget_table_provider=widget_catalog.template_table,
     )
     agent_service = AgentService(
         agent_store,

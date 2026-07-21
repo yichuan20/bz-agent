@@ -9,12 +9,11 @@ from workspace_backend.config import Settings
 
 def test_defaults(monkeypatch) -> None:
     """With no env vars, settings fall back to documented defaults."""
-    for var in ("BZCODE_CWD", "BZ_HOME", "BZCODE_PATH", "PORT", "AGENT_IDLE_TIMEOUT", "LOG_LEVEL"):
+    for var in ("BZCODE_CWD", "BZ_HOME", "BZCODE_PATH", "AGENT_IDLE_TIMEOUT", "LOG_LEVEL"):
         monkeypatch.delenv(var, raising=False)
     s = Settings(_env_file=None)
     assert s.bz_home == Path("/usr/local/boltzbit")
     assert s.bzcode_path == "bzcode"
-    assert s.port == 18789
     assert s.agent_idle_timeout == 300.0
     assert s.log_level == "INFO"
 
@@ -25,12 +24,10 @@ def test_reads_env(monkeypatch, tmp_path: Path) -> None:
     cwd = tmp_path / "ws"
     monkeypatch.setenv("BZ_HOME", str(home))
     monkeypatch.setenv("BZCODE_CWD", str(cwd))
-    monkeypatch.setenv("PORT", "9000")
     monkeypatch.setenv("AGENT_IDLE_TIMEOUT", "42")
     s = Settings(_env_file=None)
     assert s.bz_home == home
     assert s.bzcode_cwd == cwd
-    assert s.port == 9000
     assert s.agent_idle_timeout == 42.0
 
 

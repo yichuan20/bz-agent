@@ -1,0 +1,66 @@
+{
+  "_comment": "Template: boltzbit-anksy-route.json.tmpl — Anksy RouteCreate payload. IMPORTANT: path must start with /api/",
+  "method": "GET",
+  "path": "/api/v1/{resources}",
+  "description": "Human-readable description of what this route does",
+  "tags": ["{Tag}"],
+  "parameters": [
+    {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": { "type": "string", "format": "uuid" },
+      "description": "Resource UUID"
+    },
+    {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": { "type": "string", "enum": ["active", "pending", "archived"] },
+      "description": "Filter by status"
+    }
+  ],
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "description": "Success",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id":     { "type": "string" },
+          "name":   { "type": "string" },
+          "status": { "type": "string" }
+        },
+        "required": ["id", "name"]
+      },
+      "example": {
+        "id": "abc123",
+        "name": "Example",
+        "status": "active"
+      }
+    }
+  },
+  "handler": {
+    "mode": "mock",
+    "mock_response": {
+      "status_code": 200,
+      "content_type": "application/json",
+      "body": {
+        "id": "abc123",
+        "name": "Example",
+        "status": "active"
+      }
+    }
+  }
+}
+
+// To switch to proxy mode (pointing at Dynas), replace "handler" with:
+// {
+//   "mode": "proxy",
+//   "target_url": "https://flow.boltzbit.com/bz-dynas/api/v1/apps/{dynas_app_id}/tables/{table}/records",
+//   "request_template": {
+//     "query": {
+//       "filter": "[{\"field\":\"status\",\"op\":\"eq\",\"value\":\"{{query.status}}\"}]"
+//     }
+//   }
+// }

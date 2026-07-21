@@ -1,0 +1,44 @@
+# Template: boltzbit-dpyes-snippet.py.tmpl
+# Usage: Copy to a temp file, fill in the logic, then register with:
+#   $BZ_PYTHON {scripts_path}/bzapp-dpyes.py create-snippet \
+#     --name "my-snippet" --code @snippet.py \
+#     --input-schema '{"type":"object","properties":{"key":{"type":"string"}}}'
+#     --output-schema '{"type":"object","properties":{"result":{"type":"string"}}}'
+#
+# CONTRACT:
+#   - Must define def run(input: dict) -> dict
+#   - dpyes injects __context__ = {"user_id": "...", "auth_header": "Bearer ..."}
+#   - Return a plain dict (JSON-serialisable)
+#   - Raise an exception to signal failure — dpyes captures it as job error
+#
+# AVAILABLE: standard library + requests, pandas, numpy, scipy (check dpyes docs for full list)
+
+def run(input: dict) -> dict:
+    """
+    {description}
+
+    Args:
+        input: {inputDescription}
+
+    Returns:
+        {outputDescription}
+    """
+    # Injected by dpyes at runtime — use for authenticated Dynas calls
+    # context = __context__  # noqa: F821  (injected global, not defined here)
+    # auth_header = context.get("auth_header", "")
+
+    # ── Optional: fetch data from Dynas ───────────────────────────────────────
+    # import requests
+    # DYNAS_BASE = "https://flow.boltzbit.com/bz-dynas/api"
+    # APP_ID = "{DYNAS_APP_ID}"
+    # TABLE = "{tableName}"
+    # rows = requests.get(
+    #     f"{DYNAS_BASE}/v1/apps/{APP_ID}/tables/{TABLE}/records",
+    #     headers={"Authorization": auth_header},
+    # ).json().get("records", [])
+
+    # ── Your processing logic ─────────────────────────────────────────────────
+
+    result = {}
+
+    return result

@@ -14,3 +14,9 @@ build/
 
 # env
 .env
+
+# runtime data written at runtime (secrets + widget records). The built-in widget
+# library (server_data/widgets/) IS committed as a shipped asset.
+server_data/credentials.json
+server_data/widget_data/
+server_data/custom_widgets/
