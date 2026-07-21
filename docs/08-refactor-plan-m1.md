@@ -150,12 +150,13 @@ workspace-backend/
   placeholders into outbound requests (old `server.py:_resolve(text, creds)` at 628,
   applied in `/proxy` at app.py:1242) is **not** ported — it belongs with `/proxy`
   (M4) and the widget canvas (M3). Port the small `{{KEY}}` regex resolver then.
-- **Outbound `workingDir` path stripping.** The old `GET /sessions` stripped the
-  absolute-path prefix off each `workingDir` before returning it (app.py:1653-1660),
-  exposing only `workspace/foo`. The *inverse* (relative→absolute rebuild) is already
-  ported (`agent_service.resolve_cwd`, `file_service._resolve`). Decide when wiring
-  `GET /v1/agents` in Phase 4 whether to keep this leaky presentation transform or
-  return absolute paths; note the choice in the migration doc.
+- **Outbound `workingDir` path stripping (RESOLVED — ported).** The old
+  `GET /sessions` stripped the absolute-path prefix off each `workingDir`
+  (app.py:1653-1660), exposing only `workspace/foo`. This is now ported:
+  `agent_service.relativize_cwd` strips `parent(default_cwd)` for display in
+  `GET /api/v1/agents` (list + single), paired with the inverse
+  `resolve_cwd`/`file_service._resolve` rebuild on input. Same partial behavior as
+  the old server (paths outside the base stay absolute).
 - **File API traversal guard (done early in Phase 3).** `file_service._resolve`
   confines every path to the workspace root (parent of the default cwd), rejecting
   `..`/absolute/symlink escapes — hardening the original, which relied on the gateway.

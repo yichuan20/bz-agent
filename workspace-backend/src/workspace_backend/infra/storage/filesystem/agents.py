@@ -65,11 +65,10 @@ class FsAgentStore:
         self._titles = titles
 
     async def get(self, agent_id: str) -> Agent | None:
-        transcript = self._paths.transcript(agent_id)
-        if not transcript.exists():
+        if not self._paths.meta(agent_id).exists():
             return None
         titles = await self._titles.get_all()
-        return await asyncio.to_thread(self._parse_agent, agent_id, transcript, titles)
+        return await asyncio.to_thread(self._parse_agent, agent_id, titles)
 
     async def list_all(self, cwd: str | None = None) -> list[Agent]:
         sessions_dir = self._paths.sessions_dir
@@ -79,8 +78,10 @@ class FsAgentStore:
 
         def _scan() -> list[Agent]:
             agents = []
-            for p in sessions_dir.glob("*.jsonl"):
-                agent = self._parse_agent(p.stem, p, titles)
+            # An agent exists once its config dir + meta.json is written (at create),
+            # even before bzcode writes a transcript. Enumerate by meta.json.
+            for meta_path in sessions_dir.glob("*/meta.json"):
+                agent = self._parse_agent(meta_path.parent.name, titles)
                 if agent is not None and (cwd is None or agent.working_dir == cwd):
                     agents.append(agent)
             agents.sort(key=lambda a: a.last_modified, reverse=True)
@@ -89,14 +90,17 @@ class FsAgentStore:
         return await asyncio.to_thread(_scan)
 
     async def exists(self, agent_id: str) -> bool:
-        return self._paths.transcript(agent_id).exists()
+        return self._paths.meta(agent_id).exists()
 
     async def delete(self, agent_id: str) -> bool:
+        """Delete the whole agent record: config dir + transcript. True if it existed."""
+        cfg_dir = self._paths.config_dir(agent_id)
         transcript = self._paths.transcript(agent_id)
-        if not transcript.exists():
-            return False
-        transcript.unlink()
-        return True
+        existed = cfg_dir.exists() or transcript.exists()
+        if cfg_dir.exists():
+            shutil.rmtree(cfg_dir, ignore_errors=True)
+        transcript.unlink(missing_ok=True)
+        return existed
 
     async def read_meta(self, agent_id: str) -> dict[str, Any] | None:
         return _read_json(self._paths.meta(agent_id))
@@ -156,39 +160,55 @@ class FsAgentStore:
             else:
                 item.unlink(missing_ok=True)
 
-    def _parse_agent(self, agent_id: str, transcript: Path, titles: dict[str, str]) -> Agent | None:
-        """Parse a transcript + meta.json into an :class:`Agent`. Returns ``None`` if
-        no working dir can be determined (an unplaceable session)."""
-        try:
-            lines = [ln.strip() for ln in transcript.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        except OSError:
-            return None
-        if not lines:
-            return None
+    def _parse_agent(self, agent_id: str, titles: dict[str, str]) -> Agent | None:
+        """Build an :class:`Agent` from meta.json, merging transcript data if present.
 
+        ``meta.json`` (written at create) is the durable record. The transcript
+        (written by bzcode once a turn runs) is optional — when it exists we derive
+        the title, message count, last message, and mtime from it. Returns ``None`` if
+        no working dir can be determined.
+        """
         meta = _read_json(self._paths.meta(agent_id)) or {}
-        working_dir = ""
-        created = ""
-        msg_lines = lines
+        working_dir = meta.get("workingDir", "")
 
-        # Old format: first line is a session header. New format: no header, use meta.
-        try:
-            first = json.loads(lines[0])
-        except json.JSONDecodeError:
-            first = {}
-        if first.get("type") == "session":
-            working_dir = first.get("workingDir", "")
-            created = first.get("created", "")
-            msg_lines = lines[1:]
+        title = ""
+        last_preview = ""
+        msg_count = 0
+        created = ""
+        last_modified = 0.0
+
+        transcript = self._paths.transcript(agent_id)
+        if transcript.exists():
+            try:
+                lines = [ln.strip() for ln in transcript.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            except OSError:
+                lines = []
+            msg_lines = lines
+            if lines:
+                # Old format: first line is a session header (workingDir/created).
+                try:
+                    first = json.loads(lines[0])
+                except json.JSONDecodeError:
+                    first = {}
+                if first.get("type") == "session":
+                    working_dir = working_dir or first.get("workingDir", "")
+                    created = first.get("created", "")
+                    msg_lines = lines[1:]
+                title, last_preview, msg_count = self._extract_title(msg_lines)
+            try:
+                last_modified = transcript.stat().st_mtime
+            except OSError:
+                pass
         else:
-            working_dir = meta.get("workingDir", "")
-        if not working_dir:
-            working_dir = meta.get("workingDir", "")
+            # No transcript yet — fall back to the config dir's mtime for ordering.
+            try:
+                last_modified = self._paths.config_dir(agent_id).stat().st_mtime
+            except OSError:
+                pass
+
         if not working_dir:
             return None
 
-        title, last_preview, msg_count = self._extract_title(msg_lines)
-        stat = transcript.stat()
         return Agent(
             id=agent_id,
             working_dir=working_dir,
@@ -198,7 +218,7 @@ class FsAgentStore:
             message_count=msg_count,
             last_message=last_preview,
             created_at=created,
-            last_modified=stat.st_mtime,
+            last_modified=last_modified,
         )
 
     def _extract_title(self, msg_lines: list[str]) -> tuple[str, str, int]:

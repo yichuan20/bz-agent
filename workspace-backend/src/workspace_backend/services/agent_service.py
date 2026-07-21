@@ -116,21 +116,35 @@ class AgentService:
                 return str(rebuilt)
         return default
 
-    async def resolve_connect_cwd(self, agent_id: str, requested: str) -> str:
-        """Resolve cwd for a connect, honoring a valid stored workingDir.
+    def relativize_cwd(self, working_dir: str) -> str:
+        """Strip the ``parent(default_cwd)`` prefix for client display (ported from the
+        old ``GET /sessions``).
 
-        For an existing agent, prefer the stored ``workingDir`` when it still exists on
-        disk (the folder wasn't renamed); otherwise fall back to the client-resolved
-        path. Mirrors the original connect handler.
+        e.g. with default cwd ``/home/u/workspace``, ``/home/u/workspace/proj`` →
+        ``workspace/proj``. Paths outside that base are returned unchanged (absolute) —
+        same partial behavior as the old server. The inverse is :meth:`resolve_cwd`.
         """
-        effective = self.resolve_cwd(requested)
+        base = str(self._default_cwd.parent)
+        prefix = base + "/"
+        if base and working_dir.startswith(prefix):
+            return working_dir[len(prefix) :]
+        return working_dir
+
+    async def resolve_connect_cwd(self, agent_id: str, requested: str) -> str:
+        """Resolve cwd for a connect. The stored record is authoritative.
+
+        cwd is fixed at create time and stored in the agent's ``meta.json``. On connect
+        we use that stored ``workingDir`` when it still exists on disk (the folder
+        wasn't renamed). A non-empty ``requested`` is treated as an explicit override;
+        an empty one means "use the record". Falls back to the default cwd.
+        """
         meta = await self._agents.read_meta(agent_id)
-        if meta:
-            stored = meta.get("workingDir")
-            # A single quick existence check; not worth offloading to a thread.
-            if stored and Path(stored).is_dir():  # noqa: ASYNC240
-                return str(stored)
-        return effective
+        stored = (meta or {}).get("workingDir", "")
+        if requested:  # explicit override from the caller
+            return self.resolve_cwd(requested)
+        if stored and Path(stored).is_dir():  # noqa: ASYNC240
+            return str(stored)
+        return self.resolve_cwd(stored)
 
     async def default_marker(self, cwd: str) -> str | None:
         """Return the default agent id for a cwd, or ``None``."""

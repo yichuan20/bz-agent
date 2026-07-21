@@ -37,7 +37,7 @@ An agent reaped by the idle sweeper respawns transparently on the next ``connect
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from workspace_backend.api.deps import (
@@ -61,6 +61,7 @@ from workspace_backend.api.schemas import (
     UpdateAgentRequest,
 )
 from workspace_backend.api.sse import sse_stream
+from workspace_backend.domain.models import Agent
 from workspace_backend.errors import AgentDead, AgentNotFound, AgentRuntimeNotLive, CredentialsMissing
 from workspace_backend.services.agent_pool.pool import AgentPool
 from workspace_backend.services.agent_service import AgentService
@@ -76,34 +77,42 @@ _SSE_HEADERS = {
 }
 
 
+async def _to_summary(agent: Agent, svc: AgentService) -> AgentSummary:
+    """Build an AgentSummary, relativizing working_dir for client display.
+
+    ``default_marker`` is looked up on the raw stored dir; only the displayed
+    ``working_dir`` is relativized (stripped of the parent-of-default-cwd prefix).
+    """
+    default_id = await svc.default_marker(agent.working_dir)
+    return AgentSummary(
+        id=agent.id,
+        working_dir=svc.relativize_cwd(agent.working_dir),
+        mode=agent.mode,
+        title=agent.title,
+        model=agent.model,
+        message_count=agent.message_count,
+        last_message=agent.last_message,
+        last_modified=agent.last_modified,
+        is_default=default_id == agent.id,
+    )
+
+
 @router.get(
     "",
     response_model=AgentListResponse,
     summary="List agents",
-    description="List durable agent records, newest first. Filter by `cwd` to scope to one workspace.",
+    description=(
+        "List durable agent records, newest first. Filter by `cwd` to scope to one "
+        "workspace. `working_dir` is returned relative to the server's workspace root "
+        "when under it (e.g. `workspace/proj`), absolute otherwise."
+    ),
 )
 async def list_agents(
     cwd: str = Query("", description="Optional working-directory filter."),
     svc: AgentService = Depends(get_agent_service),
 ) -> AgentListResponse:
     agents = await svc.list_all(cwd or None)
-    summaries = []
-    for a in agents:
-        default_id = await svc.default_marker(a.working_dir)
-        summaries.append(
-            AgentSummary(
-                id=a.id,
-                working_dir=a.working_dir,
-                mode=a.mode,
-                title=a.title,
-                model=a.model,
-                message_count=a.message_count,
-                last_message=a.last_message,
-                last_modified=a.last_modified,
-                is_default=default_id == a.id,
-            )
-        )
-    return AgentListResponse(agents=summaries)
+    return AgentListResponse(agents=[await _to_summary(a, svc) for a in agents])
 
 
 @router.post(
@@ -117,7 +126,7 @@ async def list_agents(
     ),
 )
 async def create_agent(
-    body: CreateAgentRequest,
+    body: CreateAgentRequest = Body(default_factory=CreateAgentRequest),
     svc: AgentService = Depends(get_agent_service),
 ) -> CreateAgentResponse:
     agent_id = await svc.create(cwd=body.cwd, mode=body.mode)
@@ -147,18 +156,7 @@ async def get_agent(
     agent = await svc.get(agent_id)
     if agent is None:
         raise AgentNotFound(agent_id)
-    default_id = await svc.default_marker(agent.working_dir)
-    return AgentSummary(
-        id=agent.id,
-        working_dir=agent.working_dir,
-        mode=agent.mode,
-        title=agent.title,
-        model=agent.model,
-        message_count=agent.message_count,
-        last_message=agent.last_message,
-        last_modified=agent.last_modified,
-        is_default=default_id == agent.id,
-    )
+    return await _to_summary(agent, svc)
 
 
 @router.patch(
@@ -219,14 +217,16 @@ async def get_messages(
     description=(
         "Start the agent's bzcode runtime (or re-attach if already live) and return the "
         "handshake: runtime status, session mode, advertised modes and slash commands. "
-        "Requires a configured BZ_API_KEY (401 otherwise). Idempotent — safe to call on "
-        "every page load / reconnect."
+        "The body is optional — cwd/mode come from the agent's record (set at create); "
+        "send `{}` for a normal (re)connect, or a field to override it. Requires a "
+        "configured BZ_API_KEY (401 otherwise). Idempotent — safe to call on every "
+        "page load / reconnect (an idle-reaped agent is respawned via `--resume`)."
     ),
     responses={401: {"description": "No BZ_API_KEY configured."}},
 )
 async def connect_agent(
     agent_id: str,
-    body: ConnectRequest,
+    body: ConnectRequest = Body(default_factory=ConnectRequest),
     svc: AgentService = Depends(get_agent_service),
     creds: CredentialService = Depends(get_credential_service),
     modes: ModeService = Depends(get_mode_service),
@@ -287,7 +287,12 @@ async def stop_agent(
         "user prompt → deltas → assistant → result → status); prior turns come from "
         "`GET /messages`. Reconnecting mid-turn replays the in-flight turn. `: ping` "
         "comments keep the connection alive. Requires the runtime to be live (connect "
-        "first)."
+        "first).\n\n"
+        "**Not testable via Swagger's Execute** — this is an infinite stream, and "
+        "Swagger UI waits for the whole response before rendering, so it just spins. "
+        "Test with a streaming client instead, e.g. `curl -N "
+        "http://<host>/api/v1/agents/{id}/events` (and POST a message from another "
+        "terminal), or an `EventSource` / `fetch`+`ReadableStream` client."
     ),
     responses={
         200: {"content": {"text/event-stream": {}}, "description": "SSE stream of protocol messages."},

@@ -33,8 +33,9 @@ The new server's live contract is always authoritative: run it and read
   `sessionId`). **This is a breaking rename the FE must handle.**
 - **Path handling.** File paths are confined to the workspace root (traversal/symlink
   escapes → 400). The old outbound `workingDir` prefix-stripping in `GET /sessions`
-  is **not** ported (see deferred notes); the new list returns `working_dir` as
-  stored.
+  **is** ported: `GET /api/v1/agents` returns `working_dir` relative to the server's
+  workspace root when under it (e.g. `workspace/proj`), absolute otherwise — paired
+  with the inverse rebuild on `connect`. Same partial behavior as the old server.
 
 ---
 
@@ -43,7 +44,7 @@ The new server's live contract is always authoritative: run it and read
 | Old | New | Notes |
 |---|---|---|
 | `POST /sessions/create` `{cwd, mode}` → `{sessionId}` | `POST /api/v1/agents` `{cwd, mode}` → `{id}` | Creates the durable record + config; does **not** start the runtime. Old auto-created-on-connect; now create is explicit. |
-| `GET /sessions` → `{sessions:[…]}` | `GET /api/v1/agents?cwd=` → `{agents:[…]}` | Fields renamed to snake_case; each item has `is_default`. No path-stripping. |
+| `GET /sessions` → `{sessions:[…]}` | `GET /api/v1/agents?cwd=` → `{agents:[…]}` | Fields renamed to snake_case; each item has `is_default`. `working_dir` is relativized to the workspace root when under it (like the old server). |
 | (implicit in `/sessions`) | `GET /api/v1/agents/{id}` → `AgentSummary` | Single record. `404 agent_not_found` if absent. |
 | `DELETE /sessions/{id}` | `DELETE /api/v1/agents/{id}` | Deletes the durable record (transcript). |
 | `POST /sessions/{id}/title` `{title}` · `POST /api/sessions/{id}/model` | `PATCH /api/v1/agents/{id}` `{title?}` | Title only. **Model switching dropped as REST** — send `/model <id>` via `POST …/messages` (matches old FE behavior). |
@@ -110,18 +111,32 @@ server; the new server returns 404 for them today.
 | `POST /auth`, `POST /auth/logout`, `GET /auth/status` | OAuth `credentials.json` flow. This backend authenticates via `BZ_API_KEY` only. |
 | `POST /api/sessions/{id}/model` | Model switch flows through a `/model <id>` message, not REST (matches the old FE). |
 | `GET /agent-keys` (list), `GET /api/apikey-verify` | Unused by the FE. |
-| Outbound `workingDir` prefix-stripping in `GET /sessions` | A leaky presentation transform; the new API returns `working_dir` as stored. Revisit if the FE needs relativized paths. |
 
 ---
 
 ## Notable behavior deltas the FE must handle
 
 1. **snake_case response fields** throughout (`working_dir`, `runtime_status`, …).
-2. **Create then connect are separate calls.** The old FE minted an agent implicitly
-   by connecting with no id; now `POST /api/v1/agents` mints the record and
-   `POST …/connect` starts it.
+2. **`create` and `connect` have distinct, clean roles.** `POST /api/v1/agents`
+   mints the **durable agent record** (writes `meta.json` + config) and fixes its
+   `cwd`+`mode`; the agent is immediately listable (`GET /api/v1/agents`) and
+   gettable (`GET /api/v1/agents/{id}`) **before any turn runs** — existence is keyed
+   on the record, not on a transcript. `POST /api/v1/agents/{id}/connect` only starts
+   or re-attaches the runtime; its body is **optional** (`{}`) — `cwd`/`mode` come
+   from the record, and are sent only to override. (The old FE minted an agent
+   implicitly by connecting with no id and re-sent cwd/mode on every connect; both
+   are gone.) An idle-reaped agent is respawned transparently on the next connect
+   (`--resume` restores history).
 3. **History is a separate fetch.** `connect` no longer returns `messages`; call
    `GET /api/v1/agents/{id}/messages`. Reconnect order: open `/events`, then GET.
 4. **Model switching** is a `/model <id>` message on `POST …/messages`, not a REST call.
 5. **Widget-secret store renamed** `/credentials` → `/api/v1/secrets`.
 6. **Errors** are `{error, detail}` with stable codes.
+
+## The old frontend will 404 against this backend
+
+The current `src/` frontend polls **old** paths on timers — e.g. `GET /sessions`
+(Sidebar, every 30s) and `GET /api/apikey-status` (Sidebar/TopBar, every 60s). Those
+moved: `/sessions` → `GET /api/v1/agents`, `/api/apikey-status` →
+`GET /api/v1/auth/api-key`. Until the frontend is migrated per this doc, expect a
+steady stream of harmless 404s in the logs from the stale poll loops.

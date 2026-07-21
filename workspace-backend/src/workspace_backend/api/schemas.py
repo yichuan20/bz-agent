@@ -41,7 +41,10 @@ class AgentSummary(BaseModel):
     """A durable agent record as shown in listings."""
 
     id: str = Field(description="Server-minted agent id.", examples=["bz-a1b2c3d4e5f6"])
-    working_dir: str = Field(description="The agent's working directory.", examples=["workspace/proj"])
+    working_dir: str = Field(
+        description="Working dir, relative to the server workspace root when under it (else absolute).",
+        examples=["workspace/proj"],
+    )
     mode: str = Field(description="Agent mode / persona id.", examples=["general", "coder"])
     title: str = Field(
         description="Title (user-set, or derived from the first message).", examples=["Fix the auth bug"]
@@ -85,10 +88,17 @@ class UpdateAgentRequest(BaseModel):
 
 
 class ConnectRequest(BaseModel):
-    """Start (or re-attach to) an agent's runtime."""
+    """Start (or re-attach to) an agent's runtime. All fields optional.
 
-    cwd: str = Field(default="", description="Working dir override; stored dir wins if still valid.", examples=[""])
-    mode: str = Field(default="", description="Mode override; blank keeps the agent's stored mode.", examples=[""])
+    cwd and mode are fixed at create time and stored in the agent's record; a normal
+    (re)connect sends an empty body `{}`. Provide a field only to **override** the
+    stored value for this run.
+    """
+
+    cwd: str = Field(
+        default="", description="Override the agent's stored working dir (blank = use stored).", examples=[""]
+    )
+    mode: str = Field(default="", description="Override the agent's stored mode (blank = use stored).", examples=[""])
 
 
 class ConnectResponse(BaseModel):
