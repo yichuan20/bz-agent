@@ -1393,6 +1393,9 @@ Reply with ONLY one word: widget, worker, coder, or general.\
         if not path:
             path = app.state.default_cwd or os.getcwd()
         p = Path(path)
+        # Relative paths (server-stripped prefix) → reconstruct against parent of default_cwd
+        if not p.is_absolute() and app.state.default_cwd:
+            p = Path(app.state.default_cwd).parent / p
         if not p.exists() or not p.is_dir():
             raise HTTPException(404, "path not found or not a directory")
         entries = []

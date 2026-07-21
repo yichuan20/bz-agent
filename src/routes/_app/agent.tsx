@@ -4296,7 +4296,15 @@ function AgentPage() {
     fetch(`${HTTP_BASE}/api/home`)
       .then(r => r.json())
       .then((d: { defaultCwd?: string }) => {
-        if (d.defaultCwd) setDefaultCwd(d.defaultCwd);
+        if (!d.defaultCwd) return;
+        setDefaultCwd(d.defaultCwd);
+        // If activeCwd is a relative path (server-stripped prefix in URL), resolve to absolute.
+        // parent(defaultCwd) is the base that was stripped — mirror the pool_connect logic.
+        setActiveCwd(prev => {
+          if (!prev || prev.startsWith('/')) return prev;
+          const parent = d.defaultCwd!.split('/').slice(0, -1).join('/');
+          return parent ? `${parent}/${prev}` : prev;
+        });
       })
       .catch(() => null);
   }, []);
