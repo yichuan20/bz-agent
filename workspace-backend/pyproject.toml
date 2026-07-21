@@ -31,7 +31,7 @@ packages = ["src/workspace_backend"]
 addopts = "-v"
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 
 [tool.ruff]
 target-version = "py314"

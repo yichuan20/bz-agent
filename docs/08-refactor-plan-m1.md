@@ -144,6 +144,24 @@ workspace-backend/
 
 **Deferred (documented in migration doc as "not yet ported"):** `/ws`, `/api/doc/*`, `/api/excel/*`, `/api/ppt/*`, `/canvas`, `/widgets`, `/custom-widgets`, `/db/*`, `/boltzhub/*`, `/batch`, `/whatsapp/*`, `/proxy`, `/search`, `/shell`, `/api/dev-server/*`, SPA catch-all.
 
+**Deferred behaviors carried forward (tracked so they aren't lost):**
+- **Widget-secret `{{KEY}}` substitution.** The secret *store* is done in M1
+  (`/v1/secrets`, `SecretStore`), but the *substitution* of `{{OPENAI_API_KEY}}`-style
+  placeholders into outbound requests (old `server.py:_resolve(text, creds)` at 628,
+  applied in `/proxy` at app.py:1242) is **not** ported — it belongs with `/proxy`
+  (M4) and the widget canvas (M3). Port the small `{{KEY}}` regex resolver then.
+- **Outbound `workingDir` path stripping.** The old `GET /sessions` stripped the
+  absolute-path prefix off each `workingDir` before returning it (app.py:1653-1660),
+  exposing only `workspace/foo`. The *inverse* (relative→absolute rebuild) is already
+  ported (`agent_service.resolve_cwd`, `file_service._resolve`). Decide when wiring
+  `GET /v1/agents` in Phase 4 whether to keep this leaky presentation transform or
+  return absolute paths; note the choice in the migration doc.
+- **File API traversal guard (done early in Phase 3).** `file_service._resolve`
+  confines every path to the workspace root (parent of the default cwd), rejecting
+  `..`/absolute/symlink escapes — hardening the original, which relied on the gateway.
+  `agent_service.resolve_cwd` is intentionally *not* confined (session working dirs
+  are user-chosen at create time); revisit if that trust model changes.
+
 ### API self-documentation standard (first-class deliverable)
 
 The generated **OpenAPI schema (`/openapi.json`) and Swagger UI (`/docs`) must be good enough that a FE client or an LLM can work against the server from the schema alone.** This is a requirement of every route, not a cleanup pass. Concretely:

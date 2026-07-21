@@ -47,10 +47,12 @@ class ModelInfo:
 
 @dataclass(slots=True)
 class Agent:
-    """A durable agent record: id, working dir, mode, and transcript metadata.
+    """A durable agent record: id, working dir, mode, and transcript-derived metadata.
 
     This is the persistent side of the agent. The live process (if any) is an
-    ``AgentRuntime`` in the pool, keyed by the same ``id``.
+    ``AgentRuntime`` in the pool, keyed by the same ``id``. ``title``/``last_message``/
+    ``message_count`` are derived from the transcript (with ``title`` overridable by
+    the user); ``model`` and ``mode`` come from our ``meta.json``.
     """
 
     id: str
@@ -58,8 +60,10 @@ class Agent:
     mode: str
     title: str = ""
     model: str = ""
+    message_count: int = 0
+    last_message: str = ""
     created_at: str = ""
-    last_modified: str = ""
+    last_modified: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
