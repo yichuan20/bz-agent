@@ -1,12 +1,19 @@
 export type ThemeMode = 'light' | 'dark';
 
 export function applyTheme(mode: ThemeMode): void {
+  const el = document.documentElement;
+  el.classList.add('theme-switching');
+  // Force a reflow so the browser registers the transition before the theme flip.
+  // Without this, the class addition and attribute change batch into one recalc
+  // and elements that had no prior transition skip the animation entirely.
+  void el.offsetHeight;
   if (mode === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
+    el.setAttribute('data-theme', 'dark');
   } else {
-    document.documentElement.removeAttribute('data-theme');
+    el.removeAttribute('data-theme');
   }
   localStorage.setItem('bz-theme-mode', mode);
+  setTimeout(() => el.classList.remove('theme-switching'), 100);
 }
 
 export function getCurrentMode(): ThemeMode {

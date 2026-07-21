@@ -26,6 +26,7 @@ const TableContextMenu = forwardRef(
 
     const item = (label, handler) => (
       <button
+        type="button"
         key={label}
         onClick={() => {
           handler?.();

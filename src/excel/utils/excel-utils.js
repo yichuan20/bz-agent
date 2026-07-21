@@ -37,7 +37,7 @@ export const ALPHABET = [
 
 export const ALPHABET_EXTENDED = [
   ...ALPHABET,
-  ...ALPHABET?.flatMap(letter1 => ALPHABET?.map(letter2 => letter1 + letter2)),
+  ...(ALPHABET?.flatMap(letter1 => ALPHABET?.map(letter2 => letter1 + letter2)) ?? []),
 ];
 
 const isLetterWithinRange = (letter, startLetter, endLetter) => {
@@ -60,13 +60,13 @@ export const isCellIdWithinSelection = (cellId, selectionStr) => {
   const [startCellId, endCellId] = selectionStr?.split(':') || [];
 
   const startLetter = startCellId.match(/[A-Z]+/)?.[0];
-  const startNumber = parseInt(startCellId.match(/[0-9]+/)?.[0]);
+  const startNumber = parseInt(startCellId.match(/[0-9]+/)?.[0], 10);
 
   const endLetter = endCellId?.match(/[A-Z]+/)?.[0];
-  const endNumber = parseInt(endCellId.match(/[0-9]+/)?.[0]);
+  const endNumber = parseInt(endCellId.match(/[0-9]+/)?.[0], 10);
 
   const cellLetter = cellId?.match(/[A-Z]+/)?.[0];
-  const cellNumber = parseInt(cellId?.match(/[0-9]+/)?.[0]);
+  const cellNumber = parseInt(cellId?.match(/[0-9]+/)?.[0], 10);
 
   if (
     isLetterWithinRange(cellLetter, startLetter, endLetter) &&
@@ -86,7 +86,7 @@ export const getAllValuesOfKey = (records, fieldName) => {
 
 export const getOffsetCellLocation = (startingLocation = 'A1', rowOffset, colOffset) => {
   const startingCol = startingLocation.match(/[A-Z]*/)[0];
-  const startingRow = parseInt(startingLocation?.match(/[0-9].*/)[0]);
+  const startingRow = parseInt(startingLocation?.match(/[0-9].*/)[0], 10);
 
   const newColIndex = ALPHABET_EXTENDED.indexOf(startingCol) + colOffset;
   const newColLetter = ALPHABET_EXTENDED[newColIndex];
@@ -113,7 +113,7 @@ export const getSheetWithSmartRecordsFilledIn = ({
   const cellLocationsToUpdate = [];
 
   const idToRecords = groupBy(smartRecords, record => record?.ID);
-  Object.entries(idToRecords).forEach(([id, records]) => {
+  Object.entries(idToRecords).forEach(([_id, records]) => {
     const row = columnNamesInSelectedRow?.map(colName => {
       const smartRecord = records.find(rec => rec.TOPIC?.trim() === colName?.trim());
       return smartRecord?.Value ? parseJson(smartRecord?.Value)?.Value : null;
@@ -182,10 +182,10 @@ export const getArrayOfCellLocationsFromSelection = selectionStr => {
 
   // Extract letter and number parts properly (handles multi-letter columns like AA, AB, etc.)
   const startLetter = startCellId?.match(/[A-Z]+/)?.[0];
-  const startNumber = parseInt(startCellId?.match(/\d+/)?.[0]);
+  const startNumber = parseInt(startCellId?.match(/\d+/)?.[0], 10);
 
   const endLetter = endCellId?.match(/[A-Z]+/)?.[0];
-  const endNumber = parseInt(endCellId?.match(/\d+/)?.[0]);
+  const endNumber = parseInt(endCellId?.match(/\d+/)?.[0], 10);
 
   const startColIndex = ALPHABET_EXTENDED.indexOf(startLetter);
   const endColIndex = ALPHABET_EXTENDED.indexOf(endLetter);
@@ -343,7 +343,7 @@ export const getResizedColumnGrid = ({ grid, columnResizeIndex, columnResizeAmou
 
   // Clean up any negative indices that may have been added previously
   Object.keys(newGrid.columnIndexToWidth).forEach(key => {
-    if (parseInt(key) < 0) {
+    if (parseInt(key, 10) < 0) {
       delete newGrid.columnIndexToWidth[key];
     }
   });
@@ -393,7 +393,7 @@ export const getResizedRowGrid = ({ grid, rowResizeIndex, rowResizeAmount }) => 
 
   // Clean up any negative indices that may have been added previously
   Object.keys(newGrid.rowIndexToHeight).forEach(key => {
-    if (parseInt(key) < 0) {
+    if (parseInt(key, 10) < 0) {
       delete newGrid.rowIndexToHeight[key];
     }
   });
@@ -411,7 +411,7 @@ export const transformLabelsToApiPayload = (labels, cells) => {
       const rawValue = cell?.value || ''; // Assuming rawValue is same as value for now
 
       const colLetter = cellId?.match(/[A-Z]+/)?.[0];
-      const rowNumber = parseInt(cellId?.match(/\d+/)?.[0]);
+      const rowNumber = parseInt(cellId?.match(/\d+/)?.[0], 10);
 
       const colIndex = ALPHABET_EXTENDED.indexOf(colLetter);
       const rowIndex = rowNumber - 1;

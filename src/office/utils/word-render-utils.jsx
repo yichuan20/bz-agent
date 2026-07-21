@@ -159,7 +159,7 @@ export const drawCharBox = ({ x, y, ctx, char, fill = 'salmon' }) => {
 /**
  * Draws a query highlight box for AI-generated content
  */
-export const drawQueryBox = ({ x, y, ctx, char, queryId }) => {
+export const drawQueryBox = ({ x: _x, y, ctx, char: _char, queryId }) => {
   const prevFillStyle = ctx.fillStyle;
   ctx.fillStyle = `${getColorFromString(queryId)}`;
   ctx.fillRect(0, y - LINE_HEIGHT + 18, 6, LINE_HEIGHT);

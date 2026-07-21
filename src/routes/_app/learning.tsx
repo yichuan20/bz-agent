@@ -302,7 +302,7 @@ function LearningPage() {
             <span className="ll-stat-val">3</span>
             <span className="ll-stat-lbl">jobs run</span>
           </div>
-          <button className="ll-run-btn" onClick={() => {}}>
+          <button type="button" className="ll-run-btn" onClick={() => {}}>
             Run training job
           </button>
         </div>
@@ -311,18 +311,21 @@ function LearningPage() {
       {/* Tabs */}
       <div className="ll-tabs">
         <button
+          type="button"
           className={`ll-tab${tab === 'data' ? ' ll-tab--active' : ''}`}
           onClick={() => setTab('data')}
         >
           Training Data
         </button>
         <button
+          type="button"
           className={`ll-tab${tab === 'eval' ? ' ll-tab--active' : ''}`}
           onClick={() => setTab('eval')}
         >
           Latest Evaluation
         </button>
         <button
+          type="button"
           className={`ll-tab${tab === 'sessions' ? ' ll-tab--active' : ''}`}
           onClick={() => setTab('sessions')}
         >
@@ -334,7 +337,8 @@ function LearningPage() {
         <div className="ll-rounds">
           {MOCK_ROUNDS.map(r => (
             <div key={r.id} className={`ll-round${expanded === r.id ? ' ll-round--open' : ''}`}>
-              <div
+              <button
+                type="button"
                 className="ll-round-header"
                 onClick={() => setExpanded(expanded === r.id ? null : r.id)}
               >
@@ -362,10 +366,11 @@ function LearningPage() {
                   stroke="currentColor"
                   strokeWidth="2"
                   fill="none"
+                  aria-hidden="true"
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
-              </div>
+              </button>
 
               {expanded === r.id && (
                 <div className="ll-round-body">
@@ -468,18 +473,19 @@ function LearningPage() {
           </div>
 
           {MOCK_SESSIONS.map(s => {
-            const finalEpoch = s.epochLoss[s.epochLoss.length - 1]!;
+            const zeroEpoch = { task: 0, preference: 0, domain: 0, efficiency: 0, consistency: 0 };
+            const finalEpoch = s.epochLoss.at(-1) ?? zeroEpoch;
             const finalBAL = balTotal(finalEpoch);
-            const firstBAL = balTotal(s.epochLoss[0]!);
+            const firstBAL = balTotal(s.epochLoss[0] ?? zeroEpoch);
             const gain = s.metrics.accuracy - s.baselineAccuracy;
             const statusColor =
               s.status === 'completed' ? 'var(--accent-green)' : 'var(--accent-red)';
             return (
-              <div
+              <button
+                type="button"
                 key={s.id}
                 className="ll-session"
                 onClick={() => setSelectedSession(s)}
-                style={{ cursor: 'pointer' }}
               >
                 <div className="ll-session-row">
                   <div className="ll-session-id">Job #{s.id}</div>
@@ -521,11 +527,12 @@ function LearningPage() {
                     strokeWidth="2"
                     fill="none"
                     style={{ opacity: 0.4, flexShrink: 0 }}
+                    aria-hidden="true"
                   >
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -574,8 +581,9 @@ function SessionDetailPage({
   session: (typeof MOCK_SESSIONS)[number];
   onBack: () => void;
 }) {
-  const finalEpoch = session.epochLoss[session.epochLoss.length - 1]!;
-  const firstEpoch = session.epochLoss[0]!;
+  const zeroEpoch = { task: 0, preference: 0, domain: 0, efficiency: 0, consistency: 0 };
+  const finalEpoch = session.epochLoss.at(-1) ?? zeroEpoch;
+  const firstEpoch = session.epochLoss[0] ?? zeroEpoch;
   const finalBAL = balTotal(finalEpoch);
   const firstBAL = balTotal(firstEpoch);
   const gain = session.metrics.accuracy - session.baselineAccuracy;
@@ -585,7 +593,7 @@ function SessionDetailPage({
     <div className="ll-page">
       {/* Header */}
       <div className="ll-detail-header">
-        <button className="ll-detail-back" onClick={onBack}>
+        <button type="button" className="ll-detail-back" onClick={onBack}>
           <svg
             viewBox="0 0 24 24"
             width="14"
@@ -593,6 +601,7 @@ function SessionDetailPage({
             stroke="currentColor"
             strokeWidth="2.5"
             fill="none"
+            aria-hidden="true"
           >
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -847,6 +856,7 @@ function BrainIcon({ size = 16 }: { size?: number }) {
       fill="none"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
       <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />

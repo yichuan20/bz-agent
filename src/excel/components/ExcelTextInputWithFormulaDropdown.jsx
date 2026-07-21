@@ -24,8 +24,8 @@ const expandCellRange = range => {
   const [start, end] = range.split(':');
   const startCol = start.match(/^[A-Z]+/)[0],
     endCol = end.match(/^[A-Z]+/)[0];
-  const startRow = parseInt(start.match(/[1-9]\d*$/)[0]),
-    endRow = parseInt(end.match(/[1-9]\d*$/)[0]);
+  const startRow = parseInt(start.match(/[1-9]\d*$/)[0], 10),
+    endRow = parseInt(end.match(/[1-9]\d*$/)[0], 10);
   const c0 = colToIndex(startCol),
     c1 = colToIndex(endCol);
   const cells = [];
@@ -133,24 +133,35 @@ const ExcelTextInputWithFormulaDropdown = ({
       );
     } else if (filteredFunctionNames.length) {
       dropdownContent = filteredFunctionNames.map((opt, i) => (
-        <div
+        <button
+          type="button"
           key={i}
           style={{
+            display: 'block',
+            width: '100%',
+            textAlign: 'left',
             padding: '4px 8px',
             fontSize: 12,
             fontFamily: 'Arial',
             cursor: 'pointer',
             color: 'var(--text-primary)',
             background: selectedOptionIndex === i ? 'var(--bg-hover)' : 'transparent',
+            border: 'none',
           }}
           onMouseDown={e => {
             e.preventDefault();
             onChangeValue(opt);
             inputRef.current?.focus();
           }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              onChangeValue(opt);
+              inputRef.current?.focus();
+            }
+          }}
         >
           {opt}
-        </div>
+        </button>
       ));
     }
   }

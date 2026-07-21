@@ -9,7 +9,7 @@
  */
 
 import { parseMarkdownToHTML } from '@boltzbit/md-utils';
-import { UploadSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { SidebarSimpleIcon, XIcon } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExcelEditor } from '#/excel';
 import { type Block, WordDocEditor } from '#/office';
@@ -202,7 +202,7 @@ function FileTypeIcon({ name, size = 13 }: { name: string; size?: number }) {
         width={size}
         height={size}
         viewBox="0 0 24 24"
-        aria-hidden
+        aria-hidden="true"
         style={{ flexShrink: 0 }}
         stroke="#22c55e"
         {...APP_ICON_STROKE}
@@ -221,7 +221,7 @@ function FileTypeIcon({ name, size = 13 }: { name: string; size?: number }) {
         width={size}
         height={size}
         viewBox="0 0 24 24"
-        aria-hidden
+        aria-hidden="true"
         style={{ flexShrink: 0 }}
         stroke="#1473df"
         {...APP_ICON_STROKE}
@@ -239,7 +239,7 @@ function FileTypeIcon({ name, size = 13 }: { name: string; size?: number }) {
         width={size}
         height={size}
         viewBox="0 0 24 24"
-        aria-hidden
+        aria-hidden="true"
         style={{ flexShrink: 0 }}
         stroke="#f97316"
         {...APP_ICON_STROKE}
@@ -257,7 +257,7 @@ function FileTypeIcon({ name, size = 13 }: { name: string; size?: number }) {
       height={size}
       viewBox="0 0 14 14"
       fill="none"
-      aria-hidden
+      aria-hidden="true"
       style={{ flexShrink: 0 }}
     >
       <path
@@ -579,7 +579,8 @@ function TreeNode({
 
   return (
     <div>
-      <div
+      <button
+        type="button"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -592,10 +593,20 @@ function TreeNode({
           color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
           fontSize: 12,
           fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+          border: 'none',
+          outline: 'none',
+          textAlign: 'left',
         }}
         onClick={() => {
           if (!isRenaming && !isProcessing) {
             entry.isDir ? toggle() : onSelect(entry.path);
+          }
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            if (!isRenaming && !isProcessing) {
+              entry.isDir ? toggle() : onSelect(entry.path);
+            }
           }
         }}
         onContextMenu={e => {
@@ -605,10 +616,10 @@ function TreeNode({
         }}
         onMouseEnter={e => {
           if (!isActive)
-            (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)';
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)';
         }}
         onMouseLeave={e => {
-          if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+          if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
         }}
       >
         {entry.isDir ? (
@@ -670,7 +681,7 @@ function TreeNode({
             )}
           </>
         )}
-      </div>
+      </button>
       {entry.isDir && open && loading && (
         <div
           style={{
@@ -744,7 +755,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
   const [cursors, setCursors] = useState<Record<string, { selStart: number; selEnd: number }>>({});
   const cursorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const docAutoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [showTree, setShowTree] = useState(true);
   const [processingPptx, setProcessingPptx] = useState<Set<string>>(new Set());
   const processingPollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [newFolderDir, setNewFolderDir] = useState<string | null>(null);
@@ -795,7 +806,6 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
-      setUploading(true);
       try {
         for (const file of Array.from(files)) {
           const fd = new FormData();
@@ -807,7 +817,6 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         }
         setTreeVersion(v => v + 1);
       } finally {
-        setUploading(false);
         if (uploadRef.current) uploadRef.current.value = '';
       }
     },
@@ -914,7 +923,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
   useEffect(() => {
     const handler = (e: Event) => {
       const path = (e as CustomEvent<{ path: string }>).detail?.path;
-      if (path) openFile(path);
+      if (path) void openFile(path);
     };
     window.addEventListener('open-file', handler);
     return () => window.removeEventListener('open-file', handler);
@@ -1090,7 +1099,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         return;
       }
       const restoringForSession = sessionId;
-      (async () => {
+      void (async () => {
         for (const p of paths) {
           if (lastRestoredSession.current !== restoringForSession) break; // session switched mid-restore
           await openFile(p);
@@ -1118,7 +1127,9 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
       .then((d: { content?: string }) => {
         if (d.content !== undefined)
           setTabs(prev =>
-            prev.map(t => (t.path === activeTab && !t.dirty ? { ...t, content: d.content! } : t)),
+            prev.map(t =>
+              t.path === activeTab && !t.dirty ? { ...t, content: d.content ?? '' } : t,
+            ),
           );
       })
       .catch(() => null);
@@ -1366,152 +1377,160 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         borderRight: '1px solid var(--border-primary)',
       }}
     >
+      {/* Hidden upload input — always mounted so context-menu upload works even when tree is hidden */}
+      <input
+        ref={uploadRef}
+        type="file"
+        multiple
+        accept=".pptx,.ppt,.docx,.doc,.xlsx,.xls,.pdf,.txt,.md,.csv,.json,.py,.ts,.tsx,.js,.jsx,.html,.htm"
+        style={{ display: 'none' }}
+        onChange={handleUpload}
+      />
       {/* ── File tree ────────────────────────────────────────────────────── */}
-      <div
-        style={{
-          width: 220,
-          flexShrink: 0,
-          background: 'var(--bg-secondary)',
-          borderRight: '1px solid var(--border-primary)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      {showTree && (
         <div
           style={{
-            padding: '6px 6px 5px 10px',
+            width: 220,
             flexShrink: 0,
+            background: 'var(--bg-secondary)',
+            borderRight: '1px solid var(--border-primary)',
             display: 'flex',
-            alignItems: 'center',
-            gap: 4,
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
-          <span
+          <div
             style={{
-              flex: 1,
-              fontSize: 10,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--text-tertiary)',
-              fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {cwd.split('/').filter(Boolean).pop()}
-          </span>
-          <button
-            type="button"
-            title="Upload file"
-            disabled={uploading}
-            onClick={() => uploadRef.current?.click()}
-            style={{
+              padding: '6px 6px 5px 10px',
               flexShrink: 0,
-              width: 22,
-              height: 22,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 4,
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--text-tertiary)',
-              cursor: uploading ? 'wait' : 'pointer',
-              opacity: uploading ? 0.5 : 1,
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)';
-              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)';
+              gap: 4,
             }}
           >
-            <UploadSimpleIcon size={13} />
-          </button>
-          <input
-            ref={uploadRef}
-            type="file"
-            multiple
-            accept=".pptx,.ppt,.docx,.doc,.xlsx,.xls,.pdf,.txt,.md,.csv,.json,.py,.ts,.tsx,.js,.jsx,.html,.htm"
-            style={{ display: 'none' }}
-            onChange={handleUpload}
-          />
-        </div>
-        <div
-          style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 4px 8px' }}
-          onContextMenu={handleTreeBgCtxMenu}
-        >
-          <TreeNode
-            key={`${cwd}-${treeVersion}`}
-            entry={rootEntry}
-            depth={0}
-            selected={activeTab}
-            onSelect={openFile}
-            ctxMenu={ctxMenu}
-            onCtxMenu={handleCtxMenu}
-            renamingPath={renamingPath}
-            onRenameCommit={handleRenameCommit}
-            onRefresh={() => setTreeVersion(v => v + 1)}
-            processingPptx={processingPptx}
-          />
-          {/* Inline new-folder input */}
-          {newFolderDir && (
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 22px' }}
+            <span
+              style={{
+                flex: 1,
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--text-tertiary)',
+                fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
             >
-              <FolderTypeIcon name="folder" open={false} size={13} />
-              <input
-                ref={newFolderInputRef}
-                value={newFolderName}
-                placeholder="folder name"
-                onChange={e => setNewFolderName(e.target.value)}
-                onKeyDown={async e => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') {
-                    const name = newFolderName.trim();
-                    if (!name) return;
-                    const dir = newFolderDir!;
-                    setNewFolderDir(null);
-                    setNewFolderName('');
-                    await fetch(`${HTTP_BASE}/api/file/mkdir`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ path: `${dir}/${name}` }),
-                    }).catch(() => null);
-                    setTreeVersion(v => v + 1);
-                  }
-                  if (e.key === 'Escape') {
-                    setNewFolderDir(null);
-                    setNewFolderName('');
-                  }
-                }}
-                onContextMenu={e => e.stopPropagation()}
+              Work Folder
+            </span>
+            <button
+              type="button"
+              title="Hide file tree"
+              onClick={() => setShowTree(false)}
+              style={{
+                flexShrink: 0,
+                width: 22,
+                height: 22,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)';
+              }}
+            >
+              <SidebarSimpleIcon size={13} />
+            </button>
+          </div>
+          <div
+            role="tree"
+            style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 4px 8px' }}
+            onContextMenu={handleTreeBgCtxMenu}
+          >
+            <TreeNode
+              key={`${cwd}-${treeVersion}`}
+              entry={rootEntry}
+              depth={0}
+              selected={activeTab}
+              onSelect={openFile}
+              ctxMenu={ctxMenu}
+              onCtxMenu={handleCtxMenu}
+              renamingPath={renamingPath}
+              onRenameCommit={handleRenameCommit}
+              onRefresh={() => setTreeVersion(v => v + 1)}
+              processingPptx={processingPptx}
+            />
+            {/* Inline new-folder input */}
+            {newFolderDir && (
+              <div
                 style={{
-                  flex: 1,
-                  minWidth: 0,
-                  fontSize: 12,
-                  fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                  background: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--accent-blue)',
-                  borderRadius: 3,
-                  padding: '1px 4px',
-                  outline: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '3px 8px 3px 22px',
                 }}
-              />
-            </div>
-          )}
+              >
+                <FolderTypeIcon name="folder" open={false} size={13} />
+                <input
+                  ref={newFolderInputRef}
+                  value={newFolderName}
+                  placeholder="folder name"
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={async e => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') {
+                      const name = newFolderName.trim();
+                      if (!name) return;
+                      const dir = newFolderDir ?? '';
+                      setNewFolderDir(null);
+                      setNewFolderName('');
+                      await fetch(`${HTTP_BASE}/api/file/mkdir`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: `${dir}/${name}` }),
+                      }).catch(() => null);
+                      setTreeVersion(v => v + 1);
+                    }
+                    if (e.key === 'Escape') {
+                      setNewFolderDir(null);
+                      setNewFolderName('');
+                    }
+                  }}
+                  onContextMenu={e => e.stopPropagation()}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 12,
+                    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--accent-blue)',
+                    borderRadius: 3,
+                    padding: '1px 4px',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Context menu (fixed-position, escapes overflow) ── */}
       {ctxMenu && (
         <div
+          role="menu"
           ref={ctxMenuRef}
           style={{
             position: 'fixed',
@@ -1531,117 +1550,225 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         >
           {/* File/folder specific actions */}
           {ctxMenu.entry && !ctxMenu.entry.isDir && (
-            <div
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => doCtxAction('open', ctxMenu)}
-              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') void doCtxAction('open', ctxMenu);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                padding: '6px 14px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.background =
+                (e.currentTarget as HTMLButtonElement).style.background =
                   'var(--bg-hover, var(--bg-tertiary))';
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
               }}
             >
               Open
-            </div>
+            </button>
           )}
           {ctxMenu.entry && (
-            <div
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => doCtxAction('rename', ctxMenu)}
-              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') void doCtxAction('rename', ctxMenu);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                padding: '6px 14px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.background =
+                (e.currentTarget as HTMLButtonElement).style.background =
                   'var(--bg-hover, var(--bg-tertiary))';
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
               }}
             >
               Rename
-            </div>
+            </button>
           )}
           {ctxMenu.entry && !ctxMenu.entry.isDir && (
-            <div
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => doCtxAction('duplicate', ctxMenu)}
-              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') void doCtxAction('duplicate', ctxMenu);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                padding: '6px 14px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.background =
+                (e.currentTarget as HTMLButtonElement).style.background =
                   'var(--bg-hover, var(--bg-tertiary))';
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
               }}
             >
               Duplicate
-            </div>
+            </button>
           )}
           {ctxMenu.entry && !ctxMenu.entry.isDir && (
-            <div
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => doCtxAction('download', ctxMenu)}
-              style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') void doCtxAction('download', ctxMenu);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                padding: '6px 14px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.background =
+                (e.currentTarget as HTMLButtonElement).style.background =
                   'var(--bg-hover, var(--bg-tertiary))';
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
               }}
             >
               Download
-            </div>
+            </button>
           )}
           {/* Divider before common actions */}
           {ctxMenu.entry && (
             <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />
           )}
           {/* Common actions — always shown */}
-          <div
+          <button
+            type="button"
+            role="menuitem"
             onClick={() => doCtxAction('upload', ctxMenu)}
-            style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') void doCtxAction('upload', ctxMenu);
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              border: 'none',
+              padding: '6px 14px',
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+              background: 'transparent',
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+            }}
             onMouseEnter={e => {
-              (e.currentTarget as HTMLDivElement).style.background =
+              (e.currentTarget as HTMLButtonElement).style.background =
                 'var(--bg-hover, var(--bg-tertiary))';
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
             }}
           >
             Upload file here
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             onClick={() => doCtxAction('new-folder', ctxMenu)}
-            style={{ padding: '6px 14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') void doCtxAction('new-folder', ctxMenu);
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              border: 'none',
+              padding: '6px 14px',
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+              background: 'transparent',
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+            }}
             onMouseEnter={e => {
-              (e.currentTarget as HTMLDivElement).style.background =
+              (e.currentTarget as HTMLButtonElement).style.background =
                 'var(--bg-hover, var(--bg-tertiary))';
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
             }}
           >
             New folder
-          </div>
+          </button>
           {/* Delete — for files and folders (not the root cwd) */}
           {ctxMenu.entry && ctxMenu.entry.path !== cwd && (
             <>
               <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />
-              <div
+              <button
+                type="button"
+                role="menuitem"
                 onClick={() => doCtxAction('delete', ctxMenu)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') void doCtxAction('delete', ctxMenu);
+                }}
                 style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  border: 'none',
                   padding: '6px 14px',
                   cursor: 'pointer',
                   color: 'var(--accent-red, #e8453c)',
+                  background: 'transparent',
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
                 }}
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLDivElement).style.background =
+                  (e.currentTarget as HTMLButtonElement).style.background =
                     'var(--bg-hover, var(--bg-tertiary))';
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
                 }}
               >
                 Delete {ctxMenu.entry.isDir ? 'folder' : 'file'}
-              </div>
+              </button>
             </>
           )}
         </div>
@@ -1669,6 +1796,37 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
             flexShrink: 0,
           }}
         >
+          {/* Show-tree button — only visible when tree is hidden */}
+          {!showTree && (
+            <button
+              type="button"
+              title="Show file tree"
+              onClick={() => setShowTree(true)}
+              style={{
+                flexShrink: 0,
+                width: 28,
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                borderRight: '1px solid var(--border-primary)',
+                background: 'transparent',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)';
+              }}
+            >
+              <SidebarSimpleIcon size={13} />
+            </button>
+          )}
           {/* Scrollable tab list */}
           <div
             style={{
@@ -1761,7 +1919,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                         if (from < 0 || to < 0) return prev;
                         const next = [...prev];
                         const [moved] = next.splice(from, 1);
-                        next.splice(to, 0, moved!);
+                        if (moved !== undefined) next.splice(to, 0, moved);
                         return next;
                       });
                       setDragTab(null);
@@ -1775,9 +1933,8 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     <FileTypeIcon name={tab.name} size={13} />
                     <span className="editor-tab-name">{tab.name}</span>
                     {tab.dirty && <span className="editor-tab-dirty" />}
-                    <span
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       className="editor-tab-close"
                       onClick={e => closeTab(e, tab.path)}
                       onKeyDown={e =>
@@ -1785,7 +1942,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                       }
                     >
                       <XIcon size={10} weight="bold" />
-                    </span>
+                    </button>
                   </button>
                 );
               })
@@ -1913,7 +2070,13 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="10"
+                    height="10"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
                     <polygon points="5,3 19,12 5,21" />
                   </svg>
                   {previewLoading ? 'Starting…' : 'Run'}
@@ -2141,6 +2304,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
               >
                 <div
                   className="doc-word-view"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                   dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(currentTab.content) }}
                 />
               </div>
@@ -2277,6 +2441,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   <div className="doc-word-page">
                     <div
                       className="doc-word-view"
+                      // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                       dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(currentTab.content) }}
                     />
                   </div>

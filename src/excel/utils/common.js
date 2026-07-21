@@ -9,7 +9,7 @@ export const formatLongNumber = (num, digits = 3) => {
       { value: 1e6, symbol: 'M' },
     ];
     const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
-    var item = lookup
+    const item = lookup
       .slice()
       .reverse()
       .find(item => num >= item.value);

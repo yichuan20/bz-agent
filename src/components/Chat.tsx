@@ -94,6 +94,7 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
                         <div key={j} className="chat-row chat-row--user">
                           <div
                             className="chat-bubble-user"
+                            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                             dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
                           />
                         </div>
@@ -103,6 +104,7 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
                       <div
                         key={j}
                         className="chat-bubble-assistant"
+                        // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                         dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
                       />
                     );
@@ -122,6 +124,7 @@ export default function Chat({ className, chat, suggestions = defaultSuggestions
                         </summary>
                         <div
                           className="chat-thinking-content"
+                          // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                           dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(block.text) }}
                         />
                       </details>

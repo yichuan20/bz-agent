@@ -339,7 +339,7 @@ function StarRating({ value }: { value: number }) {
         const fill = Math.min(1, Math.max(0, value - (n - 1)));
         return (
           <span key={n} className="mkt-ll-star" style={{ '--fill': fill } as React.CSSProperties}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
               <path
                 d="M6 1l1.3 2.6L10 4.1l-2 1.9.5 2.8L6 7.5l-2.5 1.3.5-2.8-2-1.9 2.7-.5z"
                 stroke="#F59E0B"
@@ -379,13 +379,13 @@ function LiveLearningMockup() {
           // animate metrics during phase 3
           const steps = 8;
           for (let s = 1; s <= steps; s++) {
-            await new Promise(r => setTimeout(r, LL_PHASE_MS[3]! / steps));
+            await new Promise(r => setTimeout(r, (LL_PHASE_MS[3] ?? 0) / steps));
             if (cancelled) return;
             setAccuracy(75 + Math.round((82 - 75) * (s / steps)));
             setEff(+(3.5 + (4.0 - 3.5) * (s / steps)).toFixed(2));
           }
         } else {
-          await new Promise(r => setTimeout(r, LL_PHASE_MS[p]!));
+          await new Promise(r => setTimeout(r, LL_PHASE_MS[p] ?? 0));
         }
       }
       if (!cancelled) {
@@ -520,7 +520,7 @@ const TESTIMONIALS = [
 // ── Mode SVG icons ────────────────────────────────────────────────────────────
 function IconChat() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path
         d="M2 3.5A1.5 1.5 0 0 1 3.5 2h13A1.5 1.5 0 0 1 18 3.5v9A1.5 1.5 0 0 1 16.5 14H11l-3 3-1.5-3H3.5A1.5 1.5 0 0 1 2 12.5v-9Z"
         stroke="currentColor"
@@ -536,7 +536,7 @@ function IconChat() {
 
 function IconCanvas() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <rect x="2" y="2" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
       <rect x="12" y="2" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
       <rect x="2" y="12" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
@@ -547,7 +547,7 @@ function IconCanvas() {
 
 function IconDocument() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path
         d="M5 2h7.5L17 6.5V17a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"
         stroke="currentColor"
@@ -594,7 +594,7 @@ function IconDocument() {
 
 function IconCode() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <polyline
         points="6.5 5 2 10 6.5 15"
         stroke="currentColor"
@@ -727,7 +727,7 @@ function MarketingPage() {
           <div className="mkt-ll-text">
             <div className="mkt-feature-pill" style={{ marginBottom: 16 }}>
               <span className="mkt-feature-pill-icon">
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
                   <path
                     d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"

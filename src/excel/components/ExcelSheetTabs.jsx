@@ -73,6 +73,7 @@ const ExcelSheetTabs = ({
             background: 'transparent',
             flexShrink: 0,
           }}
+          type="button"
           title="Add sheet"
           onClick={() => onAddSheet?.()}
         >
@@ -83,6 +84,7 @@ const ExcelSheetTabs = ({
             stroke="currentColor"
             strokeWidth="2"
             fill="none"
+            aria-hidden="true"
           >
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -93,10 +95,16 @@ const ExcelSheetTabs = ({
           const isActive = name === selectedSheetName;
           const isEditing = name === editingName;
           return (
-            <div
+            <button
+              type="button"
               key={name}
               onClick={() => !isEditing && onSheetSelect?.(name)}
               onDoubleClick={e => startRename(name, e)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  if (!isEditing) onSheetSelect?.(name);
+                }
+              }}
               style={{
                 padding: '5px 12px',
                 fontSize: 11,
@@ -108,6 +116,9 @@ const ExcelSheetTabs = ({
                 flexShrink: 0,
                 background: isActive ? 'var(--bg-tertiary)' : 'transparent',
                 borderBottom: isActive ? '2px solid var(--accent-blue)' : '2px solid transparent',
+                border: 'none',
+                outline: 'none',
+                fontFamily: 'inherit',
               }}
             >
               {isEditing ? (
@@ -144,7 +155,7 @@ const ExcelSheetTabs = ({
               ) : (
                 name
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -157,6 +168,7 @@ const ExcelSheetTabs = ({
           {Math.round(zoom * 100)}%
         </span>
         <button
+          type="button"
           style={{
             background: 'none',
             border: 'none',
@@ -172,6 +184,7 @@ const ExcelSheetTabs = ({
           −
         </button>
         <button
+          type="button"
           style={{
             background: 'none',
             border: 'none',

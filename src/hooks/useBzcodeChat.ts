@@ -213,7 +213,7 @@ export function useBzcodeChat(wsUrl = DEFAULT_WS): UseChatReturn {
             // Slash command output — add as assistant message
             setFinalMessages(prev => [
               ...prev,
-              { role: 'assistant', content: [{ type: 'text', text: msg.output! }] },
+              { role: 'assistant', content: [{ type: 'text', text: msg.output ?? '' }] },
             ]);
           }
           break;

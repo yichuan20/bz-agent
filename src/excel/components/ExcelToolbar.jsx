@@ -158,7 +158,15 @@ const CellFormatItem = ({ children, style = {}, ...p }) => (
 );
 
 const ChevronDownIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <polyline points="6,9 12,15 18,9" />
   </svg>
 );
@@ -626,14 +634,30 @@ const DockIndicator = ({ children, $show, style = {}, ...p }) => (
 
 // SVG Icons matching HTML design
 const BoldIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
     <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
   </svg>
 );
 
 const ItalicIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <line x1="19" y1="4" x2="10" y2="4" />
     <line x1="14" y1="20" x2="5" y2="20" />
     <line x1="15" y1="4" x2="9" y2="20" />
@@ -641,7 +665,15 @@ const ItalicIcon = () => (
 );
 
 const TextColorIcon = ({ color }) => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <path d="M7 15L12 5L17 15" />
     <path d="M9 11h6" />
     <path d="M4 20h16" style={{ stroke: color, strokeWidth: 3 }} />
@@ -649,7 +681,15 @@ const TextColorIcon = ({ color }) => (
 );
 
 const FillColorIcon = ({ color = '#ffffff' }) => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <path d="M19 11H5L12 4L19 11Z" />
     <path d="M5 11V18H19V11" />
     <path
@@ -663,7 +703,15 @@ const FillColorIcon = ({ color = '#ffffff' }) => (
 );
 
 const AlignLeftIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <line x1="3" y1="6" x2="21" y2="6" />
     <line x1="3" y1="12" x2="15" y2="12" />
     <line x1="3" y1="18" x2="18" y2="18" />
@@ -671,7 +719,15 @@ const AlignLeftIcon = () => (
 );
 
 const AlignCenterIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <line x1="3" y1="6" x2="21" y2="6" />
     <line x1="6" y1="12" x2="18" y2="12" />
     <line x1="4" y1="18" x2="20" y2="18" />
@@ -679,7 +735,15 @@ const AlignCenterIcon = () => (
 );
 
 const AlignRightIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <line x1="3" y1="6" x2="21" y2="6" />
     <line x1="9" y1="12" x2="21" y2="12" />
     <line x1="6" y1="18" x2="21" y2="18" />
@@ -687,7 +751,15 @@ const AlignRightIcon = () => (
 );
 
 const WrapTextIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <line x1="3" y1="6" x2="21" y2="6" />
     <line x1="3" y1="12" x2="16" y2="12" />
     <path d="M16 12C19 12 19 18 16 18H10" fill="none" />
@@ -696,7 +768,15 @@ const WrapTextIcon = () => (
 );
 
 const MergeIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="2" y="4" width="20" height="16" rx="1" />
     <line x1="12" y1="4" x2="12" y2="20" strokeDasharray="3 2" />
     <polyline points="9,12 12,9 15,12" />
@@ -705,7 +785,15 @@ const MergeIcon = () => (
 );
 
 const PercentIconSVG = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <circle cx="7" cy="7" r="3" />
     <circle cx="17" cy="17" r="3" />
     <line x1="19" y1="5" x2="5" y2="19" />
@@ -713,7 +801,15 @@ const PercentIconSVG = () => (
 );
 
 const ImageIconSVG = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="3" y="3" width="18" height="18" rx="2" />
     <circle cx="8.5" cy="8.5" r="1.5" />
     <polyline points="21,15 16,10 5,21" />
@@ -728,6 +824,7 @@ const MoreIcon = () => (
     stroke="currentColor"
     strokeWidth="2"
     fill="currentColor"
+    aria-hidden="true"
   >
     <circle cx="12" cy="12" r="1" />
     <circle cx="19" cy="12" r="1" />
@@ -744,6 +841,7 @@ const ChevronDownTiny = () => (
     stroke="currentColor"
     strokeWidth="1.5"
     strokeLinecap="round"
+    aria-hidden="true"
   >
     <path d="M2 3.5L5 6.5L8 3.5" />
   </svg>
@@ -847,11 +945,18 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
           }}
         >
           {CURRENCIES.map(c => (
-            <div
+            <button
+              type="button"
               key={c.code}
               onClick={() => {
                 onUpdateAndPatchSelectedCell({ dataFormatString: c.format });
                 setOpen(false);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  onUpdateAndPatchSelectedCell({ dataFormatString: c.format });
+                  setOpen(false);
+                }
               }}
               style={{
                 display: 'flex',
@@ -866,6 +971,10 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
                     : 'transparent',
                 fontSize: 12,
                 color: 'var(--text-primary)',
+                border: 'none',
+                width: '100%',
+                fontFamily: 'inherit',
+                textAlign: 'left',
               }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
               onMouseLeave={e =>
@@ -886,7 +995,7 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
               >
                 {c.code}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -895,28 +1004,60 @@ const CurrencyPickerDropdown = ({ selectedCell, onUpdateAndPatchSelectedCell }) 
 };
 
 const BorderTopIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="4" y="4" width="16" height="16" rx="1" strokeWidth="1" strokeOpacity="0.4" />
     <line x1="4" y1="4" x2="20" y2="4" strokeWidth="3" strokeLinecap="round" />
   </svg>
 );
 
 const BorderBottomIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="4" y="4" width="16" height="16" rx="1" strokeWidth="1" strokeOpacity="0.4" />
     <line x1="4" y1="20" x2="20" y2="20" strokeWidth="3" strokeLinecap="round" />
   </svg>
 );
 
 const BorderLeftIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="4" y="4" width="16" height="16" rx="1" strokeWidth="1" strokeOpacity="0.4" />
     <line x1="4" y1="4" x2="4" y2="20" strokeWidth="3" strokeLinecap="round" />
   </svg>
 );
 
 const BorderRightIcon = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+  <svg
+    viewBox="0 0 24 24"
+    width="14"
+    height="14"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    aria-hidden="true"
+  >
     <rect x="4" y="4" width="16" height="16" rx="1" strokeWidth="1" strokeOpacity="0.4" />
     <line x1="20" y1="4" x2="20" y2="20" strokeWidth="3" strokeLinecap="round" />
   </svg>
@@ -924,12 +1065,12 @@ const BorderRightIcon = () => (
 
 const ExcelToolbar = ({
   selectedCell,
-  grid,
-  labels,
-  extraLabels,
-  currentSelection,
+  grid: _grid,
+  labels: _labels,
+  extraLabels: _extraLabels,
+  currentSelection: _currentSelection,
   onUpdateAndPatchSelectedCell,
-  onSaveLabel,
+  onSaveLabel: _onSaveLabel,
   onImageUpload,
   onInsertFunction,
   onResetGrid,
@@ -1083,7 +1224,11 @@ const ExcelToolbar = ({
         data-drag-handle="true"
         title="Double-click to dock"
       >
-        <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}>
+        <svg
+          viewBox="0 0 24 24"
+          style={{ width: 14, height: 14, fill: 'currentColor' }}
+          aria-hidden="true"
+        >
           <circle cx="9" cy="5" r="1.5" />
           <circle cx="15" cy="5" r="1.5" />
           <circle cx="9" cy="12" r="1.5" />
@@ -1093,8 +1238,12 @@ const ExcelToolbar = ({
         </svg>
       </DragHandle>
       {!isDocked && (
-        <div
+        <button
+          type="button"
           onClick={() => setIsDocked(true)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') setIsDocked(true);
+          }}
           title="Dock toolbar"
           style={{
             display: 'flex',
@@ -1109,12 +1258,15 @@ const ExcelToolbar = ({
             marginRight: 2,
             fontSize: 14,
             lineHeight: 1,
+            background: 'none',
+            border: 'none',
+            padding: 0,
           }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-blue)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
         >
           ⊟
-        </div>
+        </button>
       )}
 
       <ToolbarButton
@@ -1503,7 +1655,7 @@ const ExcelToolbar = ({
       {/* Tag Picker */}
       <TagPickerContainer className="tag-picker">
         <ToolbarButton onClick={() => setTagPickerOpen(!tagPickerOpen)} data-tooltip="Cell tag">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
             <rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" />
             <rect x="6" y="6" width="5" height="5" rx="1.5" fill="currentColor" />
           </svg>

@@ -20,7 +20,7 @@ export function ModeSelector({ selected, onSelect }: Props) {
         if (d.modes) {
           setConfigs(prev => {
             const next = { ...prev };
-            for (const [k, v] of Object.entries(d.modes!)) {
+            for (const [k, v] of Object.entries(d.modes ?? {})) {
               if (AGENT_MODES.includes(k as AgentMode)) {
                 next[k as AgentMode] = v as ModeConfig;
               }

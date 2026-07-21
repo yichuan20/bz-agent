@@ -175,6 +175,33 @@ const HTTP_BASE =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
   (import.meta.env.PROD ? window.location.origin : 'http://localhost:18789');
 
+const AUTO_SESSION_WORDS = [
+  'amber',
+  'azure',
+  'cedar',
+  'coral',
+  'delta',
+  'ember',
+  'frost',
+  'grove',
+  'haven',
+  'ivory',
+  'jade',
+  'lemon',
+  'maple',
+  'nexus',
+  'opal',
+  'prism',
+  'river',
+  'sage',
+  'titan',
+  'vapor',
+  'willow',
+  'xenon',
+  'zephyr',
+  'comet',
+];
+
 const MODE_META: Record<SessionMode, { label: string; description: string; color: string }> = {
   default: { label: 'Default', description: 'Normal operation', color: 'var(--accent-blue)' },
   plan: { label: 'Plan', description: 'Read-only planning mode', color: '#e67e22' },
@@ -187,7 +214,7 @@ function BlockDot({ size = 10 }: { size?: number }) {
   const gap = Math.round(size * 0.18);
   const cell = Math.floor((size - gap) / 2);
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden="true">
       <rect x={0} y={0} width={cell} height={cell} rx={1} fill="currentColor" />
       <rect x={cell + gap} y={0} width={cell} height={cell} rx={1} fill="currentColor" />
       <rect x={0} y={cell + gap} width={cell} height={cell} rx={1} fill="currentColor" />
@@ -198,7 +225,14 @@ function BlockDot({ size = 10 }: { size?: number }) {
 
 function TriangleCubes({ className }: { className?: string }) {
   return (
-    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" aria-hidden className={className}>
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 9 9"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
       <rect x="0" y="0" width="4" height="4" rx="0.8" fill="currentColor" />
       <rect x="0" y="5" width="4" height="4" rx="0.8" fill="currentColor" />
       <rect x="5" y="2.5" width="4" height="4" rx="0.8" fill="currentColor" />
@@ -219,6 +253,7 @@ function LlBrainIcon({ size = 14 }: { size?: number }) {
       fill="none"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
       <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
@@ -256,7 +291,7 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const metric = LL_METRICS[idx]!;
+  const metric = LL_METRICS[idx] ?? LL_METRICS[0] ?? { label: '', value: () => '' };
 
   return (
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
@@ -279,6 +314,7 @@ function LlEvalBadge({ gain }: { gain: { accuracy: number; quality: number } }) 
           strokeWidth="2.5"
           fill="none"
           style={{ opacity: 0.6 }}
+          aria-hidden="true"
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -338,7 +374,15 @@ function LiveLearningNotification({
   return (
     <div className={`ll-notif${expanded ? '' : ' ll-notif--mini'}`}>
       {/* Always-visible collapsed strip — click to expand */}
-      <div className="ll-notif-strip" onClick={() => setExpanded(v => !v)}>
+      <div
+        className="ll-notif-strip"
+        role="button"
+        tabIndex={0}
+        onClick={() => setExpanded(v => !v)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v);
+        }}
+      >
         <LlBrainIcon size={12} />
         <span className="ll-notif-title">{statusText}</span>
         <div className="ll-notif-bar-wrap ll-notif-bar-wrap--inline">
@@ -354,6 +398,7 @@ function LiveLearningNotification({
           stroke="currentColor"
           strokeWidth="2.5"
           fill="none"
+          aria-hidden="true"
           style={{
             flexShrink: 0,
             opacity: 0.5,
@@ -494,7 +539,7 @@ function parseCommandListOutput(text: string): CommandListResult | null {
     // Format: "  /name [(alias1, alias2)] — description [(/path)]"
     const m = line.match(/^\s+\/([\w-]+)(?:\s+\(([^)]+)\))?\s+—\s+(.+)$/);
     if (!m) continue;
-    const name = m[1]!;
+    const name = m[1] ?? '';
     const aliasRaw = m[2];
     let description = m[3]?.trim() ?? '';
 
@@ -521,16 +566,17 @@ function CompactSummaryCard({ text }: { text: string }) {
     .trim();
   return (
     <div className="compact-summary-card">
-      <div className="compact-summary-header" onClick={() => setExpanded(v => !v)}>
+      <button type="button" className="compact-summary-header" onClick={() => setExpanded(v => !v)}>
         <BoltzbitLogo size={11} />
         <span className="compact-summary-label">Conversation compacted</span>
         <span className="compact-summary-toggle">
           {expanded ? '▲ Hide summary' : '▼ Show summary'}
         </span>
-      </div>
+      </button>
       {expanded && (
         <div
           className="compact-summary-body"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
           dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(inner) }}
         />
       )}
@@ -751,7 +797,7 @@ function CreateAppModal({
         setSaving(false);
         return;
       }
-      onCreated(d.appConfig!);
+      if (d.appConfig) onCreated(d.appConfig);
     } catch (e) {
       setError(String(e));
       setSaving(false);
@@ -759,8 +805,22 @@ function CreateAppModal({
   }
 
   return (
-    <div className="bzhub-modal-overlay" onClick={onClose}>
-      <div className="bzhub-modal" onClick={e => e.stopPropagation()}>
+    <div
+      className="bzhub-modal-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={onClose}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="bzhub-modal"
+        role="dialog"
+        aria-modal={true}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+      >
         <div className="bzhub-modal-header">
           <BoltzbitLogo size={16} />
           <span className="bzhub-modal-title">Create App</span>
@@ -890,8 +950,22 @@ function ReleaseNotesModal({
   }, [onClose, stage, onPush]);
 
   return (
-    <div className="bzhub-modal-overlay" onClick={onClose}>
-      <div className="bzhub-modal" onClick={e => e.stopPropagation()}>
+    <div
+      className="bzhub-modal-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={onClose}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="bzhub-modal"
+        role="dialog"
+        aria-modal={true}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+      >
         <div className="bzhub-modal-header">
           <CloudArrowUpIcon size={16} color="var(--accent-blue)" />
           <span className="bzhub-modal-title">Push to BoltzHub</span>
@@ -1013,8 +1087,22 @@ function SyncModal({
   }
 
   return (
-    <div className="bzhub-modal-overlay" onClick={onClose}>
-      <div className="bzhub-modal" onClick={e => e.stopPropagation()}>
+    <div
+      className="bzhub-modal-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={onClose}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="bzhub-modal"
+        role="dialog"
+        aria-modal={true}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+      >
         <div className="bzhub-modal-header">
           <CloudArrowDownIcon size={16} color="var(--accent-blue)" />
           <span className="bzhub-modal-title">Sync project</span>
@@ -1161,8 +1249,22 @@ function TokenUsageModal({
   }, [onClose]);
 
   return (
-    <div className="bzhub-modal-overlay" onClick={onClose}>
-      <div className="bzhub-modal" onClick={e => e.stopPropagation()}>
+    <div
+      className="bzhub-modal-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={onClose}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="bzhub-modal"
+        role="dialog"
+        aria-modal={true}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+      >
         <div className="bzhub-modal-header">
           <ChartBarIcon size={16} color="#a78bfa" />
           <span className="bzhub-modal-title">Token Usage</span>
@@ -1372,9 +1474,12 @@ const DOC_PATH_RE =
   /(?:^|[\s`"'(])((\/[^\s`"'()]+|[a-zA-Z0-9._-]+)\.(?:docx?|xlsx?|pptx?|pdf))(?:[\s`"'().,]|$)/gm;
 function extractDocPaths(text: string): string[] {
   const found = new Set<string>();
-  let m: RegExpExecArray | null;
   DOC_PATH_RE.lastIndex = 0;
-  while ((m = DOC_PATH_RE.exec(text)) !== null) found.add(m[1]!);
+  let m = DOC_PATH_RE.exec(text);
+  while (m !== null) {
+    found.add(m[1] ?? '');
+    m = DOC_PATH_RE.exec(text);
+  }
   return Array.from(found);
 }
 
@@ -1382,9 +1487,12 @@ function extractDocPaths(text: string): string[] {
 const WIDGET_ID_RE = /\b(cw-[0-9a-f]{10,14})\b/gi;
 function extractWidgetIds(text: string): string[] {
   const found = new Set<string>();
-  let m: RegExpExecArray | null;
   WIDGET_ID_RE.lastIndex = 0;
-  while ((m = WIDGET_ID_RE.exec(text)) !== null) found.add(m[1]?.toLowerCase() ?? '');
+  let m = WIDGET_ID_RE.exec(text);
+  while (m !== null) {
+    found.add(m[1]?.toLowerCase() ?? '');
+    m = WIDGET_ID_RE.exec(text);
+  }
   return Array.from(found);
 }
 
@@ -1420,12 +1528,17 @@ function CopyPathInline({ path }: { path: string }) {
     });
   }
   return (
-    <div className="agent-session-path" title={copied ? 'Copied!' : path} onClick={handleCopy}>
+    <button
+      type="button"
+      className="agent-session-path"
+      title={copied ? 'Copied!' : path}
+      onClick={handleCopy}
+    >
       <span className="agent-session-path-text">{path}</span>
       <span className={`agent-session-path-copy${copied ? ' agent-session-path-copy--done' : ''}`}>
         {copied ? '✓' : <CopyIcon size={11} />}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -1822,8 +1935,9 @@ function resolveOverlaps(widgets: WidgetData[], fixedId?: string): WidgetData[] 
     let anyOverlap = false;
     for (let i = 0; i < result.length; i++) {
       for (let j = i + 1; j < result.length; j++) {
-        const a = result[i]!;
-        const b = result[j]!;
+        const a = result[i];
+        const b = result[j];
+        if (!a || !b) continue;
         if (
           a.x + a.w + PAD <= b.x ||
           b.x + b.w + PAD <= a.x ||
@@ -1841,17 +1955,37 @@ function resolveOverlaps(widgets: WidgetData[], fixedId?: string): WidgetData[] 
         const pushUp = b.y + b.h + PAD - a.y;
         const min = Math.min(pushRight, pushLeft, pushDown, pushUp);
         if (min === pushRight) {
-          if (!bFixed) result[j] = { ...result[j]!, x: (result[j]?.x ?? 0) + min };
-          else result[i] = { ...result[i]!, x: Math.max(0, (result[i]?.x ?? 0) - min) };
+          if (!bFixed) {
+            const cur = result[j];
+            if (cur) result[j] = { ...cur, x: cur.x + min };
+          } else {
+            const cur = result[i];
+            if (cur) result[i] = { ...cur, x: Math.max(0, cur.x - min) };
+          }
         } else if (min === pushLeft) {
-          if (!aFixed) result[i] = { ...result[i]!, x: (result[i]?.x ?? 0) + min };
-          else result[j] = { ...result[j]!, x: Math.max(0, (result[j]?.x ?? 0) - min) };
+          if (!aFixed) {
+            const cur = result[i];
+            if (cur) result[i] = { ...cur, x: cur.x + min };
+          } else {
+            const cur = result[j];
+            if (cur) result[j] = { ...cur, x: Math.max(0, cur.x - min) };
+          }
         } else if (min === pushDown) {
-          if (!bFixed) result[j] = { ...result[j]!, y: (result[j]?.y ?? 0) + min };
-          else result[i] = { ...result[i]!, y: Math.max(0, (result[i]?.y ?? 0) - min) };
+          if (!bFixed) {
+            const cur = result[j];
+            if (cur) result[j] = { ...cur, y: cur.y + min };
+          } else {
+            const cur = result[i];
+            if (cur) result[i] = { ...cur, y: Math.max(0, cur.y - min) };
+          }
         } else {
-          if (!aFixed) result[i] = { ...result[i]!, y: (result[i]?.y ?? 0) + min };
-          else result[j] = { ...result[j]!, y: Math.max(0, (result[j]?.y ?? 0) - min) };
+          if (!aFixed) {
+            const cur = result[i];
+            if (cur) result[i] = { ...cur, y: cur.y + min };
+          } else {
+            const cur = result[j];
+            if (cur) result[j] = { ...cur, y: Math.max(0, cur.y - min) };
+          }
         }
       }
     }
@@ -2012,16 +2146,27 @@ function CanvasWidget({
     >
       {/* Resize handles */}
       {RESIZE_HANDLES.map(h => (
-        <div
+        <button
           key={h}
+          type="button"
+          aria-label={`Resize widget ${h}`}
           className={`canvas-resize-handle canvas-resize-handle--${h}`}
           onMouseDown={e => handleResizeMouseDown(e, h)}
         />
       ))}
 
-      <div className="canvas-widget-header" onMouseDown={handleDragMouseDown}>
+      <div
+        className="canvas-widget-header"
+        role="button"
+        tabIndex={0}
+        onMouseDown={handleDragMouseDown}
+        onKeyDown={e => {
+          if (e.key === 'Enter') handleDragMouseDown(e as unknown as React.MouseEvent);
+        }}
+      >
         <span className="canvas-widget-title">{data.title}</span>
-        <span
+        <button
+          type="button"
           className="canvas-widget-id"
           title="Click to copy widget ID"
           onClick={e => {
@@ -2036,7 +2181,7 @@ function CanvasWidget({
           }}
         >
           {data.id}
-        </span>
+        </button>
 
         <button
           type="button"
@@ -2212,7 +2357,15 @@ function CodeDrawer({
 
   return (
     <>
-      <div className="code-drawer-backdrop" onClick={onCloseDrawer} />
+      <div
+        className="code-drawer-backdrop"
+        role="button"
+        tabIndex={0}
+        onClick={onCloseDrawer}
+        onKeyDown={e => {
+          if (e.key === 'Escape') onCloseDrawer();
+        }}
+      />
       <div className="code-drawer">
         <div className="code-drawer-header">
           <span className="code-drawer-title">&lt;/&gt; {title}</span>
@@ -2910,7 +3063,8 @@ const CanvasPanel = forwardRef<CanvasPanelHandle, { cwd?: string; sessionId?: st
                 }}
               >
                 ⚡ {entry.label}
-                <span
+                <button
+                  type="button"
                   className="canvas-custom-archive"
                   title="Archive"
                   onClick={ev => {
@@ -2919,7 +3073,7 @@ const CanvasPanel = forwardRef<CanvasPanelHandle, { cwd?: string; sessionId?: st
                   }}
                 >
                   ×
-                </span>
+                </button>
               </button>
             ))}
         </div>
@@ -2988,6 +3142,11 @@ type SessionInfo = {
 
 type FsEntry = { name: string; path: string; isDir: boolean };
 
+function dirIsAboveRoot(root: string, path: string) {
+  const p = path.replace(/\/$/, '');
+  return p !== root && !p.startsWith(`${root}/`);
+}
+
 function DirPickerPanel({
   rootPath,
   onConfirm,
@@ -3006,31 +3165,29 @@ function DirPickerPanel({
   const root = rootPath.replace(/\/$/, '');
   const rootParts = root.split('/').filter(Boolean);
 
-  function isAboveRoot(path: string) {
-    const p = path.replace(/\/$/, '');
-    return p !== root && !p.startsWith(`${root}/`);
-  }
-
-  function loadPath(path: string) {
-    if (isAboveRoot(path)) return;
-    fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(path)}`)
-      .then(r => r.json())
-      .then((d: { path?: string; entries?: FsEntry[] }) => {
-        const resolved = d.path ?? path;
-        if (isAboveRoot(resolved)) return;
-        setBrowsePath(resolved);
-        setMkdirErr('');
-        const dirs = (d.entries ?? []).filter(
-          e =>
-            e.isDir &&
-            !e.name.startsWith('.') &&
-            e.name !== 'node_modules' &&
-            e.name !== '__pycache__',
-        );
-        setEntries(dirs);
-      })
-      .catch(() => null);
-  }
+  const loadPath = useCallback(
+    (path: string) => {
+      if (dirIsAboveRoot(root, path)) return;
+      fetch(`${HTTP_BASE}/files?path=${encodeURIComponent(path)}`)
+        .then(r => r.json())
+        .then((d: { path?: string; entries?: FsEntry[] }) => {
+          const resolved = d.path ?? path;
+          if (dirIsAboveRoot(root, resolved)) return;
+          setBrowsePath(resolved);
+          setMkdirErr('');
+          const dirs = (d.entries ?? []).filter(
+            e =>
+              e.isDir &&
+              !e.name.startsWith('.') &&
+              e.name !== 'node_modules' &&
+              e.name !== '__pycache__',
+          );
+          setEntries(dirs);
+        })
+        .catch(() => null);
+    },
+    [root],
+  );
 
   function commitNewFolder() {
     const name = (pendingFolderName ?? '').trim();
@@ -3057,8 +3214,7 @@ function DirPickerPanel({
 
   useEffect(() => {
     loadPath(root);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: loadPath stable
-  }, [loadPath, root]);
+  }, [root, loadPath]);
 
   const parts = browsePath.split('/').filter(Boolean);
   const parentPath = parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : '/';
@@ -3234,11 +3390,16 @@ function SessionCard({
     <div
       className="agent-session-card animate-slide-in"
       style={{ '--session-accent': accentColor } as React.CSSProperties}
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') onSelect();
+      }}
     >
       <div className="agent-session-card-top">
         <span className="agent-session-dirname">{primaryLabel}</span>
-        <div className="agent-session-card-actions" onClick={e => e.stopPropagation()}>
+        <div className="agent-session-card-actions">
           <span className="agent-session-time" title={absoluteTime(s.lastModified)}>
             {relativeTime(s.lastModified)}
           </span>
@@ -3387,7 +3548,16 @@ function SessionListPage({
   return (
     <div className="agent-session-page">
       <div className="agent-session-topbar">
-        <div className="agent-session-topbar-left" onClick={load} title="Click to refresh">
+        <div
+          className="agent-session-topbar-left"
+          role="button"
+          tabIndex={0}
+          onClick={load}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') load();
+          }}
+          title="Click to refresh"
+        >
           <h2 className="agent-session-page-title">
             Sessions
             {!loading && <span className="agent-session-count">{sessions.length}</span>}
@@ -3877,12 +4047,6 @@ function AgentPage() {
   // pendingNewCwd: set when "new conversation" is clicked inside an existing chat session
   const [pendingNewCwd, setPendingNewCwd] = useState<string | null>(null);
   const [showModeSelector, setShowModeSelector] = useState(false);
-  const [pendingNewMode, setPendingNewMode] = useState<AgentMode | null>(null);
-  const [coderStartChoice, setCoderStartChoice] = useState<
-    'empty' | 'describe' | 'existing' | 'github' | null
-  >(null);
-  const [coderInputText, setCoderInputText] = useState('');
-  const [coderInputDone, setCoderInputDone] = useState(false);
   const [defaultCwd, setDefaultCwd] = useState('');
   // Session creation state
   const [sessionCreating, setSessionCreating] = useState(false);
@@ -3974,6 +4138,40 @@ function AgentPage() {
     [openSession],
   );
 
+  // Auto-create a folder with a random memorable name and start a new session in it.
+  const createAutoSession = useCallback(
+    async (mode: AgentMode) => {
+      if (!defaultCwd) return;
+      const shuffled = [...AUTO_SESSION_WORDS].sort(() => Math.random() - 0.5);
+      for (const word of shuffled.slice(0, 5)) {
+        const name = `${mode}-${word}`;
+        const res = await fetch(`${HTTP_BASE}/files/mkdir`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parent: defaultCwd, name }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { path: string };
+          void startNewSession(data.path, mode);
+          return;
+        }
+        if (res.status !== 409) break;
+      }
+      // Fallback: short random suffix
+      const fallbackName = `${mode}-${Math.random().toString(36).slice(2, 6)}`;
+      const res = await fetch(`${HTTP_BASE}/files/mkdir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent: defaultCwd, name: fallbackName }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { path: string };
+        void startNewSession(data.path, mode);
+      }
+    },
+    [defaultCwd, startNewSession],
+  );
+
   // Resume an existing session: connect bzcode (showing progress), then navigate.
   const connectAndOpenSession = useCallback(
     async (cwd: string, sessionId: string, mode?: AgentMode) => {
@@ -3994,16 +4192,18 @@ function AgentPage() {
           body: JSON.stringify({ cwd, sessionId, mode: resolvedMode }),
           signal: controller.signal,
         });
+        const poolData = (await poolRes.json().catch(() => ({}))) as {
+          detail?: string;
+          error?: string;
+          cwd?: string;
+        };
         if (!poolRes.ok) {
-          const err = (await poolRes.json().catch(() => ({}))) as {
-            detail?: string;
-            error?: string;
-          };
-          setSessionCreateError(err.detail ?? err.error ?? 'Failed to connect agent');
+          setSessionCreateError(poolData.detail ?? poolData.error ?? 'Failed to connect agent');
           return;
         }
         setSessionCreating(false);
-        openSession(cwd, sessionId, resolvedMode);
+        // Use the server-resolved absolute cwd — the client may have sent a relative path
+        openSession(poolData.cwd ?? cwd, sessionId, resolvedMode);
       } catch (e) {
         if ((e as Error).name === 'AbortError') {
           setSessionCreating(false);
@@ -4025,7 +4225,6 @@ function AgentPage() {
     setSessionCreateError(null);
     setPendingNewCwd(null);
     setShowModeSelector(false);
-    setPendingNewMode(null);
   }, []);
 
   const retrySessionCreate = useCallback(() => {
@@ -4083,14 +4282,14 @@ function AgentPage() {
     function handler(e: CustomEvent<{ mode: AgentMode }>) {
       const mode = e.detail.mode;
       if (mode === 'worker' || mode === 'coder') {
-        setPendingNewMode(mode);
+        void createAutoSession(mode);
       } else {
         void startNewSession(defaultCwd, mode);
       }
     }
     window.addEventListener('bz:start-new-session', handler as EventListener);
     return () => window.removeEventListener('bz:start-new-session', handler as EventListener);
-  }, [startNewSession, defaultCwd]);
+  }, [startNewSession, defaultCwd, createAutoSession]);
 
   // Fetch server-configured default cwd (from --cwd arg or deployment config)
   useEffect(() => {
@@ -4109,18 +4308,28 @@ function AgentPage() {
     isNewSessionRef.current = false;
     const mode = searchMode ?? 'general';
     if (mode === 'worker' || mode === 'coder') {
-      setPendingNewMode(mode);
+      void createAutoSession(mode);
     } else {
       void startNewSession(defaultCwd, mode);
     }
-  }, [defaultCwd, searchMode, startNewSession]);
+  }, [defaultCwd, searchMode, startNewSession, createAutoSession]);
 
-  // On first mount pick up pending message from sessionStorage (cwd/sessionId come via URL now)
+  // On first mount pick up pending message/attachments from sessionStorage
   useEffect(() => {
     const msg = sessionStorage.getItem('agent:pendingMessage');
-    if (msg) {
+    const attsRaw = sessionStorage.getItem('agent:pendingAttachments');
+    if (msg !== null) {
       sessionStorage.removeItem('agent:pendingMessage');
       pendingAutoSendRef.current = msg;
+    }
+    if (attsRaw) {
+      sessionStorage.removeItem('agent:pendingAttachments');
+      try {
+        pendingAttachmentsRef.current = JSON.parse(attsRaw);
+      } catch {
+        /* ignore */
+      }
+      if (pendingAutoSendRef.current === null) pendingAutoSendRef.current = '';
     }
   }, []);
 
@@ -4172,6 +4381,9 @@ function AgentPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const [isRenamingFolder, setIsRenamingFolder] = useState(false);
+  const [renamingFolderValue, setRenamingFolderValue] = useState('');
+  const renameFolderInputRef = useRef<HTMLInputElement>(null);
   const [_canvasMode, setCanvasMode] = useState(() => {
     if (!searchSessionId) return false;
     return localStorage.getItem(`bz-canvas:${searchSessionId}`) === '1';
@@ -4198,6 +4410,9 @@ function AgentPage() {
   const [stickyTranslateY, setStickyTranslateY] = useState(0);
 
   const pendingAutoSendRef = useRef<string | null>(null);
+  const pendingAttachmentsRef = useRef<{ name: string; mediaType: string; data: string }[] | null>(
+    null,
+  );
   const pendingAutoSendOnIdleRef = useRef<(() => void) | null>(null);
   const isCompactingRef = useRef(false);
   const streamingBlocksRef = useRef<StreamingBlocks>(new Map());
@@ -4248,14 +4463,15 @@ function AgentPage() {
     setStickyTranslateY(translateY);
   }, []);
 
-  // Scroll to bottom + update sticky only on conversation-level changes (new messages).
+  // Scroll to bottom + update sticky on conversation-level changes (new messages).
   // Delta streaming updates are handled separately via RAF to avoid per-keystroke reflows.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: items.length is an intentional scroll trigger; the effect reads DOM via scrollRef
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
     // RAF ensures updateSticky reads final layout positions after the browser paints
     requestAnimationFrame(() => updateSticky());
-  }, [updateSticky]);
+  }, [items.length, updateSticky]);
 
   // Attach scroll listener — must re-run when `view` becomes 'chat' because the
   // scroll container isn't mounted during list view (scrollRef.current is null then).
@@ -4268,16 +4484,17 @@ function AgentPage() {
     return () => el.removeEventListener('scroll', onScroll);
   }, [updateSticky, view]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea — grows with content up to ~6 lines (~40 words), then scrolls
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputValue is a resize trigger; actual measurement reads DOM scrollHeight
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = '1px';
     const lh = parseFloat(getComputedStyle(el).lineHeight);
-    const maxH = lh * 9;
+    const maxH = lh * 6;
     el.style.height = `${Math.max(Math.min(el.scrollHeight, maxH), lh)}px`;
-    el.style.overflowY = el.scrollHeight >= maxH ? 'auto' : 'hidden';
-  }, []);
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+  }, [inputValue]);
 
   const sendRaw = useCallback((msg: object) => {
     const sid = confirmedSessionIdRef.current;
@@ -4909,15 +5126,31 @@ function AgentPage() {
         // before the agent's first output arrives). If it's still 'starting' (bzcode
         // is restoring history), we wait for the first status:idle on the stream
         // before sending — the stream is the correct signal, no polling needed.
-        if (pendingAutoSendRef.current && !cancelled) {
+        if (pendingAutoSendRef.current !== null && !cancelled) {
           const text = pendingAutoSendRef.current;
           pendingAutoSendRef.current = null;
           const doSend = () => {
             if (cancelled) return;
+            const atts = pendingAttachmentsRef.current ?? [];
+            pendingAttachmentsRef.current = null;
+            let content: unknown;
+            if (atts.length > 0) {
+              const blocks: unknown[] = [];
+              if (text) blocks.push({ type: 'text', text });
+              for (const att of atts) {
+                blocks.push({
+                  type: 'image',
+                  source: { type: 'base64', mediaType: att.mediaType, data: att.data },
+                });
+              }
+              content = blocks;
+            } else {
+              content = text;
+            }
             fetch(`${HTTP_BASE}/api/pool/${encodeURIComponent(sid)}/send`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ type: 'user', content: text }),
+              body: JSON.stringify({ type: 'user', content }),
             }).catch(() => null);
           };
           if (connData.agentStatus === 'idle') {
@@ -5051,6 +5284,27 @@ function AgentPage() {
     },
     [activeSessionId],
   );
+
+  const confirmFolderRename = useCallback(async () => {
+    const newName = renamingFolderValue.trim();
+    setIsRenamingFolder(false);
+    if (!newName || newName === activeDirName || !activeCwd) return;
+    const res = await fetch(`${HTTP_BASE}/api/file/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: activeCwd, newName }),
+    }).catch(() => null);
+    if (!res?.ok) return;
+    const data = (await res.json()) as { path: string };
+    setActiveCwd(data.path);
+    setActiveDirName(newName);
+    void navigate({
+      to: '/agent',
+      search: { cwd: data.path, sessionId: activeSessionId ?? undefined, mode: agentMode },
+      replace: true,
+    });
+    setReconnectKey(k => k + 1);
+  }, [renamingFolderValue, activeDirName, activeCwd, activeSessionId, agentMode, navigate]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -5380,7 +5634,7 @@ function AgentPage() {
 
   // ── Shared session-creation overlay (used in both list and chat views) ────────
   const newSessionOverlay =
-    pendingNewMode !== null || sessionCreating || sessionCreateError ? (
+    sessionCreating || sessionCreateError ? (
       <div className="new-session-overlay">
         <div className="new-session-panel">
           {sessionCreating && (
@@ -5422,207 +5676,9 @@ function AgentPage() {
               onSaveApiKey={handleSaveApiKey}
               onRetry={retrySessionCreate}
               onSignOut={handleSignOut}
-              onBack={() => {
-                setSessionCreateError(null);
-                setPendingNewMode(null);
-              }}
+              onBack={() => setSessionCreateError(null)}
             />
           )}
-          {pendingNewMode !== null &&
-            !sessionCreating &&
-            !sessionCreateError &&
-            (() => {
-              const isCoder = pendingNewMode === 'coder';
-              const needInput =
-                isCoder &&
-                (coderStartChoice === 'describe' || coderStartChoice === 'github') &&
-                !coderInputDone;
-              const showDirPicker = !isCoder || (coderStartChoice !== null && !needInput);
-
-              function cancelCoder() {
-                setCoderStartChoice(null);
-                setCoderInputText('');
-                setCoderInputDone(false);
-                setPendingNewMode(null);
-              }
-              function confirmInput() {
-                if (coderInputText.trim()) setCoderInputDone(true);
-              }
-
-              return (
-                <>
-                  {/* Step 1 — Coder start options */}
-                  {isCoder && coderStartChoice === null && (
-                    <>
-                      <div className="new-session-header">
-                        <span className="new-session-title">Start your project</span>
-                      </div>
-                      <div className="coder-start-options">
-                        {(
-                          [
-                            {
-                              key: 'describe',
-                              label: 'Describe an app',
-                              desc: "Tell me what to build — I'll do the rest",
-                            },
-                            {
-                              key: 'empty',
-                              label: 'Empty project',
-                              desc: 'Start from scratch in a blank folder',
-                            },
-                            {
-                              key: 'existing',
-                              label: 'Open existing code',
-                              desc: 'Browse to a project you already have',
-                            },
-                            {
-                              key: 'github',
-                              label: 'Clone from GitHub',
-                              desc: "Paste a repo URL and I'll pull it down",
-                            },
-                          ] as const
-                        ).map(opt => (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            className="coder-start-option"
-                            onClick={() => {
-                              setCoderStartChoice(opt.key);
-                              setCoderInputText('');
-                              setCoderInputDone(false);
-                            }}
-                          >
-                            <span className="coder-start-option-label">{opt.label}</span>
-                            <span className="coder-start-option-desc">{opt.desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <button type="button" className="new-session-cancel" onClick={cancelCoder}>
-                        Cancel
-                      </button>
-                    </>
-                  )}
-
-                  {/* Step 2 — Description or GitHub URL input */}
-                  {needInput && (
-                    <>
-                      <div className="new-session-header">
-                        <button
-                          type="button"
-                          className="coder-start-back"
-                          onClick={() => {
-                            setCoderStartChoice(null);
-                            setCoderInputText('');
-                          }}
-                        >
-                          ← Back
-                        </button>
-                        <span className="new-session-title">
-                          {coderStartChoice === 'describe'
-                            ? 'Describe your app'
-                            : 'GitHub repository'}
-                        </span>
-                      </div>
-                      <p className="new-session-hint">
-                        {coderStartChoice === 'describe'
-                          ? 'What does the app do? Who uses it? The more detail, the better.'
-                          : 'Paste the repository URL to clone.'}
-                      </p>
-                      {coderStartChoice === 'describe' ? (
-                        <textarea
-                          className="coder-start-textarea"
-                          placeholder="e.g. A CRM for tracking sales leads — contact list, pipeline view, notes per deal"
-                          value={coderInputText}
-                          onChange={e => setCoderInputText(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              confirmInput();
-                            }
-                          }}
-                        />
-                      ) : (
-                        <input
-                          className="coder-start-input"
-                          type="url"
-                          placeholder="https://github.com/org/repo"
-                          value={coderInputText}
-                          onChange={e => setCoderInputText(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') confirmInput();
-                          }}
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="coder-start-continue"
-                        disabled={!coderInputText.trim()}
-                        onClick={confirmInput}
-                      >
-                        Continue →
-                      </button>
-                      <button
-                        type="button"
-                        className="new-session-cancel"
-                        style={{ marginTop: 4 }}
-                        onClick={cancelCoder}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-
-                  {/* Step 3 — Directory picker */}
-                  {showDirPicker && (
-                    <>
-                      <div className="new-session-header">
-                        {isCoder && (
-                          <button
-                            type="button"
-                            className="coder-start-back"
-                            onClick={() => {
-                              coderStartChoice === 'empty' || coderStartChoice === 'existing'
-                                ? setCoderStartChoice(null)
-                                : setCoderInputDone(false);
-                            }}
-                          >
-                            ← Back
-                          </button>
-                        )}
-                        <span className="new-session-title">Select working directory</span>
-                      </div>
-                      <p className="new-session-hint">
-                        Choose the project folder for this {pendingNewMode} session.
-                      </p>
-                      <DirPickerPanel
-                        rootPath={defaultCwd}
-                        onConfirm={cwd => {
-                          const m = pendingNewMode!;
-                          if (
-                            m === 'coder' &&
-                            coderStartChoice === 'describe' &&
-                            coderInputText.trim()
-                          )
-                            pendingAutoSendRef.current = coderInputText.trim();
-                          else if (
-                            m === 'coder' &&
-                            coderStartChoice === 'github' &&
-                            coderInputText.trim()
-                          )
-                            pendingAutoSendRef.current = `Clone this GitHub repository and help me work on it: ${coderInputText.trim()}`;
-                          setCoderStartChoice(null);
-                          setCoderInputText('');
-                          setCoderInputDone(false);
-                          setPendingNewMode(null);
-                          void startNewSession(cwd, m);
-                        }}
-                        onCancel={cancelCoder}
-                      />
-                    </>
-                  )}
-                </>
-              );
-            })()}
         </div>
       </div>
     ) : null;
@@ -5647,7 +5703,7 @@ function AgentPage() {
                 onSelect={m => {
                   setShowModeSelector(false);
                   if (m === 'worker' || m === 'coder') {
-                    setPendingNewMode(m);
+                    void createAutoSession(m);
                   } else {
                     void startNewSession(defaultCwd, m);
                   }
@@ -5713,11 +5769,37 @@ function AgentPage() {
             Agent
           </button>
           <span className="agent-breadcrumb-sep">/</span>
-          <CopyPathButton path={activeCwd} label={activeDirName || '—'} />
+          {isRenamingFolder ? (
+            <input
+              ref={renameFolderInputRef}
+              className="agent-folder-rename-input"
+              value={renamingFolderValue}
+              onChange={e => setRenamingFolderValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void confirmFolderRename();
+                if (e.key === 'Escape') setIsRenamingFolder(false);
+              }}
+              onBlur={() => void confirmFolderRename()}
+            />
+          ) : (
+            <button
+              type="button"
+              className="agent-breadcrumb-dir"
+              title="Click to rename folder"
+              onClick={() => {
+                setRenamingFolderValue(activeDirName);
+                setIsRenamingFolder(true);
+                setTimeout(() => renameFolderInputRef.current?.select(), 0);
+              }}
+            >
+              {activeDirName || '—'}
+            </button>
+          )}
           {sessionTitle && !isEditingTitle && (
             <>
               <span className="agent-breadcrumb-sep">·</span>
-              <span
+              <button
+                type="button"
                 className="agent-session-title"
                 title="Click to rename"
                 onClick={() => {
@@ -5726,7 +5808,7 @@ function AgentPage() {
                 }}
               >
                 {sessionTitle}
-              </span>
+              </button>
             </>
           )}
           {isEditingTitle && (
@@ -5781,6 +5863,7 @@ function AgentPage() {
                 height="6"
                 viewBox="0 0 10 6"
                 fill="none"
+                aria-hidden="true"
               >
                 <path
                   d="M1 1l4 4 4-4"
@@ -5840,6 +5923,7 @@ function AgentPage() {
                         height="12"
                         viewBox="0 0 12 12"
                         fill="none"
+                        aria-hidden="true"
                         className="agent-model-dropdown-check"
                       >
                         <path
@@ -5866,6 +5950,7 @@ function AgentPage() {
                         strokeWidth="2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
+                        aria-hidden="true"
                       >
                         <circle cx="11" cy="11" r="8" />
                         <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -5900,6 +5985,7 @@ function AgentPage() {
                             height="12"
                             viewBox="0 0 12 12"
                             fill="none"
+                            aria-hidden="true"
                             className="agent-model-dropdown-check"
                           >
                             <path
@@ -6083,6 +6169,7 @@ function AgentPage() {
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <div
                                       className="chat-bubble-assistant"
+                                      // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                                       dangerouslySetInnerHTML={{
                                         __html: parseMarkdownToHTML(block.text),
                                       }}
@@ -6104,6 +6191,7 @@ function AgentPage() {
                                               stroke="currentColor"
                                               strokeWidth="2"
                                               strokeLinecap="round"
+                                              aria-hidden="true"
                                               style={{ flexShrink: 0 }}
                                             >
                                               <rect x="3" y="3" width="7" height="7" />
@@ -6207,6 +6295,7 @@ function AgentPage() {
                                   </summary>
                                   <div
                                     className="agent-thinking-content"
+                                    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                                     dangerouslySetInnerHTML={{
                                       __html: parseMarkdownToHTML(block.text),
                                     }}
@@ -6329,6 +6418,7 @@ function AgentPage() {
                   stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
+                  aria-hidden="true"
                 >
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
@@ -6392,6 +6482,7 @@ function AgentPage() {
                   stroke="currentColor"
                   strokeWidth="2.5"
                   strokeLinecap="round"
+                  aria-hidden="true"
                 >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -6704,9 +6795,17 @@ function AgentPage() {
         <>
           <div
             className="code-drawer-backdrop"
+            role="button"
+            tabIndex={0}
             onClick={() => {
               setDocViewer(null);
               setDocViewerLoading(false);
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Escape') {
+                setDocViewer(null);
+                setDocViewerLoading(false);
+              }
             }}
           />
           <div className="code-drawer doc-viewer-drawer">
@@ -6746,6 +6845,7 @@ function AgentPage() {
               {docViewer && !docViewerLoading && (
                 <div
                   className="doc-viewer-content"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
                   dangerouslySetInnerHTML={{ __html: parseMarkdownToHTML(docViewer.content) }}
                 />
               )}

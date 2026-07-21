@@ -144,16 +144,30 @@ const TablePickerTooltip = ({ onTableSelect = () => {}, triggerIcon, disabled = 
 
   return (
     <TablePickerContainer>
-      <div
+      <button
+        type="button"
         onClick={() => {
           if (!disabled) {
             setIsOpen(true);
           }
         }}
-        style={disabled ? { pointerEvents: 'none', cursor: 'not-allowed' } : { cursor: 'pointer' }}
+        onKeyDown={e => {
+          if ((e.key === 'Enter' || e.key === ' ') && !disabled) setIsOpen(true);
+        }}
+        style={
+          disabled
+            ? {
+                pointerEvents: 'none',
+                cursor: 'not-allowed',
+                border: 'none',
+                background: 'none',
+                padding: 0,
+              }
+            : { cursor: 'pointer', border: 'none', background: 'none', padding: 0 }
+        }
       >
         {triggerIcon}
-      </div>
+      </button>
       {isOpen && !disabled && (
         <TablePickerTip ref={tipRef} isVisible={isOpen}>
           <TableGridContainer

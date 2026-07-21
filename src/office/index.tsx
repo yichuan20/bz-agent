@@ -57,7 +57,7 @@ function loadImageDimensions(url: string): Promise<{ width: number; height: numb
         h = Math.round((h * TEXT_COL_WIDTH_PX) / w);
         w = TEXT_COL_WIDTH_PX;
       }
-      resolve({ width: w, height: h });
+      void resolve({ width: w, height: h });
     };
     img.onerror = () => resolve({ width: 64, height: 64 });
     img.src = url;
@@ -65,11 +65,15 @@ function loadImageDimensions(url: string): Promise<{ width: number; height: numb
 }
 
 // Internal opaque type for the bz-office Doc format
+// biome-ignore lint/suspicious/noExplicitAny: opaque JS interop type
 type OfficeDoc = Record<string, any>;
 
 // Cast JS modules to avoid TS type inference errors on bz-office internals
+// biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS module, no type declarations
 const DocArea = DocAreaRaw as React.ComponentType<any>;
+// biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS module, no type declarations
 const getDocFromBlocks = _gdfb as (blocks?: any[]) => OfficeDoc;
+// biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS module, no type declarations
 const getBlocksFromDoc = _gbfd as (doc: any) => { blocks: any[] };
 export { getDocFromBlocks, getBlocksFromDoc };
 
@@ -147,6 +151,7 @@ export function WordDocEditor({
   );
 
   // Derive current formatting state from selection for toolbar
+  // biome-ignore lint/suspicious/noExplicitAny: opaque JS interop type
   const sel = getSelectionStyle(doc as any);
 
   const currentHeading = (() => {
@@ -158,6 +163,7 @@ export function WordDocEditor({
 
   // Toolbar command helpers — each applies a docUtils transform then propagates
   const cmd = useCallback(
+    // biome-ignore lint/suspicious/noExplicitAny: opaque JS interop type
     (fn: (d: any) => any) => {
       if (readOnly) return;
       applyDoc(fn(doc));
@@ -184,6 +190,7 @@ export function WordDocEditor({
           heading={currentHeading}
           isBullet={sel.isBullet}
           isNumbered={sel.isNumbered}
+          // biome-ignore lint/suspicious/noExplicitAny: opaque JS interop type
           isInTable={isCursorInTable(doc as any)}
           onToggleBold={() => cmd(d => toggleStyle(d, 'isBold'))}
           onToggleItalic={() => cmd(d => toggleStyle(d, 'isItalic'))}

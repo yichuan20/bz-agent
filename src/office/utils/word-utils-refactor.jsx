@@ -533,7 +533,7 @@ export const drawDoc = ({
               }
             }
 
-            if (rowStartY !== null && isFinite(rowMaxY)) {
+            if (rowStartY !== null && Number.isFinite(rowMaxY)) {
               const relStart = rowStartY - firstContentY;
               const relMax = rowMaxY - firstContentY;
               if (relStart >= 0 && relMax >= 0) {
@@ -656,7 +656,7 @@ export const drawDoc = ({
             if (img.complete && img.naturalHeight !== 0) {
               try {
                 ctx.drawImage(img, px, placedDrawY - imgHeight, imgWidth, imgHeight);
-              } catch (e) {
+              } catch {
                 failedImageUrls.add(imageUrl);
               }
             }

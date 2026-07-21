@@ -33,8 +33,26 @@ function useKeyStatus() {
   const [last4, setLast4] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
+  // Lightweight poll: only checks whether the key is stored locally.
+  // Called every 60s — cheap, no external API call.
+  const checkStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`${AGENT_HTTP}/api/apikey-status`);
+      const d = (await r.json()) as { present: boolean; last4: string | null };
+      if (!d.present) {
+        setKeyStatus('missing');
+        setLast4(null);
+      } else {
+        setLast4(d.last4);
+      }
+    } catch {
+      setKeyStatus('unreachable');
+    }
+  }, []);
+
+  // Full check: status + verify against Boltzbit API.
+  // Called once on mount and on explicit refresh (e.g. after saving a new key).
   const check = useCallback(async () => {
-    // First get the stored key info
     try {
       const r = await fetch(`${AGENT_HTTP}/api/apikey-status`);
       const d = (await r.json()) as { present: boolean; last4: string | null };
@@ -48,7 +66,6 @@ function useKeyStatus() {
       setKeyStatus('unreachable');
       return;
     }
-    // Then verify it against the Boltzbit API
     try {
       const r = await fetch(`${AGENT_HTTP}/api/apikey-verify`);
       const d = (await r.json()) as { status: string; reason?: string; httpStatus?: number };
@@ -71,10 +88,10 @@ function useKeyStatus() {
   }, []);
 
   useEffect(() => {
-    void check();
-    const id = setInterval(() => void check(), 30_000);
+    void check(); // verify once on mount
+    const id = setInterval(() => void checkStatus(), 60_000); // status-only poll every 60s
     return () => clearInterval(id);
-  }, [check]);
+  }, [check, checkStatus]);
 
   return { keyStatus, last4, reason, refresh: check };
 }

@@ -23,7 +23,7 @@ export function GeneralModeIcon({ size = 18, className }: Props) {
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      aria-hidden
+      aria-hidden="true"
       className={className}
       {...STROKE_PROPS}
     >
@@ -45,7 +45,7 @@ export function WidgetModeIcon({ size = 18, className }: Props) {
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      aria-hidden
+      aria-hidden="true"
       className={className}
       {...STROKE_PROPS}
     >
@@ -68,7 +68,7 @@ export function WorkerModeIcon({ size = 18, className }: Props) {
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      aria-hidden
+      aria-hidden="true"
       className={className}
       {...STROKE_PROPS}
     >
@@ -90,7 +90,7 @@ export function CoderModeIcon({ size = 18, className }: Props) {
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      aria-hidden
+      aria-hidden="true"
       className={className}
       {...STROKE_PROPS}
     >

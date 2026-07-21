@@ -62,7 +62,8 @@ const DropdownMenu = ({ children, style = {}, ...p }) => (
 );
 
 const DropdownMenuItem = ({ children, ...p }) => (
-  <div
+  <button
+    type="button"
     style={{
       display: 'flex',
       alignItems: 'center',
@@ -72,6 +73,10 @@ const DropdownMenuItem = ({ children, ...p }) => (
       cursor: 'pointer',
       fontSize: 13,
       color: 'var(--text-secondary)',
+      border: 'none',
+      background: 'transparent',
+      width: '100%',
+      textAlign: 'left',
     }}
     onMouseEnter={e => {
       e.currentTarget.style.background = 'var(--bg-hover,var(--bg-tertiary))';
@@ -84,7 +89,7 @@ const DropdownMenuItem = ({ children, ...p }) => (
     {...p}
   >
     {children}
-  </div>
+  </button>
 );
 
 /* isVisible controls display — critical fix: previously ignored this prop */
@@ -115,14 +120,17 @@ const FormGroup = ({ children, ...p }) => (
   </div>
 );
 
-const FormLabel = ({ children, ...p }) => (
-  <label
-    style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}
-    {...p}
-  >
-    {children}
-  </label>
-);
+const FormLabel = ({ children, ...p }) => {
+  return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: htmlFor forwarded via ...p
+    <label
+      style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}
+      {...p}
+    >
+      {children}
+    </label>
+  );
+};
 
 const FormInput = ({ children, ...p }) => (
   <input
@@ -165,10 +173,10 @@ const ConfirmButton = ({ children, ...p }) => (
 );
 
 const ImageInsert = ({
-  style = {},
+  style: _style = {},
   onNetworkImage = () => {},
   onUploadImage = () => {},
-  title = '',
+  title: _title = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
@@ -308,7 +316,7 @@ const ImageInsert = ({
           setIsOpen(!isOpen);
         }}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <circle cx="8.5" cy="8.5" r="1.5" />
           <path d="M21 15l-5-5L5 21" />

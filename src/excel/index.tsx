@@ -11,8 +11,9 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS component, no type declarations available
 const ExcelViewSheetArea = React.lazy(() => import('./components/ExcelViewSheetArea')) as any;
+// biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS component, no type declarations available
 const ExcelSheetTabs = React.lazy(() => import('./components/ExcelSheetTabs')) as any;
 
 const HTTP_BASE =
@@ -23,11 +24,62 @@ export interface ExcelEditorProps {
   style?: React.CSSProperties;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SheetData = Record<string, any>;
+interface CellData {
+  value?: string | number | boolean | null;
+  formula?: string;
+  fontBold?: boolean;
+  fontItalic?: boolean;
+  fontColor?: string;
+  color?: string;
+  bgColor?: string;
+  bgPattern?: string;
+  align?: string;
+  dataFormatString?: string;
+  wrapText?: boolean;
+  fontSize?: number;
+}
+
+interface SidecarStyle {
+  bold?: boolean;
+  italic?: boolean;
+  fg?: string;
+  bg?: string | null;
+  align?: string;
+  format?: string;
+  wrap?: boolean;
+  fontSize?: number;
+}
+
+interface SidecarCell {
+  v?: string | number | boolean | null;
+  f?: string;
+  s?: SidecarStyle;
+}
+
+interface SheetRecord {
+  sheetName: string;
+  cells?: Record<string, CellData>;
+  mergedCellRanges?: string[];
+  columnIndexToWidth?: Record<string, number>;
+  rowIndexToHeight?: Record<string, number>;
+  images?: unknown[];
+  hiddenColIndices?: number[];
+  hiddenRowIndices?: number[];
+  mergedCellIndices?: unknown[];
+}
+
+interface ExcelApiData {
+  sheets: SheetRecord[];
+  error?: string;
+}
+
+interface GridUpdate {
+  columnIndexToWidth?: Record<string, number>;
+  rowIndexToHeight?: Record<string, number>;
+}
 
 export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ExcelApiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedSheet, setSelectedSheet] = useState('');
@@ -50,7 +102,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
     setError('');
     fetch(`${HTTP_BASE}/api/excel/load?path=${encodeURIComponent(filePath)}`)
       .then(r => r.json())
-      .then((d: any) => {
+      .then((d: ExcelApiData) => {
         if (d.error) {
           setError(d.error);
           setLoading(false);
@@ -66,52 +118,56 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
       });
   }, [filePath]);
 
-  const sheet: SheetData | null =
-    data?.sheets?.find((s: any) => s.sheetName === selectedSheet) ?? null;
+  const sheet: SheetRecord | null =
+    data?.sheets?.find((s: SheetRecord) => s.sheetName === selectedSheet) ?? null;
 
   const handleCellPatch = useCallback(
-    (cellUpdates: Record<string, any>) => {
+    (cellUpdates: Record<string, CellData>) => {
       if (!sheet) return;
 
       // Optimistic update for immediate UI feedback
-      const mergedCells: Record<string, any> = { ...sheet.cells };
+      const mergedCells: Record<string, CellData> = { ...sheet.cells };
       for (const [ref, cd] of Object.entries(cellUpdates)) {
         mergedCells[ref] = { ...(mergedCells[ref] ?? {}), ...cd };
       }
-      setData((prev: any) => ({
-        ...prev,
-        sheets: prev.sheets.map((s: any) =>
-          s.sheetName === selectedSheet ? { ...s, cells: mergedCells } : s,
-        ),
-      }));
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              sheets: prev.sheets.map((s: SheetRecord) =>
+                s.sheetName === selectedSheet ? { ...s, cells: mergedCells } : s,
+              ),
+            }
+          : prev,
+      );
 
       // Convert API format {value, formula, fontBold, fontColor, bgColor, align}
       // to sidecar format {v, f, s} for the PATCH endpoint
-      const sidecarCells: Record<string, any> = {};
+      const sidecarCells: Record<string, SidecarCell> = {};
       for (const [ref, cd] of Object.entries(cellUpdates)) {
-        const sc: Record<string, any> = {};
+        const sc: SidecarCell = {};
         if ('value' in cd) sc.v = cd.value;
         if ('formula' in cd) sc.f = cd.formula;
-        const style: Record<string, any> = {};
-        if (cd.fontBold !== undefined) style.bold = cd.fontBold;
-        if (cd.fontItalic !== undefined) style.italic = cd.fontItalic;
+        const sidecarStyle: SidecarStyle = {};
+        if (cd.fontBold !== undefined) sidecarStyle.bold = cd.fontBold;
+        if (cd.fontItalic !== undefined) sidecarStyle.italic = cd.fontItalic;
         // fontColor is FFRRGGBB; convert to #RRGGBB for sidecar storage
-        const _fc = cd.fontColor ?? (cd as any).color;
+        const _fc = cd.fontColor ?? cd.color;
         if (_fc !== undefined) {
           const _fcHex = String(_fc).replace(/^#/, '').replace(/^FF/i, '');
-          style.fg = `#${_fcHex}`;
+          sidecarStyle.fg = `#${_fcHex}`;
         }
         if (cd.bgPattern === 'NO_FILL') {
-          style.bg = null; // explicit null = remove fill
+          sidecarStyle.bg = null; // explicit null = remove fill
         } else if (cd.bgColor !== undefined) {
           const _bgHex = String(cd.bgColor).replace(/^#/, '').replace(/^FF/i, '');
-          style.bg = `#${_bgHex}`;
+          sidecarStyle.bg = `#${_bgHex}`;
         }
-        if (cd.align !== undefined) style.align = cd.align;
-        if (cd.dataFormatString !== undefined) style.format = cd.dataFormatString;
-        if (cd.wrapText !== undefined) style.wrap = cd.wrapText;
-        if (cd.fontSize !== undefined) style.fontSize = cd.fontSize;
-        if (Object.keys(style).length) sc.s = style;
+        if (cd.align !== undefined) sidecarStyle.align = cd.align;
+        if (cd.dataFormatString !== undefined) sidecarStyle.format = cd.dataFormatString;
+        if (cd.wrapText !== undefined) sidecarStyle.wrap = cd.wrapText;
+        if (cd.fontSize !== undefined) sidecarStyle.fontSize = cd.fontSize;
+        if (Object.keys(sidecarStyle).length) sc.s = sidecarStyle;
         sidecarCells[ref] = sc;
       }
 
@@ -121,7 +177,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         body: JSON.stringify({ path: filePath, sheet: selectedSheet, cells: sidecarCells }),
       })
         .then(r => r.json())
-        .then((d: any) => {
+        .then((d: ExcelApiData) => {
           if (!d.sheets) return;
           // Replace full state with server response (contains recalculated formula values)
           setData(d);
@@ -132,14 +188,18 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
   );
 
   const handleGridChange = useCallback(
-    (grid: any) => {
+    (grid: GridUpdate) => {
       if (!sheet) return;
-      setData((prev: any) => ({
-        ...prev,
-        sheets: prev.sheets.map((s: any) =>
-          s.sheetName === selectedSheet ? { ...s, ...grid } : s,
-        ),
-      }));
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              sheets: prev.sheets.map((s: SheetRecord) =>
+                s.sheetName === selectedSheet ? { ...s, ...grid } : s,
+              ),
+            }
+          : prev,
+      );
       fetch(`${HTTP_BASE}/api/excel/grid`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -168,19 +228,23 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         return;
       }
       // Optimistic update
-      setData((prev: any) => ({
-        ...prev,
-        sheets: prev.sheets.map((s: any) =>
-          s.sheetName === selectedSheet ? { ...s, mergedCellRanges: newMerges } : s,
-        ),
-      }));
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              sheets: prev.sheets.map((s: SheetRecord) =>
+                s.sheetName === selectedSheet ? { ...s, mergedCellRanges: newMerges } : s,
+              ),
+            }
+          : prev,
+      );
       fetch(`${HTTP_BASE}/api/excel/merge`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, sheet: selectedSheet, mergedCells: newMerges }),
       })
         .then(r => r.json())
-        .then((d: any) => {
+        .then((d: ExcelApiData) => {
           if (d.sheets) setData(d);
         })
         .catch(() => null);
@@ -190,12 +254,16 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
 
   const handleRenameSheet = useCallback(
     (oldName: string, newName: string) => {
-      setData((prev: any) => ({
-        ...prev,
-        sheets: prev.sheets.map((s: any) =>
-          s.sheetName === oldName ? { ...s, sheetName: newName } : s,
-        ),
-      }));
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              sheets: prev.sheets.map((s: SheetRecord) =>
+                s.sheetName === oldName ? { ...s, sheetName: newName } : s,
+              ),
+            }
+          : prev,
+      );
       if (selectedSheet === oldName) setSelectedSheet(newName);
       fetch(`${HTTP_BASE}/api/excel/renamesheet`, {
         method: 'PUT',
@@ -208,26 +276,30 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
 
   const handleAddSheet = useCallback(() => {
     if (!data) return;
-    const existing = new Set(data.sheets.map((s: any) => s.sheetName));
+    const existing = new Set(data.sheets.map((s: SheetRecord) => s.sheetName));
     let n = (data.sheets.length as number) + 1;
     while (existing.has(`Sheet${n}`)) n++;
     const newName = `Sheet${n}`;
-    setData((prev: any) => ({
-      ...prev,
-      sheets: [
-        ...prev.sheets,
-        {
-          sheetName: newName,
-          cells: {},
-          columnIndexToWidth: {},
-          rowIndexToHeight: {},
-          images: [],
-          hiddenColIndices: [],
-          hiddenRowIndices: [],
-          mergedCellIndices: [],
-        },
-      ],
-    }));
+    setData(prev =>
+      prev
+        ? {
+            ...prev,
+            sheets: [
+              ...prev.sheets,
+              {
+                sheetName: newName,
+                cells: {},
+                columnIndexToWidth: {},
+                rowIndexToHeight: {},
+                images: [],
+                hiddenColIndices: [],
+                hiddenRowIndices: [],
+                mergedCellIndices: [],
+              },
+            ],
+          }
+        : prev,
+    );
     setSelectedSheet(newName);
     fetch(`${HTTP_BASE}/api/excel/addsheet`, {
       method: 'POST',
@@ -255,7 +327,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
     return <div style={{ padding: 16, color: 'var(--accent-red)', fontSize: 13 }}>{error}</div>;
   if (!data || !sheet) return null;
 
-  const sheetNames: string[] = data.sheets?.map((s: any) => s.sheetName) ?? [];
+  const sheetNames: string[] = data.sheets?.map((s: SheetRecord) => s.sheetName) ?? [];
 
   return (
     <div

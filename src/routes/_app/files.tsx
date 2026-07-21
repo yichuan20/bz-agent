@@ -88,7 +88,11 @@ function FilesPage() {
       attempts++;
 
       try {
-        const { data, error } = await (dynasClient.GET as any)(
+        type GetFn = (
+          path: string,
+          opts: { params: { path: Record<string, string> } },
+        ) => Promise<{ data: unknown; error: unknown }>;
+        const { data, error } = await (dynasClient.GET as unknown as GetFn)(
           '/v1/apps/{appId}/files/{resourceId}',
           {
             params: { path: { appId: import.meta.env.VITE_DYNAS_APP_ID, resourceId } },

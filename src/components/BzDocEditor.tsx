@@ -112,7 +112,7 @@ function TableView({ cells }: { cells: Block[] }) {
   const nRows = cells[0]?.numberOfRows ?? 0;
   const nCols = cells[0]?.numberOfColumns ?? 0;
   const grid: Block[][] = Array.from({ length: nRows }, () => Array(nCols).fill({ text: '' }));
-  for (const c of cells) grid[c.rowIndex ?? 0]![c.columnIndex ?? 0] = c;
+  for (const c of cells) (grid[c.rowIndex ?? 0] ?? [])[c.columnIndex ?? 0] = c;
 
   return (
     <table className="bzd-table">
@@ -143,13 +143,18 @@ function BlockEdit({
   onKeyDown: (e: React.KeyboardEvent, index: number) => void;
 }) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: contentEditable requires a div
     <div
+      role="textbox"
+      aria-multiline="true"
+      tabIndex={0}
       contentEditable
       suppressContentEditableWarning
       className="bzd-block-edit"
       style={{ marginLeft: (block.indent ?? 0) * 20 }}
       onInput={e => onChange(index, (e.currentTarget as HTMLDivElement).innerText)}
       onKeyDown={e => onKeyDown(e, index)}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised HTML
       dangerouslySetInnerHTML={{ __html: block.text || '<br>' }}
     />
   );
@@ -211,7 +216,7 @@ export function BzDocEditor({ blocks, mode, onChange }: Props) {
   let bi = 0;
 
   while (bi < blocks.length) {
-    const block = blocks[bi]!;
+    const block = blocks[bi] ?? { text: '' };
 
     if (block.isTableCell && block.tableId) {
       if (!seenTables.has(block.tableId)) {

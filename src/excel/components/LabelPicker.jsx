@@ -227,13 +227,13 @@ export default function LabelPicker({
               open
               multiple
               freeSolo
-              onClose={(event, reason) => {
+              onClose={(_event, reason) => {
                 if (reason === 'escape') {
                   handleClose();
                 }
               }}
               value={pendingValue}
-              onChange={(event, newValue) => {
+              onChange={(_event, newValue) => {
                 handleLabelsChange(newValue);
               }}
               disableCloseOnSelect

@@ -424,6 +424,9 @@ def _read_session_file(path: Path) -> Optional[dict]:
         title = ""
         last_preview = ""
         msg_count = 0
+        _SKIP_EXACT = {"Hi, hand shake, say yes", "[Request interrupted by user]"}
+        import re as _re
+        _SYSREM_RE = _re.compile(r"<system-reminder>.*?</system-reminder>", _re.DOTALL)
         for line in msg_lines:
             try:
                 msg = json.loads(line)
@@ -438,11 +441,13 @@ def _read_session_file(path: Path) -> Optional[dict]:
                             if isinstance(block, dict) and block.get("type") == "text":
                                 text = block.get("text", "")
                                 break
-                    _t = text.strip()
-                    if not title and _t and _t != "Hi, hand shake, say yes" and not _t.startswith("<system-reminder>"):
+                    # Strip embedded system-reminder blocks then check for noise
+                    clean = _SYSREM_RE.sub("", text).strip()
+                    _t = clean
+                    if not title and _t and _t not in _SKIP_EXACT:
                         title = _t[:60]
-                    if text:
-                        last_preview = text[:150]
+                    if _t and _t not in _SKIP_EXACT:
+                        last_preview = _t[:150]
             except json.JSONDecodeError:
                 pass
 

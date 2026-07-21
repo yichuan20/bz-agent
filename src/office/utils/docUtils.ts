@@ -175,7 +175,7 @@ export const addStyleField = (doc: Doc, fieldName: string, fieldValue: string | 
   const newDoc = cloneDeep(doc);
 
   if (fieldName === 'fontSize') {
-    const fontSize = typeof fieldValue === 'string' ? parseInt(fieldValue) : fieldValue;
+    const fontSize = typeof fieldValue === 'string' ? parseInt(fieldValue, 10) : fieldValue;
     const [start, end] = getStartEnd(doc) as [number, number];
     let i = start;
     while (i < end) {
@@ -461,7 +461,7 @@ export const removeNumberedList = (doc: Doc): Doc => {
   });
 
   // Renumber the following list items if they exist
-  const lastIndex = prefixIndices[prefixIndices.length - 1]!;
+  const lastIndex = prefixIndices[prefixIndices.length - 1] ?? 0;
   let nextLineIndex = lastIndex + 1;
   while (nextLineIndex < newDoc.text.length && newDoc.text[nextLineIndex] !== '\n') {
     nextLineIndex++;

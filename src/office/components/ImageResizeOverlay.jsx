@@ -4,7 +4,7 @@ import { SF } from '../utils/word-utils-refactor';
 
 // SVG icons representing each text-wrap mode
 const InlineIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
     {/* image block */}
     <rect x="3" y="3" width="12" height="7" rx="1" fill="currentColor" opacity="0.85" />
     {/* text lines below */}
@@ -14,7 +14,7 @@ const InlineIcon = () => (
 );
 
 const SquareIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
     {/* image block right-floated */}
     <rect x="9" y="3" width="6" height="12" rx="1" fill="currentColor" opacity="0.85" />
     {/* text lines left of image */}
@@ -26,7 +26,7 @@ const SquareIcon = () => (
 );
 
 const BehindIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
     {/* text lines full-width (in front) */}
     <rect x="2" y="4" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.5" />
     <rect x="2" y="7" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.5" />
@@ -252,7 +252,12 @@ const ImageResizeOverlay = ({
 
   return (
     <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-move handle; role/tabIndex applied conditionally */}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-label is only set when role=button */}
       <div
+        role={isMovable ? 'button' : undefined}
+        tabIndex={isMovable ? 0 : undefined}
+        aria-label={isMovable ? 'Move image' : undefined}
         style={{
           ...overlayStyle,
           cursor: isMovable ? 'move' : 'default',
@@ -260,6 +265,13 @@ const ImageResizeOverlay = ({
           opacity: isDragging ? 0.35 : 1,
         }}
         onMouseDown={isMovable ? handleMoveStart : undefined}
+        onKeyDown={
+          isMovable
+            ? e => {
+                if (e.key === 'Enter' || e.key === ' ') handleMoveStart(e);
+              }
+            : undefined
+        }
       >
         {/* Selection border */}
         <div
@@ -274,9 +286,14 @@ const ImageResizeOverlay = ({
 
         {/* Resize handles */}
         {HANDLES.map(h => (
-          <div
+          <button
+            type="button"
             key={h.id}
+            aria-label={`Resize image ${h.id}`}
             onMouseDown={e => handleResizeStart(e, h.id)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') handleResizeStart(e, h.id);
+            }}
             style={{
               position: 'absolute',
               width: 10,
@@ -285,6 +302,8 @@ const ImageResizeOverlay = ({
               borderRadius: 2,
               cursor: h.cursor,
               pointerEvents: 'all',
+              border: 'none',
+              padding: 0,
               ...h.style,
             }}
           />
@@ -322,6 +341,7 @@ const ImageResizeOverlay = ({
             const active = (imageStyle?.imageWrap || 'inline') === m.id;
             return (
               <button
+                type="button"
                 key={m.id}
                 title={m.label}
                 onMouseDown={e => e.stopPropagation()}
@@ -348,6 +368,7 @@ const ImageResizeOverlay = ({
 
           <span style={{ opacity: 0.2, margin: '0 2px' }}>|</span>
           <button
+            type="button"
             onMouseDown={e => e.stopPropagation()}
             onClick={onDelete}
             style={{
@@ -365,7 +386,7 @@ const ImageResizeOverlay = ({
             }}
             title="Delete image"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path
                 d="M2 2l10 10M12 2L2 12"
                 stroke="currentColor"

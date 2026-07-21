@@ -96,7 +96,9 @@ const getCSSVar = varName => {
  * Clear CSS variable cache (call when theme changes)
  */
 const clearCSSVarCache = () => {
-  Object.keys(cssVarCache).forEach(key => delete cssVarCache[key]);
+  Object.keys(cssVarCache).forEach(key => {
+    delete cssVarCache[key];
+  });
 };
 
 /**
@@ -1343,19 +1345,19 @@ const isInMiddleOfFormula = valueToEdit => {
 
 const ExcelViewSheetArea = ({
   viewWindow = { startRow: 0, startCol: 0, endRow: 30, endCol: 30 },
-  onScrollViewWindow = ({ startRow, startCol, endRow, endCol }) => {},
+  onScrollViewWindow = () => {},
   cells = {},
   grid = {},
   zoom = 1,
   onNewCellToPatch = () => {},
-  sheetName,
+  sheetName: _sheetName,
   isPatching,
   onNewGrid = () => {},
-  spans = [],
-  labelGroups = [],
+  spans: _spans = [],
+  labelGroups: _labelGroups = [],
   showToolbar = true,
   useMSFormulaBar = false,
-  onChangeSpans = () => {},
+  onChangeSpans: _onChangeSpans = () => {},
   onSaveLabel = () => {},
   labels = [],
   extraLabels = [],
@@ -2917,8 +2919,13 @@ const ExcelViewSheetArea = ({
 
         {/* Fill handle — small square at bottom-right of selected cell */}
         {fillHandlePos && (
-          <div
+          <button
+            type="button"
+            aria-label="Fill handle"
             onMouseDown={handleFillHandleMouseDown}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') handleFillHandleMouseDown(e);
+            }}
             style={{
               position: 'absolute',
               left: fillHandlePos.x - 4,

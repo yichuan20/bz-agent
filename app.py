@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -984,6 +985,119 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             pass
         return {"present": False, "last4": None}
 
+    @misc_router.get("/api/user/me")
+    async def user_me():
+        """Fetch current user info from BoltzHub using the stored API key."""
+        keys_file = Path(app.state.bz_home) / "api_keys.json"
+        try:
+            data = json.loads(keys_file.read_text())
+            api_key = data.get("BZ_API_KEY", "")
+        except Exception:
+            api_key = ""
+        if not api_key:
+            return JSONResponse({"error": "no_key"}, status_code=401)
+        import aiohttp as _aio_me
+        try:
+            async with _aio_me.ClientSession() as session:
+                async with session.get(
+                    "https://boltzhub.com/bz-appstore-api/v1/users/me",
+                    headers={"X-API-Key": api_key},
+                    timeout=_aio_me.ClientTimeout(total=8),
+                ) as resp:
+                    body = await resp.json()
+                    if resp.status != 200:
+                        return JSONResponse({"error": "upstream", "status": resp.status}, status_code=resp.status)
+                    return {
+                        "displayName": body.get("displayName") or body.get("username") or "",
+                        "email": body.get("email") or "",
+                        "username": body.get("username") or "",
+                        "isVerified": body.get("isVerified", False),
+                    }
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
+
+    @misc_router.post("/api/classify-mode")
+    async def classify_mode(request: Request):
+        """Classify a user message into one of the four agent modes."""
+        body = await request.json()
+        message = (body.get("message") or "").strip()
+        if not message:
+            return {"mode": "general"}
+
+        keys_file = Path(app.state.bz_home) / "api_keys.json"
+        try:
+            data = json.loads(keys_file.read_text())
+            api_key = data.get("BZ_API_KEY", "")
+        except Exception:
+            api_key = ""
+        if not api_key:
+            return {"mode": "general"}
+
+        system_prompt = """\
+You are a routing classifier for an AI agent. Given the user request, output the single best mode id.
+
+Modes — pick the most specific match, use "general" only as a last resort:
+
+widget  → building something visual and interactive: a clock, timer, stopwatch, calculator,
+          to-do list, game, chart, form, canvas mini-app, data visualisation, or any
+          self-contained browser UI component
+worker  → file or document tasks: create/edit Excel, CSV, PDF, or Word files; extract,
+          compare, or summarise document content; data processing, ETL, or automation scripts
+coder   → software development on an existing project: write, debug, or refactor code;
+          build APIs, backends, CLIs, services, or deploy applications
+general → everything else: open-ended questions, explanations, research, writing prose,
+          or tasks that produce no file, UI, or code artifact
+
+Examples:
+  "create a clock widget"               → widget
+  "build a countdown timer"             → widget
+  "make a to-do list app"               → widget
+  "build a bar chart for sales data"    → widget
+  "create an Excel file to sum numbers" → worker
+  "extract data from this PDF"          → worker
+  "summarise the attached report"       → worker
+  "compare these two documents"         → worker
+  "convert this CSV to JSON"            → worker
+  "add auth to my Express app"          → coder
+  "fix the bug in my Python script"     → coder
+  "write unit tests for this module"    → coder
+  "review my pull request"              → coder
+  "explain how quicksort works"         → general
+  "what are the pros and cons of X"     → general
+  "write a poem about the ocean"        → general
+
+Reply with ONLY one word: widget, worker, coder, or general.\
+"""
+        import aiohttp as _aio_cls
+        payload = {
+            "model": "anthropic-claude-4.5-sonnet",
+            "messages": [{"role": "user", "content": message}],
+            "stream": False,
+            "system": system_prompt,
+            "genOptions": {"maxTokens": 10, "temperature": 0},
+        }
+        try:
+            async with _aio_cls.ClientSession() as session:
+                async with session.post(
+                    "https://flow.boltzbit.com/bz-api/v1/ai/messages",
+                    headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=_aio_cls.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status != 200:
+                        return {"mode": "general"}
+                    data = await resp.json()
+                    text = ""
+                    for block in data.get("content", []):
+                        if block.get("type") == "text":
+                            text = block.get("text", "").strip().lower()
+                            break
+                    valid = {"general", "widget", "worker", "coder"}
+                    mode = text if text in valid else "general"
+                    return {"mode": mode}
+        except Exception:
+            return {"mode": "general"}
+
     @misc_router.get("/api/home")
     async def api_home():
         home = str(Path.home())
@@ -1533,6 +1647,14 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
             s["isRunning"]        = sid in _running_sessions
             s["isDefault"]        = defaults.get(wd) == sid
             s["defaultSessionId"] = defaults.get(wd)
+        # Strip absolute path prefix before sending to client — expose only the
+        # path relative to the parent of default_cwd (e.g. "workspace/session-dir").
+        _default_cwd = app.state.default_cwd or ""
+        _path_base = str(Path(_default_cwd).parent) if _default_cwd else ""
+        for s in sessions:
+            wd = s["workingDir"]
+            if _path_base and wd.startswith(_path_base + "/"):
+                s["workingDir"] = wd[len(_path_base) + 1:]
         return {"sessions": sessions}
 
     @sessions_router.post("/session-default")
@@ -1637,15 +1759,34 @@ def create_app(bzcode_path: str = "", default_cwd: str = "",
         _cwd = app.state.default_cwd
         _bz_home = app.state.bz_home
 
-        effective_cwd = req_cwd if (req_cwd and os.path.isdir(req_cwd)) else _cwd
+        # Resolve effective_cwd from req_cwd:
+        # - absolute path that still exists → use directly
+        # - relative path (server stripped the prefix) → reconstruct against parent of default_cwd
+        # - fallback to default_cwd
+        if req_cwd and os.path.isabs(req_cwd) and os.path.isdir(req_cwd):
+            effective_cwd = req_cwd
+        elif req_cwd and not os.path.isabs(req_cwd) and _cwd:
+            _resolved = os.path.join(str(Path(_cwd).parent), req_cwd)
+            effective_cwd = _resolved if os.path.isdir(_resolved) else _cwd
+        else:
+            effective_cwd = _cwd
 
         # Validate / generate session ID
         if req_session_id:
             if req_session_id not in agent_pool._entries:
                 if not (SESSIONS_DIR / f"{req_session_id}.jsonl").exists():
                     req_session_id = ""
-            # Recover saved agent mode from meta.json for existing sessions
+            # For existing sessions, prefer the server-stored workingDir — but only
+            # when it still exists on disk. If the folder was renamed the client-resolved
+            # path above is more up-to-date, so we keep that instead.
             if req_session_id:
+                _sf = SESSIONS_DIR / f"{req_session_id}.jsonl"
+                if _sf.exists():
+                    _saved = _read_session_file(_sf)
+                    _stored_wd = _saved.get("workingDir") if _saved else None
+                    if _stored_wd and os.path.isdir(_stored_wd):
+                        effective_cwd = _stored_wd
+                # Recover saved agent mode from meta.json for existing sessions
                 _meta_file = SESSIONS_DIR / req_session_id / "meta.json"
                 if _meta_file.exists():
                     try:
@@ -3957,6 +4098,17 @@ def main() -> None:
     print(f"  Docs      : http://{args.host}:{args.port}/docs", flush=True)
     if args.dist:
         print(f"  Frontend  : http://{args.host}:{args.port}/", flush=True)
+
+    # Suppress access-log noise from high-frequency polling endpoints.
+    class _SuppressPolling(logging.Filter):
+        _MUTED = frozenset(['/sessions', '/api/apikey-status', '/api/apikey-verify'])
+        def filter(self, record: logging.LogRecord) -> bool:
+            if isinstance(record.args, tuple) and len(record.args) >= 3:
+                path = str(record.args[2]).split('?')[0]
+                if path in self._MUTED:
+                    return False
+            return True
+    logging.getLogger('uvicorn.access').addFilter(_SuppressPolling())
 
     uvicorn.run(
         fastapi_app,

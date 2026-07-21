@@ -6,7 +6,7 @@ export function BoltzbitLogo({ size = 36, className }: { size?: number; classNam
       viewBox="0 0 790 790"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
+      aria-hidden="true"
       className={className}
       style={{ color: 'var(--accent-blue)' }}
     >

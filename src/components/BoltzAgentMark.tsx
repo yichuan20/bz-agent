@@ -33,7 +33,7 @@ export function BoltzAgentMark({
       height={size}
       viewBox={`0 0 ${vw} ${vh}`}
       fill="none"
-      aria-hidden
+      aria-hidden="true"
       className={className}
     >
       {squares.map(([r, c]) => (

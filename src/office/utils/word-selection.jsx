@@ -6,7 +6,7 @@ import { drawYToContentY } from './word-render-utils';
 /**
  * Finds the nearest character index to a given x,y coordinate
  */
-const getNearestCharIndex = ({ x, y, xs = [], ys = [], text = '' }) => {
+const getNearestCharIndex = ({ x, y, xs = [], ys = [], text: _text = '' }) => {
   if (!xs.length || !ys.length) {
     return 0;
   }

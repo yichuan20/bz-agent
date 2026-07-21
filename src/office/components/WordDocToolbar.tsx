@@ -1,132 +1,150 @@
 import './WordDocToolbar.css';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import ImageInsert from './ImageInsert';
 import TablePickerTooltip from './TablePickerTooltip';
+
+// Shared prop type for all styled-component wrappers in this file.
+// Dollar-sign props are destructured before ...p so the spread is always valid HTML.
+type SC = React.HTMLAttributes<HTMLElement> & {
+  children?: React.ReactNode;
+  $isDocked?: boolean;
+  $isHidden?: boolean;
+  $active?: boolean;
+  $visible?: boolean;
+  $open?: boolean;
+  $color?: string;
+  $transparent?: boolean;
+  $variant?: string;
+};
 
 // =============================================
 // STYLED COMPONENTS - Exact match to HTML design
 // =============================================
 
-const FloatingToolbar = ({ children, $isDocked, $isHidden, ...p }: any) => (
-  <div
-    className="bzt-floating-toolbar"
-    data-docked={$isDocked ? 'true' : 'false'}
-    data-hidden={$isHidden ? 'true' : 'false'}
-    {...p}
-  >
-    {children}
-  </div>
+const FloatingToolbar = forwardRef<HTMLDivElement, SC>(
+  ({ children, $isDocked, $isHidden, ...p }, ref) => (
+    <div
+      ref={ref}
+      className="bzt-floating-toolbar"
+      data-docked={$isDocked ? 'true' : 'false'}
+      data-hidden={$isHidden ? 'true' : 'false'}
+      {...p}
+    >
+      {children}
+    </div>
+  ),
 );
 
-const DockedToolbarContainer = ({ children, $active, ...p }: any) => (
+const DockedToolbarContainer = ({ children, $active, ...p }: SC) => (
   <div className="bzt-docked-toolbar-container" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const DockIndicator = ({ children, $visible, ...p }: any) => (
+const DockIndicator = ({ children, $visible, ...p }: SC) => (
   <div className="bzt-dock-indicator" data-visible={$visible ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const ToolbarDragHandle = ({ children, ...p }: any) => (
+const ToolbarDragHandle = ({ children, ...p }: SC) => (
   <div className="bzt-toolbar-drag-handle" {...p}>
     {children}
   </div>
 );
 
-const ToolbarDivider = ({ children, ...p }: any) => (
+const ToolbarDivider = ({ children, ...p }: SC) => (
   <div className="bzt-toolbar-divider" {...p}>
     {children}
   </div>
 );
 
-const ToolbarBtn = ({ children, $active, ...p }: any) => (
+const ToolbarBtn = ({ children, $active, ...p }: SC) => (
   <button className="bzt-toolbar-btn" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
   </button>
 );
 
-const ToolbarDropdown = ({ children, ...p }: any) => (
+const ToolbarDropdown = ({ children, ...p }: SC) => (
   <div className="bzt-toolbar-dropdown" {...p}>
     {children}
   </div>
 );
 
-const FontDropdown = ({ children, ...p }: any) => (
+const FontDropdown = ({ children, ...p }: SC) => (
   <div className="bzt-font-dropdown" {...p}>
     {children}
   </div>
 );
 
-const FontDropdownMenu = ({ children, $open, ...p }: any) => (
+const FontDropdownMenu = ({ children, $open, ...p }: SC) => (
   <div className="bzt-font-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const FontOption = ({ children, $active, ...p }: any) => (
+const FontOption = ({ children, $active, ...p }: SC) => (
   <div className="bzt-font-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const FontSizeDropdown = ({ children, ...p }: any) => (
+const FontSizeDropdown = ({ children, ...p }: SC) => (
   <div className="bzt-font-size-dropdown" {...p}>
     {children}
   </div>
 );
 
-const FontSizeDropdownMenu = ({ children, $open, ...p }: any) => (
+const FontSizeDropdownMenu = ({ children, $open, ...p }: SC) => (
   <div className="bzt-font-size-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const FontSizeOption = ({ children, $active, ...p }: any) => (
+const FontSizeOption = ({ children, $active, ...p }: SC) => (
   <div className="bzt-font-size-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const FontSizeBtn = ({ children, ...p }: any) => (
+const FontSizeBtn = ({ children, ...p }: SC) => (
   <button className="bzt-font-size-btn" {...p}>
     {children}
   </button>
 );
 
-const HeadingDropdownMenu = ({ children, $open, ...p }: any) => (
+const HeadingDropdownMenu = ({ children, $open, ...p }: SC) => (
   <div className="bzt-heading-dropdown-menu" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const HeadingOption = ({ children, $variant, ...p }: any) => (
+const HeadingOption = ({ children, $variant, ...p }: SC) => (
   <div className="bzt-heading-option" data-variant={$variant} {...p}>
     {children}
   </div>
 );
 
-const ColorPicker = ({ children, ...p }: any) => (
+const ColorPicker = ({ children, ...p }: SC) => (
   <div className="bzt-color-picker" {...p}>
     {children}
   </div>
 );
 
-const ColorPickerDropdown = ({ children, $open, ...p }: any) => (
+const ColorPickerDropdown = ({ children, $open, ...p }: SC) => (
   <div className="bzt-color-picker-dropdown" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const ColorPickerGrid = ({ children, ...p }: any) => (
+const ColorPickerGrid = ({ children, ...p }: SC) => (
   <div className="bzt-color-picker-grid" {...p}>
     {children}
   </div>
 );
 
-const ColorSwatch = ({ children, $color, $transparent, ...p }: any) => (
+const ColorSwatch = ({ children, $color, $transparent, ...p }: SC) => (
   <div
     className="bzt-color-swatch"
     style={{ background: $color }}
@@ -137,43 +155,43 @@ const ColorSwatch = ({ children, $color, $transparent, ...p }: any) => (
   </div>
 );
 
-const LineSpacingDropdown = ({ children, ...p }: any) => (
+const LineSpacingDropdown = ({ children, ...p }: SC) => (
   <div className="bzt-line-spacing-dropdown" {...p}>
     {children}
   </div>
 );
 
-const LineSpacingMenu = ({ children, $open, ...p }: any) => (
+const LineSpacingMenu = ({ children, $open, ...p }: SC) => (
   <div className="bzt-line-spacing-menu" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const LineSpacingOption = ({ children, $active, ...p }: any) => (
+const LineSpacingOption = ({ children, $active, ...p }: SC) => (
   <div className="bzt-line-spacing-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const MoreMenu = ({ children, ...p }: any) => (
+const MoreMenu = ({ children, ...p }: SC) => (
   <div className="bzt-more-menu" {...p}>
     {children}
   </div>
 );
 
-const MoreDropdown = ({ children, $open, ...p }: any) => (
+const MoreDropdown = ({ children, $open, ...p }: SC) => (
   <div className="bzt-more-dropdown" data-open={$open ? 'true' : 'false'} {...p}>
     {children}
   </div>
 );
 
-const MoreDropdownItem = ({ children, ...p }: any) => (
+const MoreDropdownItem = ({ children, ...p }: SC) => (
   <div className="bzt-more-dropdown-item" {...p}>
     {children}
   </div>
 );
 
-const MoreDropdownDivider = ({ children, ...p }: any) => (
+const MoreDropdownDivider = ({ children, ...p }: SC) => (
   <div className="bzt-more-dropdown-divider" {...p}>
     {children}
   </div>
@@ -503,7 +521,7 @@ const WordDocToolbar = ({
   const increaseFontSize = () => {
     const currentIndex = FONT_SIZES.indexOf(currentFontSize);
     if (currentIndex < FONT_SIZES.length - 1) {
-      const newSize = FONT_SIZES[currentIndex + 1]!;
+      const newSize = FONT_SIZES[currentIndex + 1] ?? currentFontSize;
       setCurrentFontSize(newSize);
       onSetFontSize?.(newSize);
     }
@@ -512,7 +530,7 @@ const WordDocToolbar = ({
   const decreaseFontSize = () => {
     const currentIndex = FONT_SIZES.indexOf(currentFontSize);
     if (currentIndex > 0) {
-      const newSize = FONT_SIZES[currentIndex - 1]!;
+      const newSize = FONT_SIZES[currentIndex - 1] ?? currentFontSize;
       setCurrentFontSize(newSize);
       onSetFontSize?.(newSize);
     }
@@ -527,7 +545,7 @@ const WordDocToolbar = ({
     >
       {/* Drag Handle - click to undock when docked, drag to move when floating */}
       <ToolbarDragHandle onMouseDown={isDocked ? handleDragHandleMouseDown : undefined}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="9" cy="5" r="1.5" />
           <circle cx="15" cy="5" r="1.5" />
           <circle cx="9" cy="12" r="1.5" />
@@ -545,7 +563,7 @@ const WordDocToolbar = ({
         }}
       >
         <span>{currentFont}</span>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <polyline points="6,9 12,15 18,9" />
         </svg>
         <FontDropdownMenu
@@ -610,7 +628,7 @@ const WordDocToolbar = ({
         }}
       >
         <span>{currentHeading}</span>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <polyline points="6,9 12,15 18,9" />
         </svg>
         <HeadingDropdownMenu
@@ -660,20 +678,20 @@ const WordDocToolbar = ({
 
       {/* Text Formatting */}
       <ToolbarBtn $active={isBold} data-tooltip="Bold (⌘B)" onClick={onToggleBold}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
           <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
         </svg>
       </ToolbarBtn>
       <ToolbarBtn $active={isItalic} data-tooltip="Italic (⌘I)" onClick={onToggleItalic}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="19" y1="4" x2="10" y2="4" />
           <line x1="14" y1="20" x2="5" y2="20" />
           <line x1="15" y1="4" x2="9" y2="20" />
         </svg>
       </ToolbarBtn>
       <ToolbarBtn $active={isUnderlined} data-tooltip="Underline (⌘U)" onClick={onToggleUnderline}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 3v7a6 6 0 0 0 12 0V3" />
           <line x1="4" y1="21" x2="20" y2="21" />
         </svg>
@@ -683,7 +701,7 @@ const WordDocToolbar = ({
         data-tooltip="Strikethrough"
         onClick={onToggleStrikethrough}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="5" y1="12" x2="19" y2="12" />
           <path d="M16 6C16 6 14.5 4 12 4C9.5 4 8 6 8 7.5C8 10 12 12 12 12" />
           <path d="M8 18C8 18 9.5 20 12 20C14.5 20 16 18 16 16.5C16 14 12 12 12 12" />
@@ -701,7 +719,7 @@ const WordDocToolbar = ({
             setTextColorOpen(!textColorOpen);
           }}
         >
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 20h16" style={{ stroke: textColor || 'currentColor', strokeWidth: 3 }} />
             <path d="M7 15L12 5L17 15" />
             <path d="M9 11h6" />
@@ -735,7 +753,7 @@ const WordDocToolbar = ({
             setHighlightColorOpen(!highlightColorOpen);
           }}
         >
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M19 11H5L12 4L19 11Z" />
             <path
               d="M5 11V20H19V11"
@@ -774,7 +792,7 @@ const WordDocToolbar = ({
           onSetAlignment?.('left');
         }}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="3" y1="12" x2="15" y2="12" />
           <line x1="3" y1="18" x2="18" y2="18" />
@@ -788,7 +806,7 @@ const WordDocToolbar = ({
           onSetAlignment?.('center');
         }}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="6" y1="12" x2="18" y2="12" />
           <line x1="4" y1="18" x2="20" y2="18" />
@@ -802,7 +820,7 @@ const WordDocToolbar = ({
           onSetAlignment?.('right');
         }}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="9" y1="12" x2="21" y2="12" />
           <line x1="6" y1="18" x2="21" y2="18" />
@@ -816,7 +834,7 @@ const WordDocToolbar = ({
           onSetAlignment?.('justify');
         }}
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="3" y1="12" x2="21" y2="12" />
           <line x1="3" y1="18" x2="21" y2="18" />
@@ -834,7 +852,7 @@ const WordDocToolbar = ({
             setLineSpacingOpen(!lineSpacingOpen);
           }}
         >
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="12" x2="21" y2="12" />
             <line x1="3" y1="18" x2="21" y2="18" />
@@ -864,7 +882,7 @@ const WordDocToolbar = ({
 
       {/* Lists */}
       <ToolbarBtn $active={isBullet} data-tooltip="Bullet list" onClick={onToggleBullet}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none" />
           <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
           <circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none" />
@@ -874,7 +892,7 @@ const WordDocToolbar = ({
         </svg>
       </ToolbarBtn>
       <ToolbarBtn $active={isNumbered} data-tooltip="Numbered list" onClick={onToggleNumbered}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <text x="2" y="8" fontSize="7" fill="currentColor" stroke="none">
             1
           </text>
@@ -894,7 +912,7 @@ const WordDocToolbar = ({
 
       {/* Indentation */}
       <ToolbarBtn data-tooltip="Decrease indent" onClick={onDecreaseIndent}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="9" y1="12" x2="21" y2="12" />
           <line x1="9" y1="18" x2="21" y2="18" />
@@ -902,7 +920,7 @@ const WordDocToolbar = ({
         </svg>
       </ToolbarBtn>
       <ToolbarBtn data-tooltip="Increase indent" onClick={onIncreaseIndent}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="9" y1="12" x2="21" y2="12" />
           <line x1="9" y1="18" x2="21" y2="18" />
@@ -914,7 +932,7 @@ const WordDocToolbar = ({
 
       {/* Link */}
       <ToolbarBtn $active={isLink} data-tooltip="Insert link (⌘K)" onClick={onInsertLink}>
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
@@ -936,11 +954,10 @@ const WordDocToolbar = ({
         }
         triggerIcon={
           <ToolbarBtn
-            as="div"
             data-tooltip="Insert table"
             style={{ opacity: isInTable ? 0.5 : 1, cursor: isInTable ? 'not-allowed' : 'pointer' }}
           >
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="3" y1="9" x2="21" y2="9" />
               <line x1="3" y1="15" x2="21" y2="15" />
@@ -953,7 +970,7 @@ const WordDocToolbar = ({
 
       {/* Comment */}
       <ToolbarBtn data-tooltip="Add comment (⌘⌥M)">
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </ToolbarBtn>
@@ -969,7 +986,7 @@ const WordDocToolbar = ({
             setMoreMenuOpen(!moreMenuOpen);
           }}
         >
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="1" />
             <circle cx="19" cy="12" r="1" />
             <circle cx="5" cy="12" r="1" />
@@ -977,7 +994,7 @@ const WordDocToolbar = ({
         </ToolbarBtn>
         <MoreDropdown $open={moreMenuOpen} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <text x="2" y="14" fontSize="12" fill="currentColor" stroke="none">
                 X
               </text>
@@ -988,7 +1005,7 @@ const WordDocToolbar = ({
             Subscript
           </MoreDropdownItem>
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <text x="2" y="16" fontSize="12" fill="currentColor" stroke="none">
                 X
               </text>
@@ -1000,7 +1017,7 @@ const WordDocToolbar = ({
           </MoreDropdownItem>
           <MoreDropdownDivider />
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 7V4h16v3" />
               <path d="M9 20h6" />
               <path d="M12 4v16" />
@@ -1010,7 +1027,7 @@ const WordDocToolbar = ({
           </MoreDropdownItem>
           <MoreDropdownDivider />
           <MoreDropdownItem>
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <polyline points="6 9 6 2 18 2 18 9" />
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />

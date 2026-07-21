@@ -28,7 +28,7 @@ const FormulaInput = ({ children, style = {}, ...p }) => (
 const MSExcelFormulaBar = ({
   selectedCellLocation = '',
   valueToEdit = '',
-  isEditing = false,
+  isEditing: _isEditing = false,
   onFocus = () => {},
   onBlur = () => {},
   onChangeValue = () => {},

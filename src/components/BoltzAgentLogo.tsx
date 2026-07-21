@@ -12,7 +12,7 @@ export function BoltzAgentLogo({ size = 32 }: { size?: number }) {
       viewBox="0 0 135 134"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
+      aria-hidden="true"
     >
       {/* Stone background — matches token logo-bg-rect */}
       <rect width="134.054" height="134" rx="31.9125" fill="#5E5A55" />

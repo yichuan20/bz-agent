@@ -105,8 +105,12 @@ const Swatch = ({ color, selected, onClick }) => {
   const isTransparent = color === 'transparent';
   const isWhite = color === '#ffffff';
   return (
-    <div
+    <button
+      type="button"
       onClick={() => onClick(color)}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') onClick(color);
+      }}
       title={color}
       style={{
         width: 17,
@@ -122,6 +126,7 @@ const Swatch = ({ color, selected, onClick }) => {
           : color,
         backgroundSize: isTransparent ? '8px 8px' : undefined,
         backgroundPosition: isTransparent ? '0 0,4px 4px' : undefined,
+        padding: 0,
       }}
     />
   );
@@ -145,12 +150,23 @@ const ColorPickerTooltip = ({
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <div
+      <button
+        type="button"
         onClick={() => setIsOpen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') setIsOpen(o => !o);
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          cursor: 'pointer',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+        }}
       >
         {triggerIcon}
-      </div>
+      </button>
 
       {isOpen && (
         <div
@@ -168,8 +184,12 @@ const ColorPickerTooltip = ({
           }}
         >
           {/* Reset */}
-          <div
+          <button
+            type="button"
             onClick={() => pick(resetColor)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') pick(resetColor);
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -181,6 +201,9 @@ const ColorPickerTooltip = ({
               fontSize: 12,
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-default)',
+              background: 'transparent',
+              fontFamily: 'inherit',
+              width: '100%',
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -193,12 +216,13 @@ const ColorPickerTooltip = ({
               fill="none"
               strokeWidth="2"
               strokeLinecap="round"
+              aria-hidden="true"
             >
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 .49-3.51" />
             </svg>
             Reset
-          </div>
+          </button>
 
           {/* Grayscale */}
           <div style={{ display: 'flex', gap: 2, marginBottom: 2 }}>

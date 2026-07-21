@@ -1,29 +1,16 @@
 /**
- * App layout — exact bz-codespace AppShell:
+ * App layout — ChatGPT/Claude/Gemini style:
+ *   no top bar; sidebar always visible (expanded 220px ↔ icon-only 52px)
  *
- *   ┌──────────────────────────────────────────┐  TopBar  (52px, full width)
- *   ├────────┬─────────────────────────────────┤
- *   │Sidebar │        <Outlet />               │  Sidebar: 220px open, 0px collapsed
- *   │(220px) │        (app-main)               │  Hover left edge → temporary reveal
- *   └────────┴─────────────────────────────────┘
- *
- * Collapse behavior (bz-codespace):
- *   • sidebarOpen=false → sidebar width: 0  (fully hidden, not icon-mode)
- *   • 2px hover zone at left edge → hoveredOpen=true → sidebar slides in as overlay
- *   • Mouse leaves sidebar → hoveredOpen=false → sidebar slides out
+ *   ┌──────────┬──────────────────────────────┐
+ *   │ Sidebar  │       <Outlet />             │
+ *   │ (220px   │       (app-main)             │
+ *   │  or 52px)│                              │
+ *   └──────────┴──────────────────────────────┘
  */
-import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { ModeSelector } from '#/components/ModeSelector';
 import Sidebar from '#/components/Sidebar';
-import TopBar from '#/components/TopBar';
-import type { AgentMode } from '#/lib/agentModes';
-
-declare global {
-  interface WindowEventMap {
-    'bz:start-new-session': CustomEvent<{ mode: AgentMode }>;
-  }
-}
 
 const AGENT_HTTP =
   (import.meta.env.VITE_AGENT_HTTP_URL as string | undefined) ||
@@ -61,103 +48,28 @@ export const Route = createFileRoute('/_app')({
 function AppLayout() {
   const bzcodeOutdated = useBzcodeOutdated();
   const navigate = useNavigate();
-  const { location } = useRouterState();
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [hoveredOpen, setHoveredOpen] = useState(false);
-  const [showNewChatModal, setShowNewChatModal] = useState(false);
-
-  const navOpen = sidebarOpen || hoveredOpen;
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => localStorage.getItem('bz:sidebarOpen') !== 'false',
+  );
 
   function toggleSidebar() {
-    setSidebarOpen(prev => !prev);
-    setHoveredOpen(false);
-  }
-
-  function handleModeSelected(mode: AgentMode) {
-    setShowNewChatModal(false);
-    if (location.pathname.startsWith('/agent')) {
-      // agent.tsx is mounted — let it handle session creation
-      window.dispatchEvent(new CustomEvent('bz:start-new-session', { detail: { mode } }));
-    } else {
-      // Navigate to /agent then let it pick up the event
-      void navigate({ to: '/agent', search: {} as never });
-      setTimeout(
-        () => window.dispatchEvent(new CustomEvent('bz:start-new-session', { detail: { mode } })),
-        80,
-      );
-    }
+    setSidebarOpen(prev => {
+      localStorage.setItem('bz:sidebarOpen', String(!prev));
+      return !prev;
+    });
   }
 
   return (
     <div className="app-shell">
-      <TopBar />
+      <Sidebar
+        expanded={sidebarOpen}
+        onToggle={toggleSidebar}
+        bzcodeOutdated={bzcodeOutdated}
+        onNewChat={() => void navigate({ to: '/' })}
+      />
 
       <div className="app-body">
-        <Sidebar
-          open={navOpen}
-          overlay={!sidebarOpen}
-          onMouseLeave={() => setHoveredOpen(false)}
-          onCollapse={toggleSidebar}
-          bzcodeOutdated={bzcodeOutdated}
-          onNewChat={() => setShowNewChatModal(true)}
-        />
-
-        {/* Hover strip + expand indicator — only when sidebar is fully closed */}
-        {!sidebarOpen && (
-          <div
-            className="sidebar-expand-zone"
-            onMouseEnter={() => setHoveredOpen(true)}
-            onClick={toggleSidebar}
-          >
-            <button type="button" className="sidebar-expand-indicator" title="Open navigation">
-              {bzcodeOutdated && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: -3,
-                    right: -3,
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: '#f97316',
-                    border: '2px solid var(--bg-primary)',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path
-                  d="M4 2L8 6L4 10"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-        )}
-
-        {showNewChatModal && (
-          <div className="new-session-overlay" onClick={() => setShowNewChatModal(false)}>
-            <div className="new-session-panel" onClick={e => e.stopPropagation()}>
-              <div className="new-session-header">
-                <span className="new-session-title">New chat</span>
-              </div>
-              <p className="new-session-hint">Select how this agent should behave.</p>
-              <ModeSelector selected="general" onSelect={handleModeSelected} />
-              <button
-                type="button"
-                className="new-session-cancel"
-                onClick={() => setShowNewChatModal(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
         <main className="app-main">
           <Outlet />
         </main>

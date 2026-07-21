@@ -329,7 +329,7 @@ const getTableTextAndStyles = (blocks, blockIndex) => {
 
     const tableDoc = getDocFromBlocks(tableBlocks);
     blockText += tableDoc.text;
-    blockStyles = [...blockStyles, ...tableDoc?.styles];
+    blockStyles = [...blockStyles, ...(tableDoc?.styles ?? [])];
     i = tableAtChar.end + 1;
   }
 
