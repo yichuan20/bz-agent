@@ -1,0 +1,47 @@
+[project]
+name = "workspace-backend"
+version = "0.1.0"
+description = "BoltzAgent workspace backend — a FastAPI service that manages bzcode agent sessions."
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.124",
+    "uvicorn[standard]>=0.33",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "python-multipart>=0.0.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workspace_backend"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.14"
+packages = ["workspace_backend"]
+mypy_path = "src"
+strict = true
