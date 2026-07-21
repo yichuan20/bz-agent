@@ -3555,18 +3555,51 @@ Reply with ONLY one word: widget, worker, coder, or general.\
             cmd = ["yarn", "dev", "--port", str(port), "--host", "0.0.0.0"]
         else:
             cmd = ["npm", "run", "dev", "--", "--port", str(port), "--host", "0.0.0.0"]
+        import os as _os
+        import shutil as _shutil
+        env = _os.environ.copy()
+        extra_paths = [
+            "/usr/local/bin", "/usr/bin",
+            str(Path.home() / ".local/node/bin"),
+            str(Path.home() / ".local/share/pnpm"),
+            str(Path.home() / ".nvm/versions/node/current/bin"),
+            "/root/.local/share/pnpm",
+            "/root/.local/node/bin",
+        ]
+        env["PATH"] = ":".join(extra_paths) + ":" + env.get("PATH", "")
+        resolved = _shutil.which(cmd[0], path=env["PATH"])
+        if resolved:
+            cmd = [resolved] + cmd[1:]
+        print(f"[dev-server] starting {' '.join(cmd)} in {cwd}", file=sys.stderr)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, cwd=cwd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env,
             )
         except FileNotFoundError as exc:
+            print(f"[dev-server] command not found: {exc}", file=sys.stderr)
             raise HTTPException(500, f"command not found: {exc}")
+
+        async def _pipe_output(p: asyncio.subprocess.Process, label: str) -> None:
+            if p.stdout is None:
+                return
+            try:
+                async for raw in p.stdout:
+                    line = raw.decode(errors="replace").rstrip()
+                    print(f"[{label}] {line}", file=sys.stderr)
+            except Exception:
+                pass
+
+        asyncio.create_task(_pipe_output(proc, f"dev-server:{Path(cwd).name}"))
         _dev_servers[cwd] = {"proc": proc, "url": url}
         await asyncio.sleep(2)
         if proc.returncode is not None:
+            print(f"[dev-server] exited immediately (rc={proc.returncode})", file=sys.stderr)
+            _dev_servers.pop(cwd, None)
             raise HTTPException(500, "dev server exited immediately — check package.json")
+        print(f"[dev-server] started pid={proc.pid} url={url}", file=sys.stderr)
         return {"url": url, "pid": proc.pid}
 
     @misc_router.post("/api/dev-server/stop")
@@ -3574,6 +3607,7 @@ Reply with ONLY one word: widget, worker, coder, or general.\
         cwd = body.cwd
         entry = _dev_servers.pop(cwd, None)
         if entry:
+            print(f"[dev-server] stopping pid={entry['proc'].pid} cwd={cwd}", file=sys.stderr)
             try:
                 entry["proc"].terminate()
             except Exception:
@@ -4083,6 +4117,7 @@ def main() -> None:
     import shutil as _shutil
     bzcode_path = _shutil.which(args.bzcode) or args.bzcode
     default_cwd = os.path.abspath(args.cwd)
+    Path(default_cwd).mkdir(parents=True, exist_ok=True)
     _bz_home_raw = args.bz_home or os.environ.get("BZ_HOME", "")
     bz_home      = os.path.abspath(_bz_home_raw) if _bz_home_raw else ""
 

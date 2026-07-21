@@ -2046,9 +2046,13 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ cwd }),
                       });
-                      const d = (await r.json()) as { url?: string; error?: string };
+                      const d = (await r.json()) as {
+                        url?: string;
+                        error?: string;
+                        detail?: string;
+                      };
                       if (d.url) setPreviewUrl(d.url);
-                      else setError(d.error ?? 'Failed to start dev server');
+                      else setError(d.error ?? d.detail ?? 'Failed to start dev server');
                     } catch (e) {
                       setError(String(e));
                     } finally {
