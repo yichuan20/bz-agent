@@ -1,0 +1,342 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$metadata": {
+    "label": "Meridian",
+    "sector": "Finance & Trading",
+    "theme": "meridian"
+  },
+  "typography": {
+    "font-display": {
+      "$value": "'Inter', sans-serif",
+      "$type": "fontFamily"
+    },
+    "font-body": {
+      "$value": "'Inter', sans-serif",
+      "$type": "fontFamily"
+    }
+  },
+  "font-size": {
+    "xs": {
+      "$value": "11px",
+      "$type": "dimension"
+    },
+    "sm": {
+      "$value": "12px",
+      "$type": "dimension"
+    },
+    "md": {
+      "$value": "14px",
+      "$type": "dimension"
+    },
+    "lg": {
+      "$value": "18px",
+      "$type": "dimension"
+    },
+    "xl": {
+      "$value": "24px",
+      "$type": "dimension"
+    },
+    "2xl": {
+      "$value": "36px",
+      "$type": "dimension"
+    }
+  },
+  "spacing": {
+    "card-padding": {
+      "$value": "12px",
+      "$type": "dimension"
+    },
+    "hero-padding": {
+      "$value": "24px",
+      "$type": "dimension"
+    },
+    "section-gap": {
+      "$value": "24px",
+      "$type": "dimension"
+    }
+  },
+  "modes": {
+    "dark": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#0A0E1A",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#0F1628",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#1A2240",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#1E2A4A",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#E8EDF5",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#8A9BB8",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#4A5A78",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#1E2A4A",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#2A3A5A",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#00D4FF",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#00FF9D",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#FF4D6D",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FFB800",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 1px rgba(0,212,255,0.1),0 4px 24px rgba(0,0,0,0.4)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 1px rgba(0,212,255,0.35),0 8px 32px rgba(0,212,255,0.12)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "2px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "6px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.15s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "light": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#F0F4FA",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#E4EAF5",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#0A0E1A",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#3A4A6A",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#7A8AAA",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#C8D4E8",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#A8B8D8",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#0066CC",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#00AA66",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#DD2244",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#CC8800",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 1px 4px rgba(10,14,26,0.08),0 4px 16px rgba(10,14,26,0.04)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 4px 16px rgba(10,14,26,0.12),0 1px 4px rgba(0,102,204,0.12)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "2px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "6px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.15s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "hc": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#111111",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#111111",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#CCCCCC",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#00FFFF",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#00FF00",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#FF0000",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FFFF00",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 2px #FFFFFF",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 3px #00FFFF",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "0px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "0px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "0px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.05s linear",
+          "$type": "other"
+        }
+      }
+    }
+  }
+}

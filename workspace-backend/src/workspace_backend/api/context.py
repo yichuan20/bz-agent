@@ -33,6 +33,7 @@ from workspace_backend.services.credential_service import CredentialService
 from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
+from workspace_backend.services.user_service import UserService
 from workspace_backend.services.widget_catalog import WidgetCatalog
 
 log = get_logger(__name__)
@@ -78,6 +79,7 @@ async def build_context(settings: Settings) -> AppContext:
     )
     credential_service = CredentialService(api_key_store, secret_store)
     model_service = ModelService(http_client, now=lambda: asyncio.get_event_loop().time())
+    user_service = UserService(http_client, now=lambda: asyncio.get_event_loop().time())
     file_service = FileService(settings.bzcode_cwd)
 
     pool = _build_pool(settings, api_key_store, runtime_state)
@@ -91,6 +93,7 @@ async def build_context(settings: Settings) -> AppContext:
         credential_service=credential_service,
         mode_service=mode_service,
         model_service=model_service,
+        user_service=user_service,
         file_service=file_service,
     )
 

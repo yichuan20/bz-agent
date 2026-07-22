@@ -1,0 +1,342 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$metadata": {
+    "label": "Pulse",
+    "sector": "Analytics & Data Visualization",
+    "theme": "pulse"
+  },
+  "typography": {
+    "font-display": {
+      "$value": "'Syne', sans-serif",
+      "$type": "fontFamily"
+    },
+    "font-body": {
+      "$value": "'IBM Plex Mono', monospace",
+      "$type": "fontFamily"
+    }
+  },
+  "font-size": {
+    "xs": {
+      "$value": "10px",
+      "$type": "dimension"
+    },
+    "sm": {
+      "$value": "11px",
+      "$type": "dimension"
+    },
+    "md": {
+      "$value": "13px",
+      "$type": "dimension"
+    },
+    "lg": {
+      "$value": "17px",
+      "$type": "dimension"
+    },
+    "xl": {
+      "$value": "24px",
+      "$type": "dimension"
+    },
+    "2xl": {
+      "$value": "38px",
+      "$type": "dimension"
+    }
+  },
+  "spacing": {
+    "card-padding": {
+      "$value": "12px",
+      "$type": "dimension"
+    },
+    "hero-padding": {
+      "$value": "24px",
+      "$type": "dimension"
+    },
+    "section-gap": {
+      "$value": "20px",
+      "$type": "dimension"
+    }
+  },
+  "modes": {
+    "dark": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#08090F",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#050608",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#0E1018",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#141620",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#E8EAF8",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#6870A8",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#30386A",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#141A2E",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#1E2640",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#7C3AED",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#06C98A",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#F43F5E",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FFD600",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 1px rgba(124,58,237,0.2),0 4px 20px rgba(0,0,0,0.5)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 1px rgba(124,58,237,0.5),0 0 30px rgba(124,58,237,0.2)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "3px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "6px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "10px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.15s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "light": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#FAFBFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#F0F1FF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#E6E8FF",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#0E0F2A",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#4A5080",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#9298C0",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#D0D4FF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#B8BCFF",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#6020CC",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#00AA70",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#CC5200",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#AA8800",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 1px 3px rgba(14,15,42,0.08),0 4px 16px rgba(96,32,204,0.06)",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 4px 16px rgba(14,15,42,0.12),0 0 20px rgba(96,32,204,0.1)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "3px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "6px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "10px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.15s ease",
+          "$type": "other"
+        }
+      }
+    },
+    "hc": {
+      "color": {
+        "bg": {
+          "primary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#000000",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#0A0A14",
+            "$type": "color"
+          },
+          "elevated": {
+            "$value": "#0A0A14",
+            "$type": "color"
+          }
+        },
+        "text": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "tertiary": {
+            "$value": "#AAAACC",
+            "$type": "color"
+          }
+        },
+        "border": {
+          "primary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          },
+          "secondary": {
+            "$value": "#FFFFFF",
+            "$type": "color"
+          }
+        },
+        "accent": {
+          "1": {
+            "$value": "#AA55FF",
+            "$type": "color"
+          },
+          "2": {
+            "$value": "#00FFAA",
+            "$type": "color"
+          },
+          "3": {
+            "$value": "#FF6600",
+            "$type": "color"
+          },
+          "4": {
+            "$value": "#FFDD00",
+            "$type": "color"
+          }
+        }
+      },
+      "shadow": {
+        "card": {
+          "$value": "0 0 0 2px #FFFFFF",
+          "$type": "shadow"
+        },
+        "hover": {
+          "$value": "0 0 0 2px #AA55FF,0 0 20px rgba(170,85,255,0.4)",
+          "$type": "shadow"
+        }
+      },
+      "radius": {
+        "sm": {
+          "$value": "0px",
+          "$type": "dimension"
+        },
+        "md": {
+          "$value": "2px",
+          "$type": "dimension"
+        },
+        "lg": {
+          "$value": "4px",
+          "$type": "dimension"
+        }
+      },
+      "motion": {
+        "transition": {
+          "$value": "all 0.05s linear",
+          "$type": "other"
+        }
+      }
+    }
+  }
+}

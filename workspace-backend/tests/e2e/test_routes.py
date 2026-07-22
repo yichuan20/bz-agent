@@ -59,6 +59,13 @@ async def test_models_empty_without_key(client: httpx.AsyncClient) -> None:
     assert resp.json()["models"] == []
 
 
+async def test_user_absent_without_key(client: httpx.AsyncClient) -> None:
+    """No BZ_API_KEY → no identity, no external call."""
+    resp = await client.get("/api/v1/user")
+    assert resp.status_code == 200
+    assert resp.json() == {"display_name": "", "email": "", "username": "", "present": False}
+
+
 # ── Files ─────────────────────────────────────────────────────────────────────
 
 

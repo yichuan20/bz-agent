@@ -26,6 +26,7 @@ class VersionResponse(BaseModel):
     """Backend version information."""
 
     backend: str = Field(description="workspace-backend version.", examples=["0.1.0"])
+    default_cwd: str = Field(default="", description="Server-configured default working directory (BZCODE_CWD).")
 
 
 class OkResponse(BaseModel):
@@ -203,6 +204,18 @@ class SetApiKeyRequest(BaseModel):
     """Set the BZ_API_KEY login credential."""
 
     value: str = Field(description="The BZ_API_KEY value.", examples=["bz_xxxxxxxxxxxxxxxx"])
+
+
+# ── User ────────────────────────────────────────────────────────────────────
+
+
+class UserResponse(BaseModel):
+    """The signed-in user's identity (from BoltzHub; blank when unknown)."""
+
+    display_name: str = Field(default="", description="Display name.", examples=["Jane Doe"])
+    email: str = Field(default="", description="Email.", examples=["jane@example.com"])
+    username: str = Field(default="", description="Username.", examples=["jane"])
+    present: bool = Field(default=False, description="True when identity was resolved.", examples=[True])
 
 
 # ── Secrets (widget placeholders) ─────────────────────────────────────────────

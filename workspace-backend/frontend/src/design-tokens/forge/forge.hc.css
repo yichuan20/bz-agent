@@ -1,0 +1,32 @@
+[data-theme="forge-hc"] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #000000;
+  --color-bg-tertiary: #111111;
+  --color-bg-elevated: #111111;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffffff;
+  --color-text-tertiary: #cccccc;
+  --color-border-primary: #ffffff;
+  --color-border-secondary: #ffffff;
+  --color-accent-1: #ff6600;
+  --color-accent-2: #aaff00;
+  --color-accent-3: #ff0055;
+  --color-accent-4: #00aaff;
+  --shadow-card: 0 0 0 2px #ffffff;
+  --shadow-hover: 0 0 0 3px #ff6600;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --motion-transition: all 0.05s linear;
+  --font-display: "Space Mono", monospace;
+  --font-body: "Space Mono", monospace;
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 32px;
+  --card-padding: 12px;
+  --hero-padding: 20px;
+  --section-gap: 20px;
+}

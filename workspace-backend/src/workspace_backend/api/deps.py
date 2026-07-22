@@ -22,6 +22,7 @@ from workspace_backend.services.credential_service import CredentialService
 from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
+from workspace_backend.services.user_service import UserService
 
 
 @dataclass
@@ -36,6 +37,7 @@ class AppContext:
     credential_service: CredentialService
     mode_service: ModeService
     model_service: ModelService
+    user_service: UserService
     file_service: FileService
 
 
@@ -66,6 +68,10 @@ def get_mode_service(request: Request) -> ModeService:
 
 def get_model_service(request: Request) -> ModelService:
     return get_context(request).model_service
+
+
+def get_user_service(request: Request) -> UserService:
+    return get_context(request).user_service
 
 
 def get_file_service(request: Request) -> FileService:

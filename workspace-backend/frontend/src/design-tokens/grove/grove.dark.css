@@ -1,0 +1,32 @@
+[data-theme="grove-dark"] {
+  --color-bg-primary: #0e1c0d;
+  --color-bg-secondary: #091408;
+  --color-bg-tertiary: #152414;
+  --color-bg-elevated: #1c2e1a;
+  --color-text-primary: #d8edd4;
+  --color-text-secondary: #88aa84;
+  --color-text-tertiary: #4a6a46;
+  --color-border-primary: #1e3a1c;
+  --color-border-secondary: #264a24;
+  --color-accent-1: #4aaf80;
+  --color-accent-2: #74c69d;
+  --color-accent-3: #e0b840;
+  --color-accent-4: #a8ddb8;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 6px 24px rgba(0, 0, 0, 0.4);
+  --radius-sm: 6px;
+  --radius-md: 14px;
+  --radius-lg: 28px;
+  --motion-transition: all 0.3s ease;
+  --font-display: "Instrument Serif", serif;
+  --font-body: "Epilogue", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 29px;
+  --font-size-2xl: 44px;
+  --card-padding: 28px;
+  --hero-padding: 56px;
+  --section-gap: 48px;
+}

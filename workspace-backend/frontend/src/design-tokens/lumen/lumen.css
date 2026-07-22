@@ -1,0 +1,98 @@
+[data-theme="lumen-light"] {
+  --color-bg-primary: #fafff0;
+  --color-bg-secondary: #f0ffd8;
+  --color-bg-tertiary: #e4f7c0;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #0a1a00;
+  --color-text-secondary: #3a5a1a;
+  --color-text-tertiary: #7a9a5a;
+  --color-border-primary: #c8e8a0;
+  --color-border-secondary: #b0d880;
+  --color-accent-1: #1a3d00;
+  --color-accent-2: #6b21a8;
+  --color-accent-3: #dc2626;
+  --color-accent-4: #b45309;
+  --shadow-card: 4px 4px 0px #c8e8a0;
+  --shadow-hover: 6px 6px 0px #b0d880;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --motion-transition: all 0.12s ease;
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Cabinet Grotesk", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 20px;
+  --font-size-xl: 32px;
+  --font-size-2xl: 56px;
+  --card-padding: 32px;
+  --hero-padding: 72px;
+  --section-gap: 64px;
+}
+
+[data-theme="lumen-dark"] {
+  --color-bg-primary: #0a1a00;
+  --color-bg-secondary: #061200;
+  --color-bg-tertiary: #122600;
+  --color-bg-elevated: #1a3000;
+  --color-text-primary: #d4ff80;
+  --color-text-secondary: #88bb44;
+  --color-text-tertiary: #446622;
+  --color-border-primary: #1e3a00;
+  --color-border-secondary: #2a5000;
+  --color-accent-1: #aaff00;
+  --color-accent-2: #cc88ff;
+  --color-accent-3: #ff6666;
+  --color-accent-4: #ffcc44;
+  --shadow-card: 4px 4px 0px #1e3a00;
+  --shadow-hover: 6px 6px 0px #2a5000;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --motion-transition: all 0.12s ease;
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Cabinet Grotesk", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 20px;
+  --font-size-xl: 32px;
+  --font-size-2xl: 56px;
+  --card-padding: 32px;
+  --hero-padding: 72px;
+  --section-gap: 64px;
+}
+
+[data-theme="lumen-hc"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f0f0f0;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #004400;
+  --color-accent-2: #440088;
+  --color-accent-3: #cc0000;
+  --color-accent-4: #884400;
+  --shadow-card: 3px 3px 0px #000000;
+  --shadow-hover: 5px 5px 0px #004400;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --motion-transition: all 0.08s linear;
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Cabinet Grotesk", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 32px;
+  --font-size-2xl: 56px;
+  --card-padding: 32px;
+  --hero-padding: 72px;
+  --section-gap: 64px;
+}

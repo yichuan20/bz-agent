@@ -38,6 +38,7 @@ Browser SPA  ──HTTP + SSE──►  FastAPI (app.py)  ──stdio──►  
 | [06 — Deployment & Versioning](./06-deployment.md) | Build/package/deploy, env vars, systemd, versioning |
 | [07 — Tech Debt & Risks](./07-tech-debt.md) | Consolidated, prioritized list of issues — read this before changing anything |
 | [08 — Refactor Plan (M1)](./08-refactor-plan-m1.md) | Approved plan for the `workspace-backend/` rebuild: architecture, `/v1` API surface + migration map, 5 phases, later-milestone roadmap |
+| [09 — Refactor Plan (M2)](./09-refactor-plan-m2.md) | Approved plan for the new frontend (`workspace-backend/frontend/`): structure, the extracted chat service, main pages (Home/Agent-chat/Settings), phases, and the resequenced milestone roadmap |
 
 ## The 60-second orientation
 

@@ -1,0 +1,38 @@
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
+import viteReact from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+import tsconfigPaths from 'vite-tsconfig-paths';
+
+const config = defineConfig({
+  plugins: [
+    tsconfigPaths({ projects: ['./tsconfig.json'] }),
+    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    viteReact(),
+  ],
+  server: {
+    port: 5010,
+    proxy: {
+      // Forward /api and /healthz to the backend so the FE can use same-origin
+      // relative URLs (HTTP_BASE = '') in dev; in prod the backend serves the SPA
+      // on the same origin anyway.
+      '/api': {
+        target: process.env.VITE_BACKEND_URL ?? 'http://localhost:18789',
+        changeOrigin: true,
+      },
+      '/healthz': {
+        target: process.env.VITE_BACKEND_URL ?? 'http://localhost:18789',
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    outDir: 'dist',
+    // Raise the chunk warning threshold — the agent UI is intentionally large
+    chunkSizeWarningLimit: 1500,
+  },
+  optimizeDeps: {
+    include: ['recharts'],
+  },
+});
+
+export default config;

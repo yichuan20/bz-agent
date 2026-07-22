@@ -6,7 +6,7 @@ BoltzAgent is a FastAPI service that wraps the external `bzcode` CLI agent so on
 
 **Goal:** rebuild the backend cleanly in a new `workspace-backend/` folder, leaving all existing files untouched. Python stays, now managed by **uv** on **Python 3.14** (verified: all deps — including `formulas`, `lxml`, `numpy 2.5.1`, `scipy 1.18.0`, `asyncpg`, `aiohttp`→`httpx` — resolve cleanly on 3.14). We start with the **core agent path** and lay a structure the rest of the system ports into over later milestones.
 
-This plan covers **Milestone 1 only**, in 5 reviewable phases, plus a roadmap sketch (M2–M5) and the frontend-tooling follow-up.
+This plan covers **Milestone 1 only**, in 5 reviewable phases, plus a roadmap sketch (M2–M6) and the frontend-tooling follow-up.
 
 ### Decisions locked with the user
 - **API:** clean redesign, **`/v1` prefix**, a **single `agent` resource** (`/v1/agents/{id}`) — the frontend thinks in terms of "agents," so that is the public noun. Creating an agent returns an id; you connect, stream, and send against that same id. **Transcript fetched separately** via `GET /v1/agents/{id}/messages`. A migration doc (old→new) is a deliverable so the frontend can be adapted later.
@@ -149,7 +149,7 @@ workspace-backend/
   (`/v1/secrets`, `SecretStore`), but the *substitution* of `{{OPENAI_API_KEY}}`-style
   placeholders into outbound requests (old `server.py:_resolve(text, creds)` at 628,
   applied in `/proxy` at app.py:1242) is **not** ported — it belongs with `/proxy`
-  (M4) and the widget canvas (M3). Port the small `{{KEY}}` regex resolver then.
+  (M5) and the widget canvas (M3). Port the small `{{KEY}}` regex resolver then.
 - **Outbound `workingDir` path stripping (RESOLVED — ported).** The old
   `GET /sessions` stripped the absolute-path prefix off each `workingDir`
   (app.py:1653-1660), exposing only `workspace/foo`. This is now ported:
@@ -199,13 +199,32 @@ The generated **OpenAPI schema (`/openapi.json`) and Swagger UI (`/docs`) must b
 
 ## Later milestones (roadmap sketch — not part of this approval)
 
-- **M2 — Document workbench** (`/api/doc|excel|ppt/*`): biggest LOC (app.py 2245-3450 + `ppt_layout.py` + docx/xlsx logic). Pure functions → `services/documents/`. Depends only on the M1 files layer; independent of the pool. Highest extraction payoff.
-- **M3 — Canvas + widgets** (`/canvas`, `/widgets`, `/custom-widgets`, `/db/*`): depends on M1 sessions + a `WidgetStore` port. `/db/widget/{id}/exec` server-side Python is a security-redesign item (sandbox or drop).
-- **M4 — BoltzHub** (`/boltzhub/*`, `/proxy`, `/search`): SSE build→deploy pipeline; depends on the httpx client and M3 (deploys canvas apps).
-- **M5 — WhatsApp** (`/whatsapp/*`): reuses the M1 AgentPool wholesale (phone-keyed session); narrowest, last.
-- **Cross-cutting anytime after M1:** add `infra/storage/postgres/` (+ `asyncpg`) — the payoff of the Protocol design — to persist token stats etc.
+> **Resequenced after M1:** the frontend foundation was inserted as **M2** (see
+> `docs/09-refactor-plan-m2.md`), so the milestones below shifted down one. Nothing was
+> dropped. Current order: M2 = frontend + main pages; M3 = widgets/canvas; M4 = document
+> workbench; M5 = BoltzHub; M6 = WhatsApp.
 
-**Frontend follow-up (separate track):** uv is Python-only, so "set up frontend with uv" means smooth co-existence with the uv-managed backend — a `just`/`Makefile` (or uv scripts) that runs `pnpm dev` with a Vite dev-proxy to the backend, and wires `pnpm build` output to what the backend serves. The frontend then migrates from the old endpoints to `/v1` per the migration doc. Detailed after M1 lands.
+- **M2 — Frontend foundation + main pages** (`workspace-backend/frontend/`): scaffold + app
+  shell + Home/Agent(**chat**)/Settings against the new `/api/v1`. See
+  `docs/09-refactor-plan-m2.md`.
+- **M3 — Canvas + widgets** (`/canvas`, `/widgets`, `/custom-widgets`, `/db/*` + the agent
+  page's canvas pane): depends on M1 sessions + a `WidgetStore` port. `/db/widget/{id}/exec`
+  server-side Python is a security-redesign item (sandbox or drop).
+- **M4 — Document workbench** (`/api/doc|excel|ppt/*` + the office/excel/ppt editors hosted in
+  the agent page's editor pane): biggest LOC (app.py 2245-3450 + `ppt_layout.py` + docx/xlsx
+  logic). Pure functions → `services/documents/`. Depends on the M1 files layer + the M2
+  frontend host; independent of the pool.
+- **M5 — BoltzHub** (`/boltzhub/*`, `/proxy`, `/search`): SSE build→deploy pipeline; depends on
+  the httpx client and M3 (deploys canvas apps).
+- **M6 — WhatsApp** (`/whatsapp/*`): reuses the M1 AgentPool wholesale (phone-keyed session);
+  narrowest, last.
+- **Cross-cutting anytime after M1:** add `infra/storage/postgres/` (+ `asyncpg`) — the payoff
+  of the Protocol design — to persist token stats etc.
+
+**Frontend follow-up (now M2 — see `docs/09-refactor-plan-m2.md`):** the frontend moves into
+`workspace-backend/frontend/` (React, its own pnpm/vite), with a Makefile running `pnpm dev`
+behind a Vite dev-proxy to the backend and `pnpm build` output served by the backend as the
+SPA. The frontend migrates from the old endpoints to `/api/v1` per the migration doc.
 
 ---
 

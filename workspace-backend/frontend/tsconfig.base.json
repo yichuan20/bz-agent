@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    // Use "webworker" instead of "dom" to get browser-style setTimeout typings
+    // (returns number, not NodeJS.Timeout) without pulling in full DOM APIs.
+    "lib": ["ESNext", "WebWorker", "Webworker.Iterable", "WebWorker.AsyncIterable"],
+    // in case of accidental emit
+    "outDir": "dist",
+    "composite": true,
+    // Output & Build Info
+    "noEmit": true,
+
+    // Language & Module Target
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+
+    "noErrorTruncation": true,
+
+    // JavaScript & JSX
+    "allowJs": true,
+    "jsx": "preserve",
+
+    // Type Checking & Strictness
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": false, // let biome handle this
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+
+    // Miscellaneous
+    "skipLibCheck": true,
+    "types": []
+  }
+}

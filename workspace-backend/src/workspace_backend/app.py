@@ -26,7 +26,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from workspace_backend.api.context import build_context, close_context
 from workspace_backend.api.exception_handlers import register_exception_handlers
-from workspace_backend.api.routes import agents, auth, files, health, modes, version
+from workspace_backend.api.routes import agents, auth, files, health, modes, user, version
+from workspace_backend.api.spa import mount_spa
 from workspace_backend.config import Settings, get_settings
 from workspace_backend.logging import configure_logging, get_logger
 
@@ -110,6 +111,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(modes.router)
     app.include_router(files.router)
+    app.include_router(user.router)
+
+    # Serve the built SPA last so its catch-all never shadows the API routers above.
+    mount_spa(app, settings.frontend_dist)
 
     return app
 

@@ -51,13 +51,21 @@ class Settings(BaseSettings):
         alias="BZ_DATA_ROOT",
     )
 
+    # Built frontend SPA to serve (index.html + assets). Defaults to the sibling
+    # ``frontend/dist`` produced by ``pnpm build``; if absent, no SPA is mounted
+    # (dev runs the frontend on its own vite port). Override in deployment.
+    frontend_dist: Path = Field(
+        default=Path(__file__).resolve().parents[2] / "frontend" / "dist",
+        alias="BZ_FRONTEND_DIST",
+    )
+
     # Seconds an idle (no-client) agent runtime lives before the sweeper reaps it.
     agent_idle_timeout: float = Field(default=300.0, alias="AGENT_IDLE_TIMEOUT")
 
     # Logging level name (DEBUG/INFO/WARNING/ERROR).
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    @field_validator("bzcode_cwd", "bz_home", "data_root", mode="before")
+    @field_validator("bzcode_cwd", "bz_home", "data_root", "frontend_dist", mode="before")
     @classmethod
     def _expand(cls, v: object) -> object:
         """Expand ``~`` and env vars in path settings so ``BZ_HOME=~/x`` works."""

@@ -1,0 +1,148 @@
+/**
+ * Original BZ App Template Theme
+ *
+ * This is the original OKLCH-based theme from the bz-app-template.
+ * Cool blue-teal color palette with custom design tokens.
+ */
+
+[data-theme="original-light"] {
+  /* Backgrounds — cool blue-teal tints */
+  --color-bg-primary: oklch(96.5% 0.01 205);
+  --color-bg-secondary: oklch(98% 0.006 205);
+  --color-bg-tertiary: oklch(93% 0.015 205);
+  --color-bg-elevated: oklch(99.5% 0.003 205);
+
+  /* Text — cool blue-slate */
+  --color-text-primary: oklch(22% 0.015 210);
+  --color-text-secondary: oklch(34% 0.012 210);
+  --color-text-tertiary: oklch(50% 0.012 210);
+
+  /* Borders */
+  --color-border-primary: oklch(84% 0.012 205);
+  --color-border-secondary: oklch(84% 0.012 205);
+
+  /* Brand — olo-inspired saturated blue-teal */
+  --color-accent-1: oklch(48% 0.18 200);
+  --color-accent-2: oklch(55% 0.14 160);
+  --color-accent-3: oklch(48% 0.2 18);
+  --color-accent-4: oklch(80% 0.14 85);
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Motion */
+  --motion-transition: all 0.2s ease;
+
+  /* Typography */
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+
+  /* Spacing */
+  --card-padding: 16px;
+  --hero-padding: 32px;
+  --section-gap: 32px;
+}
+
+[data-theme="original-dark"] {
+  /* Backgrounds — deep blue-teal dark */
+  --color-bg-primary: oklch(17% 0.015 210);
+  --color-bg-secondary: oklch(22% 0.018 210);
+  --color-bg-tertiary: oklch(14% 0.015 210);
+  --color-bg-elevated: oklch(27% 0.018 210);
+
+  /* Text */
+  --color-text-primary: oklch(94% 0.008 205);
+  --color-text-secondary: oklch(90% 0.008 205);
+  --color-text-tertiary: oklch(68% 0.01 205);
+
+  /* Borders */
+  --color-border-primary: oklch(34% 0.015 210);
+  --color-border-secondary: oklch(34% 0.015 210);
+
+  /* Brand — brighter olo blue-teal for dark bg */
+  --color-accent-1: oklch(62% 0.18 200);
+  --color-accent-2: oklch(65% 0.14 160);
+  --color-accent-3: oklch(58% 0.18 18);
+  --color-accent-4: oklch(85% 0.14 85);
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Motion */
+  --motion-transition: all 0.2s ease;
+
+  /* Typography */
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+
+  /* Spacing */
+  --card-padding: 16px;
+  --hero-padding: 32px;
+  --section-gap: 32px;
+}
+
+[data-theme="original-hc"] {
+  /* High contrast version of original theme */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f5f5f5;
+  --color-bg-elevated: #ffffff;
+
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+
+  --color-accent-1: #0066cc;
+  --color-accent-2: #008855;
+  --color-accent-3: #cc0000;
+  --color-accent-4: #cc8800;
+
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #0066cc;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --motion-transition: all 0.15s ease;
+
+  --font-display: "DM Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+
+  --card-padding: 16px;
+  --hero-padding: 32px;
+  --section-gap: 32px;
+}

@@ -1,0 +1,32 @@
+[data-theme="signal-hc"] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #000000;
+  --color-bg-tertiary: #111111;
+  --color-bg-elevated: #111111;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffffff;
+  --color-text-tertiary: #cccccc;
+  --color-border-primary: #ffffff;
+  --color-border-secondary: #ffffff;
+  --color-accent-1: #00ff55;
+  --color-accent-2: #ff0066;
+  --color-accent-3: #00aaff;
+  --color-accent-4: #ffaa00;
+  --shadow-card: 0 0 0 2px #ffffff;
+  --shadow-hover: 0 0 0 2px #00ff55;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --motion-transition: all 0.1s ease;
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 22px;
+  --font-size-xl: 32px;
+  --font-size-2xl: 52px;
+  --card-padding: 20px;
+  --hero-padding: 48px;
+  --section-gap: 40px;
+}

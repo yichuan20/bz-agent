@@ -1,0 +1,248 @@
+# Milestone 2 — New Frontend + Main Pages (`workspace-backend/frontend/`)
+
+## Status: ✅ Done
+
+All five phases landed. The new frontend lives in `workspace-backend/frontend/`
+(React 19 + Vite 8 + TanStack Router, pnpm, biome). Verified end-to-end: login,
+Home (classify → create → chat), the chat page against **real bzcode**, Sidebar
+(list/rename/delete), Settings (API key + secrets), and the backend serving the
+built SPA (`make serve`). Gate: backend 113 tests + ruff + mypy; frontend biome +
+tsc + 33 vitest — all green.
+
+**Deferred (intentional, noted for later):**
+- **`app.css` prune** — the 249 KB file was copied wholesale and is *not* pruned;
+  it gzips to ~31 KB and unused rules are harmless. Pruning risks removing classes
+  used by `parseMarkdownToHTML`/hljs output (not greppable), so it's left for a
+  dedicated cleanup pass.
+- **Backend `SendMessageRequest` gaps** — no `mode`/`feedback` fields, so session-mode
+  switching (plan/yolo) and permission-deny feedback aren't wired. Model switch
+  (`/model <id>`) and abort work. Small DTO additions when those features are needed.
+- **Agent route bundle** ~1 MB (markdown + highlight.js) — candidate for lazy-loading
+  hljs.
+- Attachments/slash-menu/canvas/editor panes remain out of scope (M3/M4).
+
+## Context
+
+M1 rebuilt the backend into `workspace-backend/` with a clean `/api/v1` REST + SSE API,
+but the frontend is still the old rushed `src/` — one 6,992-line `agent.tsx`, base URLs
+re-derived in 17 places across two idioms, coupled to the *old* endpoint names
+(`/api/pool/*`, `/sessions`, `/agent-key`, `/api/classify-mode`). M2 stands up a fresh,
+well-structured frontend and brings back the **main pages** (Home, Agent chat, Settings)
+against the new API — so we have a usable end-to-end app before tackling the document
+workbench (deferred). The old `src/` stays untouched as reference.
+
+### Decisions locked with the user
+- **Location:** `workspace-backend/frontend/` (React app beside `src/workspace_backend/`).
+  Dev: vite on :5010 proxying `/api`+`/healthz` → backend :18789. Build: `dist/` served by
+  the backend as the SPA.
+- **Agent page = CHAT ONLY.** Port connect → SSE → send → render (messages, tool cards,
+  permission/input prompts). Decompose the old monolith into a chat **service** +
+  components. Canvas (widgets) → M3; editor panes → docs milestone.
+- **M2 pages:** scaffold + shell (layout, sidebar, theming) + Login + Home + Agent(chat) +
+  Settings. Defer files/learning/products/marketing/platform-chat.
+- **Styling:** reuse existing tokens (`bz-agent-tokens-v1-0/boltzagent-tokens.css`) + port
+  `src/styles/app.css` (copy wholesale first, prune later). Keep light/dark `theme-config`.
+  Drop the 16 unused `src/design-tokens/<name>/` theme folders.
+- **Auth:** server API-key is the source of truth. The `/login` route is a **minimal
+  API-key entry screen** (single `BZ_API_KEY` field + Continue — no username/password, no
+  OAuth; mirrors the old `login.tsx`), which POSTs `PUT /api/v1/auth/api-key`. Enforcement is
+  **reactive** (matches old code): no upfront door guard; when an authed action (connect)
+  returns **401**, redirect to `/login` with a return URL. The key is also editable in
+  Settings. "Logged in" = the server has a key (`GET /api/v1/auth/api-key` → `{present}`).
+  Drop the old localStorage `bz_access_token` JWT (it was inconsistent — login never set it).
+- **One `agentClient`:** a single base-URL resolution + typed fetch wrappers for `/api/v1`,
+  replacing the 17 ad-hoc call sites.
+
+### Roadmap resequencing (the FE is inserted as M2)
+
+The original M1-doc roadmap had M2=documents. Per the user, the frontend foundation is
+inserted as M2 and everything shifts down one — **nothing dropped, just resequenced**:
+
+- **M2 (this plan)** — Frontend foundation + main pages (Home, Agent **chat**, Settings).
+- **M3** — Widgets / canvas (backend `/canvas`,`/widgets` + the agent page's canvas pane).
+- **M4** — Document workbench (backend `/api/doc|excel|ppt/*` + the office/excel/ppt editors,
+  hosted in the agent page's editor pane). *This is the old "M2 documents", now with a
+  frontend to live in.*
+- **M5** — BoltzHub. **M6** — WhatsApp. **Cross-cutting** — Postgres storage.
+
+"Agent page = chat only" for M2 therefore means: port the **chat pane** now; the **canvas
+pane** lands in M3 and the **editor pane** (document workbench) in M4 — because neither
+their backend nor a frontend host exists yet. M2 builds the host.
+
+---
+
+## Target structure — `workspace-backend/frontend/`
+
+```
+package.json          # trimmed deps (chat-only); pnpm; #/* -> ./src/* alias
+vite.config.ts        # :5010, proxy /api + /healthz -> :18789; tanstackRouter + react + tsconfigPaths
+tsconfig*.json        # mirror old strict split
+biome.json            # copy from repo root
+index.html            # #app
+src/
+  main.tsx            # createRouter + initializeTheme + render
+  routeTree.gen.ts    # auto-generated by tanstackRouter plugin (gitignored)
+  routes/
+    __root.tsx        # Outlet (no QueryClient — unused for chat)
+    login.tsx         # API-key entry screen (single BZ_API_KEY field; no user/pass)
+    _app/
+      route.tsx       # shell: Sidebar + Outlet (no door guard; 401 on connect -> /login)
+      index.tsx       # Home (create-agent composer)
+      agent.tsx       # Agent CHAT page — thin, delegates to useAgentChat (~150 lines)
+      settings.tsx    # API key + secrets
+  api/                # THE central client — nothing else calls fetch for /api/*
+    client.ts         # base URL (one idiom) + requestJson() + openEventStream(); errors.ts
+    agents.ts auth.ts modes.ts files.ts system.ts   # typed endpoint groups
+  chat/               # the extracted connection state machine (crown jewel)
+    useAgentChat.ts   # hook: lifecycle + reconnect + auto-send
+    chatReducer.ts    # PURE reducer: DisplayItem[] transitions
+    handleEvent.ts    # PURE SSE-event -> action (was handleMessage)
+    streamParser.ts   # ReadableStream -> parsed SSE JSON (async generator)
+    history.ts        # GET messages -> DisplayItem[] (was restoreHistory)
+    blocks.ts types.ts
+  components/
+    chat/ MessageList, UserMessage, AssistantMessage (md+sanitize), ToolCard,
+          PermissionCard, InputPromptCard, SystemMessage, Composer, ConnStatusBar
+    Sidebar, ModeSelector, ModeIconSvg, ThemeToggle, logos, CubeGridBackground
+  lib/  agentModes.ts (port), markdown.ts (parseMarkdownToHTML + DOMPurify), theme-config.ts (port)
+  auth/ apiKey.ts (getApiKeyStatus + redirectToLogin(returnUrl) for 401 handling)
+  styles/ tokens.css, app.css (ported), hljs-*.css ; styles.css (single entry)
+```
+
+**Module ownership:** `api/client.ts` owns the one base-URL resolution + all fetch/SSE
+mechanics; endpoint groups map endpoints→typed methods; `chat/` owns connection logic +
+the DisplayItem model (zero JSX); `components/chat/` render only (props + callbacks, no
+fetch); `routes/_app/agent.tsx` just calls `useAgentChat` and renders.
+
+**Deps:** keep `react`, `react-dom`, `@tanstack/react-router` (+ router-plugin),
+`@boltzbit/md-utils`, `@phosphor-icons/react`, `highlight.js`, add `dompurify`, optional
+`zod`. Drop `@mui/*`, `@emotion/*`, `@monaco-editor/react`, `recharts`, `@boltzbit/{chat,
+dynas-client,bz-api-client,auth-utils,tools__dynas-db}`, `lodash`, `date-fns`,
+`@tanstack/react-query`.
+
+---
+
+## Agent chat service (the core port)
+
+**Approach:** a `useAgentChat(agentId)` hook wrapping `useReducer` + a ref-held,
+effect-driven connection controller. Not zustand/class — the machine is single-agent and
+effect-scoped. Move all display mutations into a **pure reducer** so the SSE handler
+returns actions (kills the old stale-closure hazards where `handleMessage` closed over ~15
+setters). Streaming deltas accumulate in a ref (`Map<blockIndex,…>`), rAF-flushed to a
+`streamingBlocks` field.
+
+**Lifecycle** (effect keyed on `[agentId, reconnectKey]`, ported from
+`src/routes/_app/agent.tsx` 4646-5237, reordered for the new contract):
+1. reset state; `connStatus='connecting'`.
+2. `POST /agents/{id}/connect {}` → handshake. Seed `mode`/`session_mode`/`runtime_status`;
+   seed `modes`/`commands` **only if non-empty** (may be empty on fresh spawn — the
+   stream's `session` event is the source of truth). 401 → `/login` (stash return URL).
+3. **Open `/events` SSE first, then `GET /agents/{id}/messages`** for history (the backend's
+   documented reconnect ordering; closes the mid-turn gap). connect no longer returns
+   `messages`.
+4. **Auto-send** the Home-stashed prompt (`sessionStorage['agent:pendingMessage']`): send if
+   `runtime_status==='idle'`, else defer until first `status:idle` on the stream.
+5. **Stream loop:** `for await (msg of streamParser(body))` → `dispatch(handleEvent(msg))`.
+   `streamParser` owns getReader/TextDecoder, split on `\n\n`, skip `: ping`.
+6. **Reconnect:** backoff `min(2000·2^n, 30000)`, max 5, then `unavailable`; bump
+   `reconnectKey`.
+7. **Cleanup:** cancel + `AbortController.abort()` + clear timers.
+
+**Event→action** (`handleEvent`, from `handleMessage` 4801): `session`→set modes/commands;
+`user`→append + dedup by `clientId`, filter `<system-reminder>`/`<context-summary>`;
+`status`→streaming flag + model/mode + fire deferred auto-send on idle; `delta`→accumulate
+(ignore `signature`/`toolUse`); `assistant`→finalize; `tool`→upsert by `toolUseId`;
+`prompt`→pending permission/input; `result`→usage + error item; `system`→system item
+(terminal "Agent process exited" → disconnect→reconnect).
+
+**Optimistic echo:** `send()` mints `clientId`, renders the bubble immediately (`id===
+clientId`), POSTs `{content, clientId}`. Backend re-emits with the same `clientId` → deduped
+live, still renders after a reconnect. **Replies:** `answerPermission/answerInput` POST
+`{type:'user', subtype, requestId, behavior|answers}`. **Model switch:** `send('/model <id>')`
+(no REST).
+
+**DisplayItem** union ported from agent.tsx 95-118, trimmed to `user|assistant|tool|system`
+(drop `push-progress`/`sync-progress`/`compact-summary` — BoltzHub/compact, deferred).
+
+---
+
+## Typing, dev/build, and the backend SPA gap
+
+- **Types:** hand-write REST DTOs mirroring `schemas.py` (snake_case, no camel remap) + a
+  hand-written `SseEvent` discriminated union (the SSE body is **not** in OpenAPI — it's
+  `dict[str,Any]`). Optionally validate frames with a dev-only `zod` union so protocol drift
+  is loud. `openapi-typescript` allowed as a dev reference only, not a build step.
+- **Base URL:** `const API_BASE = import.meta.env.VITE_API_BASE ?? ''` → same-origin relative
+  `/api/v1/...` works in dev (proxy) and prod (SPA host). Collapses all 17 old sites.
+- **Vite proxy:** `/api` + `/healthz` → `:18789`, `changeOrigin`. SSE flushes (backend sets
+  `X-Accel-Buffering:no`); verify with `curl -N` through :5010 in Phase 3, add a `configure`
+  hook only if buffering appears. Use `fetch`+ReadableStream (not `EventSource`) for
+  `AbortController` teardown.
+- **Backend SPA serving — GAP:** the M1 backend mounts only API routers (`app.py:107-112`);
+  no `StaticFiles`. Add (final phase): mount `StaticFiles(dist, html=True)` + an SPA
+  catch-all returning `index.html` for non-API paths (guarded against `/api`/`/healthz`/
+  `/docs`/`/openapi.json`), dist path a `Settings` field, no-op if absent. Dev doesn't need
+  it (FE on :5010).
+- **Scripts:** FE `dev`/`build`/`preview`/`check`(biome)/`typecheck`(tsc -b). Root `Makefile`:
+  `dev-backend`, `dev-frontend`, `dev` (both), `build-frontend`, `serve` (build + backend
+  serving dist).
+
+---
+
+## Phases (each independently reviewable)
+
+- **Phase 0 — Scaffold, shell, login, theming.** Create the project (package.json, vite +
+  proxy, tsconfig, biome, index.html, main.tsx). Port theme-config, logos,
+  CubeGridBackground, ThemeToggle, tokens.css + app.css. TanStack routes (`__root`,
+  `_app/route`, `login`, placeholder index/agent/settings). `auth/apiKey.ts` + the API-key
+  entry page vs `PUT /api/v1/auth/api-key`. **Gate:** boots, theme toggles, entering a key
+  works and a 401 redirects to `/login`.
+- **Phase 1 — agentClient + types.** `api/client.ts` (base URL, requestJson, ApiError,
+  openEventStream) + endpoint groups; REST DTOs + `SseEvent` union. Vitest for error mapping
+  + stream-frame splitting. **Gate:** typed client with tests, no UI dep.
+- **Phase 2 — chat service.** `chatReducer`, `handleEvent`, `history`, `blocks`,
+  `streamParser`, `useAgentChat`. Vitest the reducer against recorded event sequences (delta
+  batching, tool upsert, clientId dedup, permission/input). **Gate:** pure tested machine.
+- **Phase 3 — Agent chat page + components.** Thin `agent.tsx` + MessageList, User/Assistant
+  messages (md+sanitize), ToolCard+CollapsibleOutput, Permission/InputPromptCard, Composer,
+  ConnStatusBar, model picker. **Gate:** connect→stream→send→render→permission-reply against
+  real backend + bzcode.
+- **Phase 4 — Home, Settings, Sidebar, polish + SPA mount.** Home composer (classify → stash
+  → `POST /agents` → navigate). Settings (api-key + secrets). Sidebar (list/rename/delete via
+  agentClient, poll `GET /agents`). Prune app.css. Add backend StaticFiles + SPA fallback +
+  `make serve`. **Gate:** full M2 surface + prod serving.
+
+---
+
+## Key risks (from the design pass)
+
+- **Empty `modes`/`commands` on connect** — treat connect values as seed-only-when-non-empty;
+  the stream `session` event is authoritative (most likely correctness bug if missed).
+- **app.css reuse** — copy wholesale first (correctness), prune in Phase 4 by grepping ported
+  components' `className=` (cleanliness last).
+- **SSE through the vite proxy** — verify no buffering early; keep `fetch`+ReadableStream.
+- **Markdown XSS** — old code injects `parseMarkdownToHTML` via `dangerouslySetInnerHTML` with
+  no sanitizer; wrap with DOMPurify (a security improvement).
+- **Port vs rebuild** — port the battle-tested cards (ToolCard/Permission/InputPrompt/
+  CollapsibleOutput) near-verbatim; rebuild the Composer slim (text+send; attachments/
+  doc-parse stubbed for M2); do NOT port canvas/widget/BoltzHub/editor code.
+- **Auth round-trip** — cache the `{present}` check in memory (invalidate on login/logout);
+  connect's 401 is the real enforcement (redirect + return URL).
+- **routeTree.gen.ts** — plugin-generated; gitignore it; keep plugin order
+  tsconfigPaths→tanstackRouter→react; use `validateSearch` on the agent route (not `as never`).
+
+## Verification
+- Per phase: `pnpm --dir workspace-backend/frontend check` (biome) + `typecheck` (tsc) +
+  `vitest` green.
+- Phase 3 end-to-end (the real test): run backend (`uvicorn`, real bzcode + BZ_API_KEY) +
+  `pnpm dev`; open :5010, log in, create an agent from Home, watch a turn stream in, answer a
+  permission prompt. Confirm reconnect (kill/restart mid-turn) replays. Verify SSE isn't
+  buffered via `curl -N` vs through the proxy.
+- Phase 4: `make serve` (built dist served by backend on :18789) loads the SPA and deep-links
+  (`/agent`, `/settings`) resolve.
+
+## Non-goals for M2
+No canvas/widgets (M3), no document workbench / office-excel-ppt editors (docs milestone), no
+files/learning/products/marketing pages, no platform (`@boltzbit/chat`) chat, no Dynas. No
+changes to `src/` (old FE stays as reference). No new backend business logic beyond the
+StaticFiles/SPA mount.
