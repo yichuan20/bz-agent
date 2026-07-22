@@ -25,7 +25,7 @@ def _read_sidecar(path: Path) -> dict[str, Any] | None:
         return None
     try:
         return json.loads(sc.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
 
 

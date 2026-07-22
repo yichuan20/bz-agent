@@ -48,7 +48,7 @@ _SYSREM_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
 def _read_json(path: Path) -> Any | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
 
 

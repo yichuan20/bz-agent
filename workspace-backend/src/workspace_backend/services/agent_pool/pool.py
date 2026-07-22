@@ -71,7 +71,7 @@ class AgentPool:
             self._sweeper_task.cancel()
             try:
                 await self._sweeper_task
-            except asyncio.CancelledError, Exception:  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         async with self._lock:
             runtimes = list(self._runtimes.values())

@@ -137,7 +137,7 @@ class AgentRuntime:
         if self._proc is not None and self._proc.stdin is not None:
             try:
                 self._proc.stdin.close()  # signals bzcode to save and exit
-            except BrokenPipeError, ConnectionResetError, OSError:
+            except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
         if self._proc is not None:
             try:
@@ -155,7 +155,7 @@ class AgentRuntime:
         for task in self._tasks:
             try:
                 await task
-            except asyncio.CancelledError, Exception:  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         self._broadcast(None)
 

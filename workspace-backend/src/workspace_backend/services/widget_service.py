@@ -23,7 +23,7 @@ class WidgetService:
     def _read_index(self) -> dict[str, Any]:
         try:
             return json.loads(self._index.read_text(encoding="utf-8"))
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             return {"version": 1, "widgets": []}
 
     def _write_index(self, data: dict[str, Any]) -> None:

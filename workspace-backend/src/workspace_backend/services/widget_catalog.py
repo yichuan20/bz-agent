@@ -33,7 +33,7 @@ class WidgetCatalog:
         try:
             data = json.loads(self._index.read_text(encoding="utf-8"))
             widgets = [w for w in data.get("widgets", []) if not w.get("archived")]
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             log.warning("[widgets] index unavailable at %s", self._index)
             return _UNAVAILABLE
 
