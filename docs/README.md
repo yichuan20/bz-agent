@@ -39,6 +39,7 @@ Browser SPA  ──HTTP + SSE──►  FastAPI (app.py)  ──stdio──►  
 | [07 — Tech Debt & Risks](./07-tech-debt.md) | Consolidated, prioritized list of issues — read this before changing anything |
 | [08 — Refactor Plan (M1)](./08-refactor-plan-m1.md) | Approved plan for the `workspace-backend/` rebuild: architecture, `/v1` API surface + migration map, 5 phases, later-milestone roadmap |
 | [09 — Refactor Plan (M2)](./09-refactor-plan-m2.md) | Approved plan for the new frontend (`workspace-backend/frontend/`): structure, the extracted chat service, main pages (Home/Agent-chat/Settings), phases, and the resequenced milestone roadmap |
+| [10 — Refactor Plan (M3)](../workspace-backend/docs/10-refactor-plan-m3.md) | Plan for the missing backend APIs: file extras, settings, canvas/widgets, widget runtime, document workbench (doc/excel/ppt), dev-server, and BoltzHub — 6 groups in priority order |
 
 ## The 60-second orientation
 

@@ -1153,7 +1153,7 @@ async function send() {
     :{model,stream:false,messages};
 
   try {
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'POST',headers,body:JSON.stringify(body)})});
     const d=await res.json();
     const reply=isAnthropic?d.content?.[0]?.text:d.choices?.[0]?.message?.content;
@@ -1370,7 +1370,7 @@ async function loadFile() {
   try {
     let text;
     if(val.startsWith('http')){
-      const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+      const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({url:val,method:'GET',headers:{}})});
       text=await res.text();
     } else {
@@ -1521,7 +1521,7 @@ list.style.cssText='flex:1;overflow-y:auto';
 async function loadDir(path) {
   list.innerHTML='<div style="padding:16px;color:'+textSecondary+';font-size:12px">Loading…</div>';
   try {
-    const res = await fetch(H+'/files?path='+encodeURIComponent(path||'.'));
+    const res = await fetch(H+'/api/v1/files?path='+encodeURIComponent(path||'.'));
     const d = await res.json();
     if(d.error) throw new Error(d.error);
     currentPath=d.path;
@@ -1687,7 +1687,7 @@ async function fetchWeather() {
   content.innerHTML='<p style="color:'+textSecondary+'">Loading…</p>';
   try {
     const url='https://api.openweathermap.org/data/2.5/weather?q='+encodeURIComponent(city)+'&appid={{OPENWEATHERMAP_API_KEY}}&units=metric';
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{}})});
     const d=await res.json();
     if(d.cod&&d.cod!==200) throw new Error(d.message);
@@ -1779,7 +1779,7 @@ async function loadData() {
       issues:'https://api.github.com/repos/'+repo+'/issues?state=all&per_page=20',
       commits:'https://api.github.com/repos/'+repo+'/commits?per_page=20',
     };
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url:endpoints[activeTab],method:'GET',headers:{'Authorization':'Bearer {{GITHUB_TOKEN}}','Accept':'application/vnd.github.v3+json'}})});
     const items=await res.json();
     if(!Array.isArray(items)) throw new Error(items.message||JSON.stringify(items));
@@ -1845,7 +1845,7 @@ async function load() {
   grid.innerHTML='<p style="color:'+textSecondary+';font-size:12px;grid-column:1/-1;padding:16px 0;text-align:center">Loading…</p>';
   try {
     const url='https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids='+DEFAULT_TICKERS.join(',')+'&order=market_cap_desc&per_page=10&page=1&sparkline=false';
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{}})});
     const coins=await res.json();
     grid.innerHTML='';
@@ -2045,7 +2045,7 @@ async function load(url) {
   urlInp.value=url;
   preview.innerHTML='<p style="color:'+textSecondary+'">Fetching…</p>';
   try {
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{'User-Agent':'Mozilla/5.0'}})});
     const html=await res.text();
     const parser=new DOMParser();

@@ -47,7 +47,7 @@ import { MODE_COLORS, ModeIconSvg } from '#/components/ModeIconSvg';
 import { ModeSelector } from '#/components/ModeSelector';
 import { AGENT_MODES, type AgentMode, modeLSKey } from '#/lib/agentModes';
 import { REGISTRY_MAP, WIDGET_REGISTRY, type WidgetKind } from '#/lib/widgetRegistry';
-import { HTTP_BASE, connectSession, listSessions, deleteSession, renameSession, setDefaultSession, openEventsStream, getHomeConfig, sendMessage as sendMessageToAgent, listModels, listCredentials, setCredential, deleteCredential, listFiles, makeDir, setApiKey as saveApiKey, logout as doLogout } from '#/lib/api';
+import { HTTP_BASE, connectSession, listSessions, deleteSession, renameSession, setDefaultSession, openEventsStream, getHomeConfig, sendMessage as sendMessageToAgent, listModels, listCredentials, setCredential, deleteCredential, listFiles, makeDir, renameFile, setApiKey as saveApiKey, logout as doLogout, getCanvas, saveCanvas, getCustomWidget, setCustomWidget, deleteCustomWidget, listWidgets, createWidget, seedWidgets, deleteWidget, parseDoc, boltzHubCheck, boltzHubApps, boltzHubVersions, boltzHubTokenUsage, boltzHubCreateApp, boltzHubPublish, boltzHubStream } from '#/lib/api';
 
 export const Route = createFileRoute('/_app/agent')({
   validateSearch: (
@@ -673,11 +673,7 @@ function PushProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'push-p
                 type="button"
                 className="bzhub-done-btn bzhub-done-btn--publish"
                 onClick={() => {
-                  fetch(`${AGENT_HTTP_BASE}/boltzhub/publish`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ appId: item.appId }),
-                  }).catch(() => null);
+                  boltzHubPublish(HTTP_BASE, { appId: item.appId }).catch(() => null);
                 }}
               >
                 <CloudArrowUpIcon size={13} />
@@ -752,12 +748,10 @@ function SyncProgressCard({ item }: { item: Extract<DisplayItem, { kind: 'sync-p
 
 function CreateAppModal({
   cwd,
-  agentHttp,
   onClose,
   onCreated,
 }: {
   cwd: string;
-  agentHttp: string;
   onClose: () => void;
   onCreated: (cfg: { id: string; name: string }) => void;
 }) {
@@ -774,23 +768,14 @@ function CreateAppModal({
     setSaving(true);
     setError('');
     try {
-      const r = await fetch(`${agentHttp}/boltzhub/create-app`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cwd,
-          name: name.trim(),
-          description: desc.trim() || undefined,
-          visibility,
-          buildCommand: buildCmd.trim() || undefined,
-        }),
-      });
-      const d = (await r.json()) as {
-        ok?: boolean;
-        appConfig?: { id: string; name: string };
-        error?: string;
-      };
-      if (!r.ok || !d.ok) {
+      const d = (await boltzHubCreateApp(HTTP_BASE, {
+        cwd,
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        visibility,
+        buildCommand: buildCmd.trim() || undefined,
+      })) as { ok?: boolean; appConfig?: { id: string; name: string }; error?: string };
+      if (!d.ok) {
         setError(d.error ?? 'Failed to create app');
         setSaving(false);
         return;
@@ -922,14 +907,12 @@ function ReleaseNotesModal({
   const [notes, setNotes] = useState('');
   const [version, setVersion] = useState('');
   const [versions, setVersions] = useState<{ versionNumber: string }[]>([]);
-  const agentHttp = HTTP_BASE; // HTTP_BASE imported from '#/lib/api'
-
   useEffect(() => {
-    fetch(`${agentHttp}/boltzhub/versions?appId=${encodeURIComponent(appId)}`)
-      .then(r => r.json())
-      .then((d: { versions?: { versionNumber: string }[]; suggestedNext?: string }) => {
-        setVersions(d.versions ?? []);
-        if (d.suggestedNext) setVersion(d.suggestedNext);
+    boltzHubVersions(HTTP_BASE, appId)
+      .then((d) => {
+        const result = d as { versions?: { versionNumber: string }[]; suggestedNext?: string };
+        setVersions(result.versions ?? []);
+        if (result.suggestedNext) setVersion(result.suggestedNext);
       })
       .catch(() => {});
   }, [appId]);
@@ -1043,11 +1026,9 @@ function ReleaseNotesModal({
 }
 
 function SyncModal({
-  agentHttp,
   onClose,
   onSync,
 }: {
-  agentHttp: string;
   onClose: () => void;
   onSync: (appId?: string) => void;
 }) {
@@ -1068,8 +1049,7 @@ function SyncModal({
     setStage('fetching');
     setError('');
     try {
-      const r = await fetch(`${agentHttp}/boltzhub/apps`);
-      const d = (await r.json()) as
+      const d = (await boltzHubApps(HTTP_BASE)) as
         | { apps?: { id: string; name: string }[]; error?: string }
         | { id: string; name: string }[];
       const list = Array.isArray(d)
@@ -1203,19 +1183,16 @@ function TokenUsageModal({
   const [summary, setSummary] = useState(data.summary);
   const [trends, setTrends] = useState(data.trends ?? []);
   const [error, setError] = useState('');
-  const agentHttp = HTTP_BASE; // HTTP_BASE imported from '#/lib/api'
-
   async function fetchUsage(p: string) {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch(`${agentHttp}/boltzhub/token-usage?period=${p}`);
-      const d = (await r.json()) as {
+      const d = (await boltzHubTokenUsage(HTTP_BASE, p)) as {
         summary?: typeof summary;
         trends?: typeof trends;
         error?: string;
       };
-      if (!r.ok) {
+      if (d.error) {
         setError(d.error ?? 'Failed to fetch');
         return;
       }
@@ -2117,7 +2094,6 @@ function CanvasWidget({
   // Resolve the JS code: custom widgets carry their own code, builtins come from the registry.
   // For custom-kind widgets (deployed by the agent), data.code is loaded async — hold off
   // rendering the iframe until the code arrives to avoid flashing the CUSTOM_CODE clock placeholder.
-  const agentHttp = HTTP_BASE; // HTTP_BASE imported from '#/lib/api'
   const isCustomKind = data.kind === 'custom';
   const code = data.code ?? (isCustomKind ? null : (REGISTRY_MAP[data.kind]?.code ?? ''));
   const content =
@@ -2126,7 +2102,7 @@ function CanvasWidget({
     ) : (
       <IframeWidget
         code={code}
-        agentHttpBase={agentHttp}
+        agentHttpBase={HTTP_BASE}
         canvasId={data.id}
         sessionId={sessionId}
         refreshKey={data.id}
@@ -2225,8 +2201,6 @@ type WidgetRecord = {
   updatedAt: string;
 };
 
-const AGENT_HTTP_BASE = HTTP_BASE; // HTTP_BASE imported from '#/lib/api'
-
 // Canvas persistence — one .bzcanvas.json per working directory
 type CanvasEntry = {
   canvasId: string; // unique ID on this canvas instance
@@ -2240,78 +2214,38 @@ type CanvasEntry = {
 };
 
 const canvasApi = {
-  load: (cwd: string, sessionId?: string | null) => {
-    const params = new URLSearchParams({ cwd });
-    if (sessionId) params.set('sessionId', sessionId);
-    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`).then(r => r.json()) as Promise<{
-      widgets: CanvasEntry[];
-    }>;
-  },
+  load: (cwd: string, sessionId?: string | null): Promise<{ widgets: CanvasEntry[] }> =>
+    getCanvas(HTTP_BASE, cwd, sessionId ?? '') as Promise<{ widgets: CanvasEntry[] }>,
 
-  save: (cwd: string, widgets: CanvasEntry[], sessionId?: string | null) => {
-    const params = new URLSearchParams({ cwd });
-    if (sessionId) params.set('sessionId', sessionId);
-    return fetch(`${AGENT_HTTP_BASE}/canvas?${params}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version: 1, widgets }),
-    }).then(r => r.json());
-  },
+  save: (cwd: string, widgets: CanvasEntry[], sessionId?: string | null): Promise<unknown> =>
+    saveCanvas(HTTP_BASE, cwd, sessionId ?? '', { version: 1, widgets }),
 };
 
 // Per-instance custom code — stored in {sessionDir}/custom_widgets/{canvasId}.js
 const customWidgetApi = {
-  load: (canvasId: string, sessionId?: string | null): Promise<string | null> => {
-    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
-    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`)
-      .then(r => (r.ok ? (r.json() as Promise<{ code: string }>) : null))
-      .then(d => d?.code ?? null)
-      .catch(() => null);
-  },
+  load: (canvasId: string, sessionId?: string | null): Promise<string | null> =>
+    getCustomWidget(HTTP_BASE, canvasId, sessionId ?? '')
+      .then(d => (d as { code?: string } | null)?.code ?? null)
+      .catch(() => null),
 
-  save: (canvasId: string, code: string, sessionId?: string | null): Promise<void> => {
-    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
-    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    })
+  save: (canvasId: string, code: string, sessionId?: string | null): Promise<void> =>
+    setCustomWidget(HTTP_BASE, canvasId, sessionId ?? '', code)
       .then(() => undefined)
-      .catch(() => undefined);
-  },
+      .catch(() => undefined),
 
-  remove: (canvasId: string, sessionId?: string | null): Promise<void> => {
-    const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
-    return fetch(`${AGENT_HTTP_BASE}/custom-widgets/${encodeURIComponent(canvasId)}${params}`, {
-      method: 'DELETE',
-    })
+  remove: (canvasId: string, sessionId?: string | null): Promise<void> =>
+    deleteCustomWidget(HTTP_BASE, canvasId, sessionId ?? '')
       .then(() => undefined)
-      .catch(() => undefined);
-  },
+      .catch(() => undefined),
 };
 
 const widgetApi = {
-  list: () =>
-    fetch(`${AGENT_HTTP_BASE}/widgets`).then(r => r.json()) as Promise<{ widgets: WidgetRecord[] }>,
-
+  list: () => listWidgets(HTTP_BASE) as Promise<{ widgets: WidgetRecord[] }>,
   upsert: (w: Omit<WidgetRecord, 'archived' | 'createdAt' | 'updatedAt'>) =>
-    fetch(`${AGENT_HTTP_BASE}/widgets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(w),
-    }).then(r => r.json()) as Promise<WidgetRecord>,
-
+    createWidget(HTTP_BASE, w) as Promise<WidgetRecord>,
   seed: (widgets: Omit<WidgetRecord, 'archived' | 'createdAt' | 'updatedAt'>[]) =>
-    fetch(`${AGENT_HTTP_BASE}/widgets/seed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ widgets }),
-    }).then(r => r.json()) as Promise<{ seeded: number }>,
-
-  archive: (id: string) =>
-    fetch(`${AGENT_HTTP_BASE}/widgets/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(r =>
-      r.json(),
-    ) as Promise<{ ok: boolean }>,
+    seedWidgets(HTTP_BASE, { widgets }) as Promise<{ seeded: number }>,
+  archive: (id: string) => deleteWidget(HTTP_BASE, id) as Promise<{ ok: boolean }>,
 };
 
 // ── Code drawer ───────────────────────────────────────────────────────────────
@@ -2437,7 +2371,6 @@ function CustomWidgetEditor({
   const [code, setCode] = useState(initial?.code ?? REGISTRY_MAP.custom?.code ?? '');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const agentHttp = HTTP_BASE; // HTTP_BASE imported from '#/lib/api'
 
   function handleSave() {
     onSave({ id: initial?.id ?? uid(), name, keywords, description, meta, code });
@@ -2500,7 +2433,7 @@ function CustomWidgetEditor({
             placeholder="// JavaScript code…"
           />
           <div className="cwe-preview">
-            <IframeWidget code={code} agentHttpBase={agentHttp} refreshKey={refreshKey} />
+            <IframeWidget code={code} agentHttpBase={HTTP_BASE} refreshKey={refreshKey} />
           </div>
         </div>
       </div>
@@ -2936,7 +2869,7 @@ const CanvasPanel = forwardRef<CanvasPanelHandle, { cwd?: string; sessionId?: st
         )}
         {showCredManager && (
           <CredentialManager
-            agentHttp={AGENT_HTTP_BASE}
+            agentHttp={HTTP_BASE}
             onClose={() => setShowCredManager(false)}
           />
         )}
@@ -4103,28 +4036,21 @@ function AgentPage() {
       const shuffled = [...AUTO_SESSION_WORDS].sort(() => Math.random() - 0.5);
       for (const word of shuffled.slice(0, 5)) {
         const name = `${mode}-${word}`;
-        const res = await fetch(`${HTTP_BASE}/files/mkdir`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parent: defaultCwd, name }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { path: string };
+        try {
+          const data = await makeDir(HTTP_BASE, defaultCwd, name);
           void startNewSession(data.path, mode);
           return;
+        } catch {
+          // 409 = name collision, try next word; any other error breaks out
         }
-        if (res.status !== 409) break;
       }
       // Fallback: short random suffix
-      const fallbackName = `${mode}-${Math.random().toString(36).slice(2, 6)}`;
-      const res = await fetch(`${HTTP_BASE}/files/mkdir`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent: defaultCwd, name: fallbackName }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { path: string };
+      try {
+        const fallbackName = `${mode}-${Math.random().toString(36).slice(2, 6)}`;
+        const data = await makeDir(HTTP_BASE, defaultCwd, fallbackName);
         void startNewSession(data.path, mode);
+      } catch {
+        // ignore
       }
     },
     [defaultCwd, startNewSession],
@@ -4467,11 +4393,7 @@ function AgentPage() {
       }
 
       try {
-        const resp = await fetch(`${AGENT_HTTP_BASE}/boltzhub/${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+        const resp = await boltzHubStream(HTTP_BASE, endpoint as 'push' | 'sync', body);
         if (!resp.body) return;
 
         const reader = resp.body.getReader();
@@ -5198,13 +5120,11 @@ function AgentPage() {
     const newName = renamingFolderValue.trim();
     setIsRenamingFolder(false);
     if (!newName || newName === activeDirName || !activeCwd) return;
-    const res = await fetch(`${HTTP_BASE}/api/file/rename`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: activeCwd, newName }),
-    }).catch(() => null);
-    if (!res?.ok) return;
-    const data = (await res.json()) as { path: string };
+    let data: { path: string } | null = null;
+    try {
+      data = await renameFile(HTTP_BASE, activeCwd, newName);
+    } catch { return; }
+    if (!data) return;
     setActiveCwd(data.path);
     setActiveDirName(newName);
     void navigate({
@@ -5236,8 +5156,7 @@ function AgentPage() {
         setAttachments(prev => [...prev, { ...placeholder, name: placeholderId } as DocAttachment]);
         const form = new FormData();
         form.append('file', file);
-        fetch(`${HTTP_BASE}/api/doc/parse`, { method: 'POST', body: form })
-          .then(r => r.json())
+        parseDoc(HTTP_BASE, form as FormData)
           .then(
             (d: {
               filename?: string;
@@ -5409,8 +5328,7 @@ function AgentPage() {
         setSlashMenuIdx(0);
         setInputValue('');
         // Check login + app config, then show the right modal
-        fetch(`${AGENT_HTTP_BASE}/boltzhub/check?cwd=${encodeURIComponent(activeCwd)}`)
-          .then(r => r.json())
+        boltzHubCheck(HTTP_BASE, activeCwd)
           .then(
             (d: {
               isLoggedIn: boolean;
@@ -6146,12 +6064,7 @@ function AgentPage() {
                                               }
                                               setDocViewerLoading(true);
                                               setDocViewer(null);
-                                              fetch(`${HTTP_BASE}/api/doc/parse`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ path: absPath }),
-                                              })
-                                                .then(r => r.json())
+                                              parseDoc(HTTP_BASE, { path: absPath })
                                                 .then(
                                                   (d: {
                                                     filename?: string;
@@ -6851,7 +6764,6 @@ function AgentPage() {
           return (
             <CreateAppModal
               cwd={m.cwd}
-              agentHttp={AGENT_HTTP_BASE}
               onClose={() => setBzHubModal(null)}
               onCreated={cfg =>
                 setBzHubModal({
@@ -6875,7 +6787,6 @@ function AgentPage() {
         if (m.type === 'sync')
           return (
             <SyncModal
-              agentHttp={AGENT_HTTP_BASE}
               onClose={() => setBzHubModal(null)}
               onSync={appId => void startSync(m.cwd, appId)}
             />

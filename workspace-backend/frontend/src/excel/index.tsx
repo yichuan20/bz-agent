@@ -16,7 +16,7 @@ const ExcelViewSheetArea = React.lazy(() => import('./components/ExcelViewSheetA
 // biome-ignore lint/suspicious/noExplicitAny: lazy-loaded JS component, no type declarations available
 const ExcelSheetTabs = React.lazy(() => import('./components/ExcelSheetTabs')) as any;
 
-import { HTTP_BASE } from '#/lib/api';
+import { HTTP_BASE, loadExcel, patchExcel, gridExcel, mergeExcel, renameSheetExcel, addSheetExcel } from '#/lib/api';
 
 export interface ExcelEditorProps {
   filePath: string;
@@ -99,8 +99,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
     if (!filePath) return;
     setLoading(true);
     setError('');
-    fetch(`${HTTP_BASE}/api/v1/excel/load?path=${encodeURIComponent(filePath)}`)
-      .then(r => r.json())
+    loadExcel(HTTP_BASE, filePath)
       .then((d: ExcelApiData) => {
         if (d.error) {
           setError(d.error);
@@ -170,12 +169,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         sidecarCells[ref] = sc;
       }
 
-      fetch(`${HTTP_BASE}/api/v1/excel/patch`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, sheet: selectedSheet, cells: sidecarCells }),
-      })
-        .then(r => r.json())
+      patchExcel(HTTP_BASE, { path: filePath, sheet: selectedSheet, cells: sidecarCells })
         .then((d: ExcelApiData) => {
           if (!d.sheets) return;
           // Replace full state with server response (contains recalculated formula values)
@@ -199,16 +193,12 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
             }
           : prev,
       );
-      fetch(`${HTTP_BASE}/api/v1/excel/grid`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      gridExcel(HTTP_BASE, {
           path: filePath,
           sheet: selectedSheet,
           columnIndexToWidth: grid.columnIndexToWidth ?? {},
           rowIndexToHeight: grid.rowIndexToHeight ?? {},
-        }),
-      }).catch(() => null);
+        }).catch(() => null);
     },
     [filePath, selectedSheet, sheet],
   );
@@ -237,12 +227,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
             }
           : prev,
       );
-      fetch(`${HTTP_BASE}/api/v1/excel/merge`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, sheet: selectedSheet, mergedCells: newMerges }),
-      })
-        .then(r => r.json())
+      mergeExcel(HTTP_BASE, { path: filePath, sheet: selectedSheet, mergedCells: newMerges })
         .then((d: ExcelApiData) => {
           if (d.sheets) setData(d);
         })
@@ -264,11 +249,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
           : prev,
       );
       if (selectedSheet === oldName) setSelectedSheet(newName);
-      fetch(`${HTTP_BASE}/api/v1/excel/renamesheet`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, oldName, newName }),
-      }).catch(() => null);
+      renameSheetExcel(HTTP_BASE, { path: filePath, oldName, newName }).catch(() => null);
     },
     [filePath, selectedSheet],
   );
@@ -300,11 +281,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         : prev,
     );
     setSelectedSheet(newName);
-    fetch(`${HTTP_BASE}/api/v1/excel/addsheet`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, sheetName: newName }),
-    }).catch(() => null);
+    addSheetExcel(HTTP_BASE, { path: filePath, sheetName: newName }).catch(() => null);
   }, [data, filePath]);
 
   if (loading)

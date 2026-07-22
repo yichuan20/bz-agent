@@ -12,7 +12,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, drawConfig, SF } from './components/Slide'
 
 const SlideCanvas = React.lazy(() => import('./components/Slide')) as any;
 
-import { HTTP_BASE } from '#/lib/api';
+import { HTTP_BASE, loadPpt, savePpt } from '#/lib/api';
 
 export interface PptEditorProps {
   filePath: string;
@@ -1254,9 +1254,9 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
     if (!filePath) return;
     setLoading(true);
     setError('');
-    fetch(`${HTTP_BASE}/api/v1/ppt/load?path=${encodeURIComponent(filePath)}`)
-      .then(r => r.json())
-      .then((d: any) => {
+    loadPpt(HTTP_BASE, filePath)
+      .then((raw: unknown) => {
+        const d = raw as { slides?: unknown[]; error?: string };
         if (d.error) {
           setError(d.error);
           setLoading(false);
@@ -1284,11 +1284,7 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
             return rest;
           }) || [],
       }));
-      fetch(`${HTTP_BASE}/api/v1/ppt/save`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, slides: clean }),
-      })
+      savePpt(HTTP_BASE, { path: filePath, slides: clean })
         .then(() => {
           setSaveMsg('Saved');
           setTimeout(() => setSaveMsg(''), 1500);

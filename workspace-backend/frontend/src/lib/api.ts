@@ -569,3 +569,226 @@ export async function getServerLog(base: string, lines?: number): Promise<unknow
   const qs = lines !== undefined ? `?lines=${lines}` : '';
   return jsonGet(`${base}/api/v1/settings/log${qs}`);
 }
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+
+export async function getCanvas(
+  base: string,
+  cwd: string,
+  sessionId: string,
+): Promise<unknown> {
+  return jsonGet(`${base}/api/v1/canvas?cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}`);
+}
+
+export async function saveCanvas(
+  base: string,
+  cwd: string,
+  sessionId: string,
+  body: unknown,
+): Promise<unknown> {
+  return jsonPost(
+    `${base}/api/v1/canvas?cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}`,
+    body,
+  );
+}
+
+export async function getCustomWidget(
+  base: string,
+  canvasId: string,
+  sessionId: string,
+): Promise<unknown> {
+  return jsonGet(
+    `${base}/api/v1/custom-widgets/${encodeURIComponent(canvasId)}?sessionId=${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export async function setCustomWidget(
+  base: string,
+  canvasId: string,
+  sessionId: string,
+  code: string,
+): Promise<unknown> {
+  return jsonPut(
+    `${base}/api/v1/custom-widgets/${encodeURIComponent(canvasId)}?sessionId=${encodeURIComponent(sessionId)}`,
+    { code },
+  );
+}
+
+export async function deleteCustomWidget(
+  base: string,
+  canvasId: string,
+  sessionId: string,
+): Promise<unknown> {
+  return jsonDelete(
+    `${base}/api/v1/custom-widgets/${encodeURIComponent(canvasId)}?sessionId=${encodeURIComponent(sessionId)}`,
+  );
+}
+
+// ── Widgets ───────────────────────────────────────────────────────────────────
+
+export async function listWidgets(base: string): Promise<unknown> {
+  return jsonGet(`${base}/api/v1/widgets`);
+}
+
+export async function createWidget(base: string, body: unknown): Promise<unknown> {
+  return jsonPost(`${base}/api/v1/widgets`, body);
+}
+
+export async function seedWidgets(base: string, body: unknown): Promise<unknown> {
+  return jsonPost(`${base}/api/v1/widgets/seed`, body);
+}
+
+export async function deleteWidget(base: string, id: string): Promise<unknown> {
+  return jsonDelete(`${base}/api/v1/widgets/${encodeURIComponent(id)}`);
+}
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+
+export async function parseDoc(
+  base: string,
+  opts: { path?: string; force?: boolean } | FormData,
+): Promise<unknown> {
+  if (opts instanceof FormData) {
+    const r = await fetch(`${base}/api/v1/doc/parse`, { method: 'POST', body: opts });
+    if (!r.ok) throw new ApiError(r.status, `${r.status} ${r.statusText}`);
+    return r.json();
+  }
+  return jsonPost(`${base}/api/v1/doc/parse`, opts);
+}
+
+export async function setDocCursor(
+  base: string,
+  path: string,
+  selStart: number,
+  selEnd: number,
+): Promise<void> {
+  await jsonPut(`${base}/api/v1/doc/cursor`, { path, selStart, selEnd });
+}
+
+export async function saveDoc(
+  base: string,
+  path: string,
+  blocks: unknown[],
+): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/doc/save`, { path, blocks });
+}
+
+/** Returns an anchor href for direct doc download. */
+export function downloadDocUrl(base: string, path: string): string {
+  return `${base}/api/v1/doc/download?path=${encodeURIComponent(path)}`;
+}
+
+// ── Excel ─────────────────────────────────────────────────────────────────────
+
+export async function loadExcel(base: string, path: string): Promise<unknown> {
+  return jsonGet(`${base}/api/v1/excel/load?path=${encodeURIComponent(path)}`);
+}
+
+export async function patchExcel(base: string, body: unknown): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/excel/patch`, body);
+}
+
+export async function gridExcel(base: string, body: unknown): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/excel/grid`, body);
+}
+
+export async function mergeExcel(base: string, body: unknown): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/excel/merge`, body);
+}
+
+export async function renameSheetExcel(base: string, body: unknown): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/excel/renamesheet`, body);
+}
+
+export async function addSheetExcel(base: string, body: unknown): Promise<unknown> {
+  return jsonPost(`${base}/api/v1/excel/addsheet`, body);
+}
+
+// ── PPT ───────────────────────────────────────────────────────────────────────
+
+export async function loadPpt(base: string, path: string): Promise<unknown> {
+  return jsonGet(`${base}/api/v1/ppt/load?path=${encodeURIComponent(path)}`);
+}
+
+export async function savePpt(base: string, body: unknown): Promise<unknown> {
+  return jsonPut(`${base}/api/v1/ppt/save`, body);
+}
+
+export async function getPptStatus(
+  base: string,
+  path: string,
+): Promise<{ ready: boolean; hasSidecar: boolean }> {
+  return jsonGet(`${base}/api/v1/ppt/status?path=${encodeURIComponent(path)}`);
+}
+
+// ── Dev server ────────────────────────────────────────────────────────────────
+
+export async function startDevServer(
+  base: string,
+  cwd: string,
+): Promise<{ url: string; pid: number }> {
+  return jsonPost(`${base}/api/v1/dev-server/start`, { cwd });
+}
+
+export async function stopDevServer(base: string, cwd?: string): Promise<void> {
+  await jsonPost(`${base}/api/v1/dev-server/stop`, { cwd: cwd ?? '' });
+}
+
+// ── Runtime (proxy / search) ──────────────────────────────────────────────────
+
+/** POST /proxy → POST /api/v1/runtime/proxy */
+export async function runtimeProxy(
+  base: string,
+  opts: { url: string; method: string; headers?: Record<string, string>; body?: string },
+): Promise<unknown> {
+  return jsonPost(`${base}/api/v1/runtime/proxy`, opts);
+}
+
+/** GET /search → GET /api/v1/runtime/search */
+export function runtimeSearchUrl(base: string): string {
+  return `${base}/api/v1/runtime/search`;
+}
+
+// ── BoltzHub ──────────────────────────────────────────────────────────────────
+
+export async function boltzHubCheck(base: string, cwd: string): Promise<unknown> {
+  return jsonGet(`${base}/boltzhub/check?cwd=${encodeURIComponent(cwd)}`);
+}
+
+export async function boltzHubApps(base: string): Promise<unknown> {
+  return jsonGet(`${base}/boltzhub/apps`);
+}
+
+export async function boltzHubVersions(base: string, appId: string): Promise<unknown> {
+  return jsonGet(`${base}/boltzhub/versions?appId=${encodeURIComponent(appId)}`);
+}
+
+export async function boltzHubTokenUsage(base: string, period: string): Promise<unknown> {
+  return jsonGet(`${base}/boltzhub/token-usage?period=${encodeURIComponent(period)}`);
+}
+
+export async function boltzHubCreateApp(base: string, body: unknown): Promise<unknown> {
+  return jsonPost(`${base}/boltzhub/create-app`, body);
+}
+
+export async function boltzHubPublish(base: string, body: unknown): Promise<unknown> {
+  return jsonPost(`${base}/boltzhub/publish`, body);
+}
+
+/**
+ * POST /boltzhub/push or /boltzhub/sync — SSE pipelines.
+ * Returns a raw Response for the caller to stream (same as openEventsStream).
+ */
+export async function boltzHubStream(
+  base: string,
+  endpoint: 'push' | 'sync',
+  body: unknown,
+): Promise<Response> {
+  const r = await fetch(`${base}/boltzhub/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new ApiError(r.status, `${r.status} ${r.statusText}`);
+  return r;
+}

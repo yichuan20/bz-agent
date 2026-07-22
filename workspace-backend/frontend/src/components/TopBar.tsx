@@ -16,8 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BoltzAgentLogo } from '#/components/BoltzAgentLogo';
 import { applyTheme, getCurrentMode } from '#/design-tokens';
 
-import { HTTP_BASE as AGENT_HTTP } from '#/lib/api';
-// AGENT_HTTP imported from '#/lib/api'
+import { HTTP_BASE, getApiKeyStatus } from '#/lib/api';
 
 type KeyVerifyStatus =
   | 'checking'
@@ -29,74 +28,35 @@ type KeyVerifyStatus =
 
 function useKeyStatus() {
   const [keyStatus, setKeyStatus] = useState<KeyVerifyStatus>('checking');
-  const [last4, setLast4] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  // Lightweight poll: only checks whether the key is stored locally.
-  // Called every 60s — cheap, no external API call.
-  const checkStatus = useCallback(async () => {
-    try {
-      const r = await fetch(`${AGENT_HTTP}/api/v1/auth/api-key`);
-      const d = (await r.json()) as { present: boolean; last4: string | null };
-      if (!d.present) {
-        setKeyStatus('missing');
-        setLast4(null);
-      } else {
-        setLast4(d.last4);
-      }
-    } catch {
-      setKeyStatus('unreachable');
-    }
-  }, []);
-
-  // Full check: status + verify against Boltzbit API.
-  // Called once on mount and on explicit refresh (e.g. after saving a new key).
+  // Poll the new /api/v1/auth/api-key endpoint (present only — no last4 or verify in new backend).
   const check = useCallback(async () => {
     try {
-      const r = await fetch(`${AGENT_HTTP}/api/v1/auth/api-key`);
-      const d = (await r.json()) as { present: boolean; last4: string | null };
+      const d = await getApiKeyStatus(HTTP_BASE);
       if (!d.present) {
         setKeyStatus('missing');
-        setLast4(null);
-        return;
+      } else {
+        // /api/apikey-verify is dropped in the new backend — treat configured as unverified.
+        setKeyStatus('unverified');
+        setReason('');
       }
-      setLast4(d.last4);
     } catch {
       setKeyStatus('unreachable');
-      return;
-    }
-    try {
-      const r = await fetch(`${AGENT_HTTP}/api/apikey-verify`);
-      const d = (await r.json()) as { status: string; reason?: string; httpStatus?: number };
-      if (d.status === 'verified') {
-        setKeyStatus('verified');
-        setReason('');
-      } else if (d.status === 'invalid') {
-        setKeyStatus('invalid');
-        setReason(d.reason ?? '');
-      } else if (d.status === 'missing') {
-        setKeyStatus('missing');
-        setReason('');
-      } else {
-        setKeyStatus('unverified');
-        setReason(d.status);
-      }
-    } catch {
-      setKeyStatus('unverified');
     }
   }, []);
 
   useEffect(() => {
-    void check(); // verify once on mount
-    const id = setInterval(() => void checkStatus(), 60_000); // status-only poll every 60s
+    void check();
+    const id = setInterval(() => void check(), 60_000);
     return () => clearInterval(id);
-  }, [check, checkStatus]);
+  }, [check]);
 
-  return { keyStatus, last4, reason, refresh: check };
+  return { keyStatus, reason, refresh: check };
 }
 
 function TokenStatusDot() {
-  const { keyStatus, last4, reason } = useKeyStatus();
+  const { keyStatus, reason } = useKeyStatus();
 
   const color =
     keyStatus === 'verified'
@@ -119,12 +79,12 @@ function TokenStatusDot() {
       : keyStatus === 'missing'
         ? 'No API key — set one in Settings'
         : keyStatus === 'verified'
-          ? `API key verified · ****${last4}`
+          ? 'API key verified'
           : keyStatus === 'invalid'
-            ? `API key rejected · ****${last4}`
+            ? 'API key rejected'
             : keyStatus === 'unreachable'
-              ? `Boltzbit API unreachable · ****${last4}`
-              : `API key configured (unverified) · ****${last4}`;
+              ? 'Boltzbit API unreachable'
+              : 'API key configured';
 
   return (
     <div

@@ -54,7 +54,7 @@ const DOC_ICONS: Record<string, string> = {
   md: '🗒',
 };
 
-import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir, renameFile as apiRenameFile, duplicateFile as apiDuplicateFile, uploadFileUrl, downloadFileUrl, viewFileUrl } from '#/lib/api';
+import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir, renameFile as apiRenameFile, duplicateFile as apiDuplicateFile, uploadFileUrl, downloadFileUrl, viewFileUrl, parseDoc, setDocCursor, saveDoc, getPptStatus, startDevServer, stopDevServer } from '#/lib/api';
 // HTTP_BASE imported from '#/lib/api'
 
 // Structural colours come from CSS variables (theme-adaptive).
@@ -779,9 +779,8 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
   const startPptxPolling = useCallback((filePath: string) => {
     setProcessingPptx(prev => new Set(prev).add(filePath));
     const poll = () => {
-      fetch(`${HTTP_BASE}/api/v1/ppt/status?path=${encodeURIComponent(filePath)}`)
-        .then(r => r.json())
-        .then((d: { ready?: boolean }) => {
+      getPptStatus(HTTP_BASE, filePath)
+        .then((d) => {
           if (d.ready) {
             setProcessingPptx(prev => {
               const n = new Set(prev);
@@ -986,12 +985,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         return;
       }
       if (isDocExt(name)) {
-        const r = await fetch(`${HTTP_BASE}/api/v1/doc/parse`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: filePath }),
-        });
-        const d = (await r.json()) as {
+        const d = (await parseDoc(HTTP_BASE, { path: filePath })) as {
           content?: string;
           blocks?: Block[];
           type?: string;
@@ -1140,11 +1134,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
       // Debounce: cancel previous timer for this path
       if (cursorSaveTimers.current[path]) clearTimeout(cursorSaveTimers.current[path]);
       cursorSaveTimers.current[path] = setTimeout(() => {
-        fetch(`${HTTP_BASE}/api/v1/doc/cursor`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path, ...cursor }),
-        }).catch(() => null);
+        setDocCursor(HTTP_BASE, path, cursor.selStart, cursor.selEnd).catch(() => null);
       }, 500);
     },
     [],
@@ -1162,15 +1152,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
       return;
     }
     if (tab.docType) {
-      const body = tab.blocks
-        ? { path: tab.path, blocks: tab.blocks }
-        : { path: tab.path, content: tab.content };
-      const r = await fetch(`${HTTP_BASE}/api/v1/doc/save`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const d = (await r.json()) as { ok?: boolean; error?: string };
+      const d = (await saveDoc(HTTP_BASE, tab.path, tab.blocks ?? [])) as { ok?: boolean; error?: string };
       if (d.error) throw new Error(d.error);
     } else {
       await apiWriteFile(HTTP_BASE, tab.path, tab.content);
@@ -1291,11 +1273,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
             type="button"
             onClick={() => {
               setPreviewUrl(null);
-              fetch(`${HTTP_BASE}/api/v1/dev-server/stop`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cwd }),
-              }).catch(() => null);
+              stopDevServer(HTTP_BASE, cwd).catch(() => null);
             }}
             style={{
               display: 'flex',
@@ -1964,11 +1942,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   type="button"
                   onClick={() => {
                     setPreviewUrl(null);
-                    fetch(`${HTTP_BASE}/api/v1/dev-server/stop`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ cwd }),
-                    }).catch(() => null);
+                    stopDevServer(HTTP_BASE, cwd).catch(() => null);
                   }}
                   style={{
                     display: 'flex',
@@ -2002,18 +1976,9 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   onClick={async () => {
                     setPreviewLoading(true);
                     try {
-                      const r = await fetch(`${HTTP_BASE}/api/v1/dev-server/start`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cwd }),
-                      });
-                      const d = (await r.json()) as {
-                        url?: string;
-                        error?: string;
-                        detail?: string;
-                      };
+                      const d = await startDevServer(HTTP_BASE, cwd);
                       if (d.url) setPreviewUrl(d.url);
-                      else setError(d.error ?? d.detail ?? 'Failed to start dev server');
+                      else setError('Failed to start dev server');
                     } catch (e) {
                       setError(String(e));
                     } finally {
@@ -2302,12 +2267,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     title="Re-parse the original DOCX file, discarding the cached sidecar"
                     onClick={async () => {
                       try {
-                        const r = await fetch(`${HTTP_BASE}/api/v1/doc/parse`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ path: currentTab.path, force: true }),
-                        });
-                        const d = (await r.json()) as {
+                        const d = (await parseDoc(HTTP_BASE, { path: currentTab.path, force: true })) as {
                           blocks?: Block[];
                           type?: string;
                           pages?: number;
