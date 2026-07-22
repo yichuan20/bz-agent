@@ -108,6 +108,18 @@ class WidgetService:
 
         return await asyncio.to_thread(_seed)
 
+    async def get_widget_template(self, name: str) -> str:
+        """Return raw JS for a built-in widget template by name."""
+
+        def _get() -> str:
+            safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+            p = self._dir / f"{safe}.js"
+            if not p.exists():
+                raise FileNotFoundError(name)
+            return p.read_text(encoding="utf-8")
+
+        return await asyncio.to_thread(_get)
+
     async def delete_widget(self, widget_id: str) -> bool:
         def _delete() -> bool:
             data = self._read_index()

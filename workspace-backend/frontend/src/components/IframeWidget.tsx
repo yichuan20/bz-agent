@@ -86,7 +86,7 @@ input,textarea,select,button{font-family:inherit;font-size:inherit}
  *
  * To call external APIs with stored credentials, route requests through the proxy:
  *
- *   const res = await fetch(window.__agentHttpBase__ + '/proxy', {
+ *   const res = await fetch(window.__agentHttpBase__ + '/api/v1/runtime/proxy', {
  *     method: 'POST',
  *     headers: { 'Content-Type': 'application/json' },
  *     body: JSON.stringify({
@@ -110,7 +110,7 @@ window.__sessionId__     = '${safeSession}';
   if (!_id) { window.db = null; return; }
   window.db = {
     ensure: function(columns) {
-      return fetch(_base + '/db/widget/' + _id + '/schema' + _sq, {
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/schema' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: columns })
       }).then(function(r){ return r.json(); });
@@ -127,28 +127,28 @@ window.__sessionId__     = '${safeSession}';
           p.append('filter', k + '=' + opts.filter[k]);
         });
       }
-      return fetch(_base + '/db/widget/' + _id + '/rows?' + p + _sq2).then(function(r){ return r.json(); });
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/rows?' + p + _sq2).then(function(r){ return r.json(); });
     },
     insert: function(rowOrRows) {
       var body = Array.isArray(rowOrRows) ? { rows: rowOrRows } : { row: rowOrRows };
-      return fetch(_base + '/db/widget/' + _id + '/rows' + _sq, {
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/rows' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }).then(function(r){ return r.json(); });
     },
     update: function(id, data) {
-      return fetch(_base + '/db/widget/' + _id + '/rows/' + id + _sq, {
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/rows/' + id + _sq, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: data })
       }).then(function(r){ return r.json(); });
     },
     delete: function(id) {
-      return fetch(_base + '/db/widget/' + _id + '/rows/' + id + _sq, {
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/rows/' + id + _sq, {
         method: 'DELETE'
       }).then(function(r){ return r.json(); });
     },
     exec: function(code) {
-      return fetch(_base + '/db/widget/' + _id + '/exec' + _sq, {
+      return fetch(_base + '/api/v1/db/widget/' + _id + '/exec' + _sq, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code })
       }).then(function(r){ return r.json(); });

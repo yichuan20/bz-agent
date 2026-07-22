@@ -11,7 +11,6 @@ import sys
 import requests
 
 BASE_URL_DEFAULT = "https://flow.boltzbit.com/bz-dynas/api"
-CRED_SERVER = "http://localhost:18789"
 
 
 def get_credential(name: str, cli_value=None) -> str:
@@ -21,7 +20,8 @@ def get_credential(name: str, cli_value=None) -> str:
     if env_val:
         return env_val
     try:
-        r = requests.get(f"{CRED_SERVER}/credentials/{name}", timeout=3)
+        server = os.environ.get("BZ_AGENT_URL", "http://localhost:18789")
+        r = requests.get(f"{server}/api/v1/secrets/{name}", timeout=3)
         val = r.json().get("value", "")
         if val:
             return val
@@ -35,7 +35,7 @@ def get_credential(name: str, cli_value=None) -> str:
                 return val
     except Exception:
         pass
-    raise SystemExit(f"Credential '{name}' not found. Ask user to save it via POST /credentials.")
+    raise SystemExit(f"Credential '{name}' not found. Ask user to set it via PUT /api/v1/secrets or set the environment variable.")
 
 
 def load_data(data_str: str):
@@ -139,7 +139,7 @@ def cmd_sql(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Dynas CLI — boltzbit DB-as-a-service")
-    parser.add_argument("--api-key", default=None, help="DYNAS_API_KEY (falls back to /credentials/)")
+    parser.add_argument("--api-key", default=None, help="DYNAS_API_KEY (falls back to env var or BZ_HOME/api_keys.json)")
     parser.add_argument("--base-url", default=BASE_URL_DEFAULT)
     parser.add_argument("--app-id", default=None, help="Dynas app ID (falls back to /credentials/DYNAS_APP_ID)")
     sub = parser.add_subparsers(dest="command", required=True)

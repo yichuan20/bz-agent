@@ -13,6 +13,7 @@ so a non-filesystem impl can satisfy them.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from workspace_backend.domain.models import Agent
@@ -49,6 +50,14 @@ class AgentStore(Protocol):
         to their contents. Paths absent from ``files`` but "owned" by us are removed,
         and files not owned by us (bzcode sub-agent leftovers) are purged, so the dir
         reflects exactly the current mode. ``meta.json`` is included by the caller.
+        """
+        ...
+
+    def config_dir(self, agent_id: str) -> Path:
+        """Return the absolute path of the agent's config directory ($BZ_HOME/sessions/{id}).
+
+        Used to resolve the ``{session_dir}`` template token so skills like
+        ``new-widget`` can pass ``--session-dir`` to helper scripts.
         """
         ...
 

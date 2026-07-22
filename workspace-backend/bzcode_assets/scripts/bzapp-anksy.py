@@ -14,7 +14,6 @@ import sys
 import requests
 
 BASE_URL_DEFAULT = "https://boltzhub.com/bz-anksy"
-CRED_SERVER = "http://localhost:18789"
 
 
 def get_credential(name: str, cli_value=None) -> str:
@@ -24,7 +23,8 @@ def get_credential(name: str, cli_value=None) -> str:
     if env_val:
         return env_val
     try:
-        r = requests.get(f"{CRED_SERVER}/credentials/{name}", timeout=3)
+        server = os.environ.get("BZ_AGENT_URL", "http://localhost:18789")
+        r = requests.get(f"{server}/api/v1/secrets/{name}", timeout=3)
         val = r.json().get("value", "")
         if val:
             return val
@@ -38,7 +38,7 @@ def get_credential(name: str, cli_value=None) -> str:
                 return val
     except Exception:
         pass
-    raise SystemExit(f"Credential '{name}' not found. Ask user to save it via POST /credentials.")
+    raise SystemExit(f"Credential '{name}' not found. Ask user to set it via PUT /api/v1/secrets or set the environment variable.")
 
 
 def json_headers(api_key: str) -> dict:
@@ -158,7 +158,7 @@ def cmd_list_apps(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Anksy CLI — API semantic wrapper")
-    parser.add_argument("--api-key", default=None, help="ANKSY_API_KEY (falls back to /credentials/)")
+    parser.add_argument("--api-key", default=None, help="ANKSY_API_KEY (falls back to env var or BZ_HOME/api_keys.json)")
     parser.add_argument("--base-url", default=BASE_URL_DEFAULT)
     parser.add_argument("--app-id", default=None, help="Anksy app UUID (falls back to /credentials/ANKSY_APP_ID)")
     sub = parser.add_subparsers(dest="command", required=True)

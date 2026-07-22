@@ -29,7 +29,7 @@ list.style.cssText='flex:1;overflow-y:auto';
 async function loadDir(path) {
   list.innerHTML='<div style="padding:16px;color:'+textSecondary+';font-size:12px">Loading…</div>';
   try {
-    const res = await fetch(H+'/files?path='+encodeURIComponent(path||'.'));
+    const res = await fetch(H+'/api/v1/files?path='+encodeURIComponent(path||'.'));
     const d = await res.json();
     if(d.error) throw new Error(d.error);
     currentPath=d.path;

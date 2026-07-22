@@ -37,7 +37,7 @@ async function load(url) {
   urlInp.value=url;
   preview.innerHTML='<p style="color:'+textSecondary+'">Fetching…</p>';
   try {
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{'User-Agent':'Mozilla/5.0'}})});
     const html=await res.text();
     const parser=new DOMParser();

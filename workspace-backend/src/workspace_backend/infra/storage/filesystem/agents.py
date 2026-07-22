@@ -64,6 +64,10 @@ class FsAgentStore:
         self._paths = paths
         self._titles = titles
 
+    def config_dir(self, agent_id: str) -> Path:
+        """Return the agent's config directory ($BZ_HOME/sessions/{agent_id})."""
+        return self._paths.config_dir(agent_id)
+
     async def get(self, agent_id: str) -> Agent | None:
         if not self._paths.meta(agent_id).exists():
             return None

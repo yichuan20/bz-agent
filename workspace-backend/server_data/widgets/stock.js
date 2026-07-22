@@ -33,7 +33,7 @@ async function load() {
   grid.innerHTML='<p style="color:'+textSecondary+';font-size:12px;grid-column:1/-1;padding:16px 0;text-align:center">Loading…</p>';
   try {
     const url='https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids='+DEFAULT_TICKERS.join(',')+'&order=market_cap_desc&per_page=10&page=1&sparkline=false';
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{}})});
     const coins=await res.json();
     grid.innerHTML='';

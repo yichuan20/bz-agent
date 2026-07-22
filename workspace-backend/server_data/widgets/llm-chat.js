@@ -70,7 +70,7 @@ async function send() {
     :{model,stream:false,messages};
 
   try {
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'POST',headers,body:JSON.stringify(body)})});
     const d=await res.json();
     const reply=isAnthropic?d.content?.[0]?.text:d.choices?.[0]?.message?.content;

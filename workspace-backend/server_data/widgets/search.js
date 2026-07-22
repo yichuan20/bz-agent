@@ -51,7 +51,7 @@ async function doSearch() {
   if (!apiKey) { results.innerHTML = ''; results.appendChild(noKey); return; }
   results.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);font-size:13px">Searching…</div>';
   try {
-    const res = await fetch(HTTP_BASE + '/search?q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(apiKey));
+    const res = await fetch(HTTP_BASE + '/api/v1/runtime/search?q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(apiKey));
     const d = await res.json();
     if (!res.ok || d.error) { results.innerHTML = '<div style="padding:8px 12px;color:var(--accent-red);font-size:12px">' + (d.error||'Error') + '</div>'; return; }
     results.innerHTML = '';

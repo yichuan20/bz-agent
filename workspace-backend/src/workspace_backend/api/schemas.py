@@ -27,6 +27,8 @@ class VersionResponse(BaseModel):
 
     backend: str = Field(description="workspace-backend version.", examples=["0.1.0"])
     default_cwd: str = Field(default="", description="Server-configured default working directory (BZCODE_CWD).")
+    bzcode: str | None = Field(default=None, description="Installed bzcode version.", examples=["0.6.4"])
+    bzcode_latest: str | None = Field(default=None, description="Latest available bzcode version.", examples=["0.6.5"])
 
 
 class OkResponse(BaseModel):
@@ -128,11 +130,15 @@ class SendMessageRequest(BaseModel):
 
     Either pass a full bzcode client message (with ``type``), or just ``content`` for
     a plain user turn. A ``/model <id>`` content switches the model.
+
+    ``content`` may be a plain string (text turn) or a content-block array
+    (text + image attachments):
+      ``[{"type":"text","text":"..."}, {"type":"image","source":{"type":"base64",...}}]``
     """
 
-    content: str | None = Field(
+    content: Any = Field(
         default=None,
-        description="User message text (or a slash command).",
+        description="User message text (string) or content-block array (text + images).",
         examples=["Fix the bug", "/model boltzbit-1"],
     )
     type: str | None = Field(

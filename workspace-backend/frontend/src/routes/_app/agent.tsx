@@ -2495,7 +2495,7 @@ function CredentialManager({ agentHttp, onClose }: { agentHttp: string; onClose:
           <strong>never sent to widgets</strong> — use the proxy with <code>{'{{KEY}}'}</code>{' '}
           placeholders instead:
         </p>
-        <pre className="cred-example">{`fetch(window.__agentHttpBase__ + '/proxy', {
+        <pre className="cred-example">{`fetch(window.__agentHttpBase__ + '/api/v1/runtime/proxy', {
   method: 'POST',
   headers: {'Content-Type':'application/json'},
   body: JSON.stringify({

@@ -6,7 +6,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from workspace_backend.api.deps import get_settings_dep
 from workspace_backend.api.schemas import VersionResponse
@@ -28,8 +28,12 @@ def _backend_version() -> str:
     summary="Backend version",
     description="Return the running workspace-backend version.",
 )
-async def get_version() -> VersionResponse:
-    return VersionResponse(backend=_backend_version())
+async def get_version(request: Request) -> VersionResponse:
+    return VersionResponse(
+        backend=_backend_version(),
+        bzcode=getattr(request.app.state, "bzcode_version", None),
+        bzcode_latest=getattr(request.app.state, "bzcode_latest", None),
+    )
 
 
 @router.get(

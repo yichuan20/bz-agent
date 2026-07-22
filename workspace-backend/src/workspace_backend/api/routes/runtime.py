@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from workspace_backend.api.deps import get_context
 from workspace_backend.services.credential_service import CredentialService
 
-router = APIRouter(tags=["Widget Runtime"])
+router = APIRouter(prefix="/api/v1/runtime", tags=["Widget Runtime"])
 
 
 # ── Proxy ──────────────────────────────────────────────────────────────────────

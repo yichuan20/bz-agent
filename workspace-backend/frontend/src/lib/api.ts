@@ -544,9 +544,16 @@ export function viewFileUrl(base: string, path: string): string {
 
 /**
  * GET /settings/resources → GET /api/v1/settings/resources
+ * Maps snake_case response fields to the camelCase shape settings.tsx expects:
+ *   server_data → serverData
  */
 export async function getResources(base: string): Promise<unknown> {
-  return jsonGet(`${base}/api/v1/settings/resources`);
+  const d = (await jsonGet(`${base}/api/v1/settings/resources`)) as Record<string, unknown>;
+  return {
+    sessions: d.sessions,
+    serverData: d.server_data ?? d.serverData,
+    disk: d.disk,
+  };
 }
 
 /**
@@ -567,7 +574,13 @@ export async function clearSessions(
  */
 export async function getServerLog(base: string, lines?: number): Promise<unknown> {
   const qs = lines !== undefined ? `?lines=${lines}` : '';
-  return jsonGet(`${base}/api/v1/settings/log${qs}`);
+  const d = (await jsonGet(`${base}/api/v1/settings/log${qs}`)) as Record<string, unknown>;
+  // Map snake_case backend fields to camelCase expected by ServerLogSection
+  return {
+    bzHome: d.bz_home ?? d.bzHome,
+    logFile: d.log_file ?? d.logFile,
+    lines: d.lines,
+  };
 }
 
 // ── Canvas ────────────────────────────────────────────────────────────────────

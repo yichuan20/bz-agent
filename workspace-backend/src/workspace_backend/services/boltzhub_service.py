@@ -1,10 +1,8 @@
 """BoltzHub service — creator platform integration.
 
-Proxies calls to ``https://boltzhub.com/bz-appstore-api``, authenticated via the
-stored BZ_API_KEY.  Local app config lives in ``<cwd>/.bzhub/app_config.json``.
-
-The two SSE pipeline methods (push, sync) yield ``{step, message, …}`` dicts as an
-async generator; routes consume them with a ``StreamingResponse``.
+All helper functions and route logic copied verbatim from old server.py + app.py.
+The only changes: aiohttp → httpx (already available), and the service class wraps
+the module-level functions for FastAPI Depends injection.
 """
 
 from __future__ import annotations
@@ -12,82 +10,114 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 import zipfile
-from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-import httpx
+# ── Constants (from server.py) ────────────────────────────────────────────────
 
-_API = "https://boltzhub.com/bz-appstore-api"
-_TIMEOUT = 30.0
-
-# Files excluded when zipping a project for push
-_ZIP_EXCLUDE = {".git", "node_modules", ".bzhub", ".venv", "__pycache__", "dist"}
+BOLTZHUB_API = "https://boltzhub.com/bz-appstore-api"
+BOLTZHUB_AUTH = "https://boltzhub.com"
+_PUSH_EXCLUDE = {".git", "node_modules", ".bzhub", "__pycache__", ".venv", "venv"}
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers (copied verbatim from server.py) ──────────────────────────────────
+
+
+def _read_api_keys(bz_home: str) -> dict[str, str]:
+    try:
+        return json.loads((Path(bz_home) / "api_keys.json").read_text())
+    except Exception:
+        return {}
+
+
+def boltzhub_token(bz_home: str) -> str | None:
+    """Return an auth token. BZ_API_KEY (non-expiring) takes priority over OAuth JWT."""
+    api_keys = _read_api_keys(bz_home)
+    api_key = api_keys.get("BZ_API_KEY") or os.environ.get("BZ_API_KEY")
+    if api_key:
+        return api_key
+    try:
+        creds = json.loads((Path(bz_home) / "credentials.json").read_text())
+        tok = creds.get(BOLTZHUB_AUTH, {}).get("accessToken")
+        if tok:
+            return tok
+    except Exception:
+        pass
+    return None
 
 
 def _read_app_config(cwd: str) -> dict[str, Any] | None:
-    cfg = Path(cwd) / ".bzhub" / "app_config.json"
-    if not cfg.exists():
-        return None
     try:
-        return json.loads(cfg.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+        return json.loads((Path(cwd) / ".bzhub" / "app_config.json").read_text())
+    except Exception:
         return None
 
 
-def _write_app_config(cwd: str, data: dict[str, Any]) -> None:
-    cfg_dir = Path(cwd) / ".bzhub"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    (cfg_dir / "app_config.json").write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+def _write_app_config(cwd: str, config: dict[str, Any]) -> None:
+    bzhub = Path(cwd) / ".bzhub"
+    bzhub.mkdir(parents=True, exist_ok=True)
+    (bzhub / "app_config.json").write_text(json.dumps(config, indent=2))
 
 
-def _headers(token: str) -> dict[str, str]:
-    return {"X-API-Key": token, "Content-Type": "application/json"}
-
-
-def _zip_project(cwd: str) -> bytes:
-    buf = io.BytesIO()
-    root = Path(cwd)
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for p in root.rglob("*"):
-            if any(part in _ZIP_EXCLUDE for part in p.parts):
+def _sync_env_oauth_client_id(cwd: str, app_id: str) -> None:
+    """Ensure VITE_OAUTH_CLIENT_ID in .env matches the app ID from app_config.json."""
+    env_path = Path(cwd) / ".env"
+    if not env_path.exists():  # noqa: ASYNC240
+        return
+    lines = env_path.read_text().splitlines(keepends=True)
+    new_lines = []
+    found = False
+    for line in lines:
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, _, _ = line.partition("=")
+            if key.strip() == "VITE_OAUTH_CLIENT_ID":
+                new_lines.append(f"VITE_OAUTH_CLIENT_ID={app_id}\n")
+                found = True
                 continue
-            if p.is_file():
-                zf.write(p, p.relative_to(root))
-    return buf.getvalue()
+        new_lines.append(line)
+    if not found:
+        new_lines.append(f"VITE_OAUTH_CLIENT_ID={app_id}\n")
+    env_path.write_text("".join(new_lines))
 
 
-def _suggest_next_version(versions: list[dict[str, Any]]) -> str:
-    if not versions:
-        return "1.0.0"
-    latest = versions[0].get("versionNumber", "0.0.0")
-    parts = str(latest).split(".")
-    try:
-        parts[-1] = str(int(parts[-1]) + 1)
-    except ValueError, IndexError:
-        parts = ["1", "0", "0"]
-    return ".".join(parts)
+def _bz_headers(token: str) -> dict[str, str]:
+    if token.startswith("bz_"):
+        return {"X-API-Key": token, "Content-Type": "application/json"}
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
-def _sse_event(step: str, message: str, **extra: Any) -> str:
-    payload = {"step": step, "message": message, **extra}
-    return f"data: {json.dumps(payload)}\n\n"
+def _bz_auth(token: str) -> dict[str, str]:
+    """Auth-only headers (no Content-Type) for multipart/form-data requests."""
+    if token.startswith("bz_"):
+        return {"X-API-Key": token}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _emit(step: str, message: str, **kw: Any) -> str:
+    return f"data: {json.dumps({'step': step, 'message': message, **kw})}\n\n"
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
 
 class BoltzHubService:
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
+    """Thin wrapper around the module-level helpers for FastAPI Depends."""
 
-    # ── Local config ──────────────────────────────────────────────────────────
+    def __init__(self, bz_home: str, http: Any) -> None:
+        self._bz_home = bz_home
+        self._http = http  # httpx.AsyncClient
 
-    def check(self, cwd: str, token: str | None) -> dict[str, Any]:
+    def token(self) -> str | None:
+        return boltzhub_token(self._bz_home)
+
+    # ── check (pure filesystem — no HTTP call) ────────────────────────────────
+
+    def check(self, cwd: str, default_cwd: str) -> dict[str, Any]:
+        if not cwd:
+            cwd = default_cwd
+        token = self.token()
         cfg = _read_app_config(cwd)
         bzhub_dir = Path(cwd) / ".bzhub"
         return {
@@ -100,49 +130,34 @@ class BoltzHubService:
             "cwd": cwd,
         }
 
-    # ── Read-only API calls ───────────────────────────────────────────────────
-
-    async def list_apps(self, token: str) -> Any:
-        resp = await self._http.get(f"{_API}/v1/creator/apps", headers=_headers(token), timeout=_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-
-    async def list_versions(self, token: str, app_id: str) -> dict[str, Any]:
-        resp = await self._http.get(
-            f"{_API}/v1/creator/apps/{app_id}/versions",
-            headers=_headers(token),
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        versions = sorted(resp.json(), key=lambda v: v.get("createdAt", ""), reverse=True)
-        return {"versions": versions, "suggestedNext": _suggest_next_version(versions)}
-
-    async def token_usage(self, token: str, period: str = "30d") -> Any:
-        resp = await self._http.get(
-            f"{_API}/v1/creator/tokens/usage/history",
-            params={"period": period, "limit": "100"},
-            headers=_headers(token),
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    # ── Write API calls ───────────────────────────────────────────────────────
+    # ── create-app ────────────────────────────────────────────────────────────
 
     async def create_app(
         self,
-        token: str,
         cwd: str,
+        default_cwd: str,
         name: str,
-        description: str | None = None,
-        visibility: str = "private",
-        build_command: str | None = None,
+        description: str | None,
+        visibility: str,
+        price_monthly: float | None,
+        build_command: str | None,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"name": name, "visibility": visibility}
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in to BoltzHub")
+        cwd = cwd or default_cwd
+        api_body: dict[str, Any] = {"name": name, "visibility": visibility}
         if description:
-            body["description"] = description
-        resp = await self._http.post(f"{_API}/v1/creator/apps", json=body, headers=_headers(token), timeout=_TIMEOUT)
-        resp.raise_for_status()
+            api_body["description"] = description
+        if price_monthly:
+            api_body["priceMonthly"] = price_monthly
+        resp = await self._http.post(
+            f"{BOLTZHUB_API}/v1/creator/apps",
+            json=api_body,
+            headers=_bz_headers(token),
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"BoltzHub {resp.status_code}: {resp.text}")
         result = resp.json()
         cfg: dict[str, Any] = {
             "id": result["id"],
@@ -155,170 +170,255 @@ class BoltzHubService:
         await asyncio.to_thread(_write_app_config, cwd, cfg)
         return {"ok": True, "appConfig": cfg}
 
-    async def publish(self, token: str, app_id: str) -> Any:
-        resp = await self._http.put(
-            f"{_API}/v1/creator/apps/{app_id}/publish",
-            headers=_headers(token),
-            timeout=_TIMEOUT,
+    # ── apps ──────────────────────────────────────────────────────────────────
+
+    async def list_apps(self) -> Any:
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in")
+        resp = await self._http.get(
+            f"{BOLTZHUB_API}/v1/creator/apps",
+            headers=_bz_auth(token),
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise RuntimeError(f"BoltzHub {resp.status_code}: {resp.text}")
         return resp.json()
 
-    # ── SSE pipelines ─────────────────────────────────────────────────────────
+    # ── versions ──────────────────────────────────────────────────────────────
 
-    async def push(
-        self,
-        token: str,
-        cwd: str,
-        release_notes: str | None = None,
-        version_number: str | None = None,
-    ) -> AsyncGenerator[str]:
-        """Build → zip → upload → deploy → (publish). Yields SSE frames."""
-        cfg = await asyncio.to_thread(_read_app_config, cwd)
-        if not cfg or not cfg.get("id"):
-            yield _sse_event("error", "No app config found. Run create-app first.")
-            return
-        app_id = cfg["id"]
-        build_cmd = cfg.get("buildCommand") or "pnpm build"
-
-        # 1. Build
-        yield _sse_event("build", f"Running {build_cmd}…")
+    async def list_versions(self, app_id: str) -> dict[str, Any]:
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in")
+        resp = await self._http.get(
+            f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/versions",
+            headers=_bz_auth(token),
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"BoltzHub {resp.status_code}: {resp.text}")
+        data = resp.json()
+        items: list[dict[str, Any]] = data if isinstance(data, list) else data.get("items", [])
+        items.sort(key=lambda v: v.get("createdAt", ""), reverse=True)
+        latest = items[0]["versionNumber"] if items else "0.0.0"
+        parts = latest.split(".")
         try:
+            suggested = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
+        except Exception:
+            suggested = "1.0.0"
+        return {"versions": items, "suggestedNext": suggested}
+
+    # ── token-usage ───────────────────────────────────────────────────────────
+
+    async def token_usage(self, period: str = "30d") -> Any:
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in")
+        resp = await self._http.get(
+            f"{BOLTZHUB_API}/v1/creator/tokens/usage/history?period={period}&limit=100",
+            headers=_bz_auth(token),
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"BoltzHub {resp.status_code}: {resp.text}")
+        return resp.json()
+
+    # ── publish ───────────────────────────────────────────────────────────────
+
+    async def publish(self, app_id: str) -> Any:
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in")
+        resp = await self._http.put(
+            f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/publish",
+            headers=_bz_headers(token),
+        )
+        result = (
+            resp.json() if "application/json" in resp.headers.get("content-type", "") else {"status": resp.status_code}
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(str(result))
+        return result
+
+    # ── create-version ────────────────────────────────────────────────────────
+
+    async def create_version(self, app_id: str, release_notes: str | None, version_number: str | None) -> Any:
+        token = self.token()
+        if not token:
+            raise PermissionError("Not logged in")
+        resp = await self._http.post(
+            f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/versions",
+            json={"releaseNotes": release_notes, "versionNumber": version_number},
+            headers=_bz_headers(token),
+        )
+        result = (
+            resp.json() if "application/json" in resp.headers.get("content-type", "") else {"status": resp.status_code}
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(str(result))
+        return result
+
+    # ── push (SSE) ────────────────────────────────────────────────────────────
+
+    async def push_stream(
+        self,
+        cwd: str,
+        default_cwd: str,
+        release_notes: str | None,
+        version_number: str | None,
+    ):  # type: ignore[return]
+        """Yield SSE frames: build → archive → upload → deploy → publish → done/error."""
+        cwd = cwd or default_cwd
+        token = self.token()
+
+        try:
+            if not token:
+                yield _emit("error", "Not logged in to BoltzHub")
+                return
+            cfg = await asyncio.to_thread(_read_app_config, cwd)
+            if not cfg:
+                yield _emit("error", "No .bzhub/app_config.json found")
+                return
+            app_id = cfg["id"]
+            await asyncio.to_thread(_sync_env_oauth_client_id, cwd, app_id)
+            build_cmd = cfg.get("buildCommand") or "pnpm build"
+            yield _emit("build", f"Running: {build_cmd}")
             proc = await asyncio.create_subprocess_shell(
                 build_cmd,
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300.0)
+            _, stderr = await proc.communicate()
             if proc.returncode != 0:
-                yield _sse_event("error", f"Build failed:\n{stdout.decode(errors='replace')[-2000:]}")
+                yield _emit("error", f"Build failed: {stderr.decode()[:300]}")
                 return
-        except TimeoutError:
-            yield _sse_event("error", "Build timed out after 5 minutes.")
-            return
 
-        # 2. Archive
-        yield _sse_event("archive", "Creating project archive…")
-        try:
-            zip_bytes = await asyncio.to_thread(_zip_project, cwd)
-        except Exception as exc:
-            yield _sse_event("error", f"Archive failed: {exc}")
-            return
-
-        # 3. Upload code
-        yield _sse_event("upload", "Uploading to BoltzHub…")
-        try:
-            resp = await self._http.post(
-                f"{_API}/v1/creator/apps/{app_id}/code",
-                content=zip_bytes,
-                headers={**_headers(token), "Content-Type": "application/zip"},
-                timeout=120.0,
+            yield _emit("archive", "Archiving project…")
+            bzhub_dir = Path(cwd) / ".bzhub"
+            bzhub_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+            zip_path = bzhub_dir / "project.zip"
+            if zip_path.exists():  # noqa: ASYNC240
+                zip_path.unlink()  # noqa: ASYNC240
+            zip_cmd = f'cd "{cwd}" && zip -r "{zip_path}" . -x "node_modules/*" ".bzhub/*" ".git/*"'
+            proc2 = await asyncio.create_subprocess_shell(
+                zip_cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
-            resp.raise_for_status()
-        except Exception as exc:
-            yield _sse_event("error", f"Upload failed: {exc}")
-            return
+            _, zip_err = await proc2.communicate()
+            if proc2.returncode not in (0, 12):
+                yield _emit("error", f"Archive failed: {zip_err.decode()[:300]}")
+                return
+            zip_bytes = await asyncio.to_thread(zip_path.read_bytes)
 
-        # 4. Deploy
-        yield _sse_event("deploy", "Deploying…")
-        try:
-            resp = await self._http.put(
-                f"{_API}/v1/creator/apps/{app_id}/deploy",
-                headers=_headers(token),
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-        except Exception as exc:
-            yield _sse_event("error", f"Deploy failed: {exc}")
-            return
+            yield _emit("upload", f"Uploading {len(zip_bytes) // 1024} KB…")
+            import httpx as _httpx
 
-        # 5. Poll until deployed (up to 5 min)
-        for _ in range(60):
-            await asyncio.sleep(5)
-            try:
-                st = await self._http.get(
-                    f"{_API}/v1/creator/apps/{app_id}/status", headers=_headers(token), timeout=10.0
+            auth_headers = _bz_auth(token)
+            async with _httpx.AsyncClient(verify=False) as client:
+                # Old code uses aiohttp FormData with field "archiveFile" — replicate
+                # with httpx multipart (do NOT set Content-Type manually; httpx sets
+                # the multipart boundary automatically when `files=` is used).
+                upload_resp = await client.post(
+                    f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/code",
+                    files={"archiveFile": ("project.zip", zip_bytes, "application/zip")},
+                    headers=auth_headers,
+                    timeout=120,
                 )
-                if st.json().get("status") == "deployed":
-                    break
-            except Exception:
-                pass
+                if upload_resp.status_code not in (200, 201):
+                    yield _emit("error", f"Upload failed ({upload_resp.status_code}): {upload_resp.text}")
+                    return
 
-        # 6. Publish version
-        if release_notes or version_number:
-            yield _sse_event("publish", "Publishing version…")
-            try:
-                pub_body: dict[str, Any] = {}
+                yield _emit("deploy", "Deploying…")
+                deploy_resp = await client.put(
+                    f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/deploy",
+                    headers=auth_headers,
+                )
+                if deploy_resp.status_code not in (200, 201):
+                    yield _emit("error", f"Deploy trigger failed: {deploy_resp.text}")
+                    return
+
+                service_url = None
+                for attempt in range(60):
+                    if attempt:
+                        await asyncio.sleep(5)
+                    st_resp = await client.get(
+                        f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/status",
+                        headers=auth_headers,
+                    )
+                    if st_resp.status_code != 200:
+                        continue
+                    st = st_resp.json()
+                    service_url = st.get("serviceUrl")
+                    dep_status = st.get("status")
+                    yield _emit("deploy", st.get("stepMessage", f"Deploying… ({attempt * 5}s)"))
+                    if dep_status == "deployed":
+                        break
+                    if dep_status == "failed":
+                        yield _emit("error", "Deployment failed")
+                        return
+
+                yield _emit("publish", "Publishing version…")
                 if release_notes:
-                    pub_body["releaseNotes"] = release_notes
-                if version_number:
-                    pub_body["versionNumber"] = version_number
-                await self._http.post(
-                    f"{_API}/v1/creator/apps/{app_id}/versions",
-                    json=pub_body,
-                    headers=_headers(token),
-                    timeout=30.0,
-                )
-            except Exception:
-                pass
+                    await client.post(
+                        f"{BOLTZHUB_API}/v1/creator/apps/{app_id}/versions",
+                        json={"releaseNotes": release_notes, "versionNumber": version_number},
+                        headers=_bz_headers(token),
+                    )
 
-        yield _sse_event("done", "Deploy complete.")
-
-    async def sync(self, token: str, cwd: str, app_id: str | None = None) -> AsyncGenerator[str]:
-        """Download → extract → install. Yields SSE frames."""
-        if not app_id:
-            cfg = await asyncio.to_thread(_read_app_config, cwd)
-            app_id = cfg.get("id") if cfg else None
-        if not app_id:
-            yield _sse_event("error", "No app_id and no local app config found.")
-            return
-
-        # 1. Download zip
-        yield _sse_event("download", "Downloading app from BoltzHub…")
-        try:
-            resp = await self._http.get(
-                f"{_API}/v1/creator/apps/{app_id}/code",
-                headers=_headers(token),
-                timeout=120.0,
-            )
-            resp.raise_for_status()
-            zip_bytes = resp.content
+            yield _emit("done", "Deployed!", serviceUrl=service_url or "", appId=app_id)
         except Exception as exc:
-            yield _sse_event("error", f"Download failed: {exc}")
-            return
+            yield _emit("error", str(exc))
 
-        # 2. Extract
-        yield _sse_event("extract", "Extracting…")
+    # ── sync (SSE) ────────────────────────────────────────────────────────────
+
+    async def sync_stream(self, cwd: str, default_cwd: str, app_id: str | None):  # type: ignore[return]
+        """Yield SSE frames: download → extract → install → done/error."""
+        cwd = cwd or default_cwd
+        token = self.token()
+
         try:
-            cwd_path = Path(cwd)
-
-            def _extract() -> None:
-                cwd_path.mkdir(parents=True, exist_ok=True)
-                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-                    zf.extractall(str(cwd_path))
-
-            await asyncio.to_thread(_extract)
-        except Exception as exc:
-            yield _sse_event("error", f"Extract failed: {exc}")
-            return
-
-        # 3. Install deps
-        if (Path(cwd) / "package.json").exists():  # noqa: ASYNC240
-            yield _sse_event("install", "Installing dependencies…")
-            from .dev_server_service import _detect_pkg_manager  # local import avoids circular
-
-            pkg = _detect_pkg_manager(Path(cwd))
-            try:
-                proc = await asyncio.create_subprocess_shell(
-                    f"{pkg} install",
-                    cwd=cwd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                )
-                await asyncio.wait_for(proc.communicate(), timeout=180.0)
-            except Exception as exc:
-                yield _sse_event("error", f"Install failed: {exc}")
+            if not token:
+                yield _emit("error", "Not logged in to BoltzHub")
                 return
+            _app_id = app_id
+            if not _app_id:
+                cfg = await asyncio.to_thread(_read_app_config, cwd)
+                if not cfg:
+                    yield _emit("error", "No .bzhub/app_config.json found")
+                    return
+                _app_id = cfg["id"]
 
-        yield _sse_event("done", "Sync complete.")
+            import httpx as _httpx
+
+            async with _httpx.AsyncClient(verify=False) as client:
+                yield _emit("download", "Downloading project…")
+                dl_resp = await client.get(
+                    f"{BOLTZHUB_API}/v1/creator/apps/{_app_id}/code",
+                    headers=_bz_auth(token),
+                    timeout=120,
+                )
+                if dl_resp.status_code != 200:
+                    yield _emit("error", f"Download failed ({dl_resp.status_code})")
+                    return
+                zip_bytes = dl_resp.content
+
+            yield _emit("extract", "Extracting files…")
+            buf = io.BytesIO(zip_bytes)
+            with zipfile.ZipFile(buf) as z:
+                await asyncio.to_thread(z.extractall, cwd)
+
+            yield _emit("install", "Installing dependencies…")
+            if (Path(cwd) / "package.json").exists():  # noqa: ASYNC240
+                lock_pnpm = (Path(cwd) / "pnpm-lock.yaml").exists()  # noqa: ASYNC240
+                install_cmd = "pnpm install" if lock_pnpm else "npm install"
+                proc = await asyncio.create_subprocess_shell(
+                    install_cmd,
+                    cwd=cwd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.wait()
+
+            yield _emit("done", "Project synced successfully!")
+        except Exception as exc:
+            yield _emit("error", str(exc))

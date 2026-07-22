@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from workspace_backend.api.deps import get_doc_service
@@ -24,26 +24,38 @@ router = APIRouter(prefix="/api/v1/doc", tags=["Documents"])
     "/parse",
     summary="Parse a document",
     description=(
-        "Parse a .docx, .pdf, .md, or .html file and return its content as a block list "
-        "(docx) or plain text (pdf). Supply either a ``path`` in the JSON body or upload "
-        "a ``file`` via multipart. Results are cached in a sidecar for instant re-opens."
+        "Parse a .docx, .pdf, .md, or .html file. Accepts two formats:\n\n"
+        "- **JSON body** ``{path, force?}`` — parse a server-side file by path.\n"
+        "- **multipart/form-data** with a ``file`` field — parse an uploaded file.\n\n"
+        "Docx results are cached in a sidecar for instant re-opens."
     ),
 )
 async def parse_doc(
-    path: str | None = None,
-    force: bool = False,
-    file: UploadFile | None = File(default=None),
+    request: Request,
     svc: DocService = Depends(get_doc_service),
 ) -> Any:
-    if file is not None:
-        data = await file.read()
-        return await svc.parse_upload(data, file.filename or "upload")
-    if path:
-        try:
-            return await svc.parse(path, force=force)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail=f"File not found: {path}") from None
-    raise HTTPException(status_code=422, detail="Provide either 'path' or a file upload.")
+    content_type = request.headers.get("content-type", "")
+    if "multipart" in content_type or "form-data" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        if file is None:
+            raise HTTPException(status_code=422, detail="Multipart upload requires a 'file' field.")
+        data = await file.read()  # type: ignore[union-attr]
+        filename: str = getattr(file, "filename", None) or "upload"
+        return await svc.parse_upload(data, filename)
+    # JSON body
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Expected JSON body {path} or multipart file upload.") from None
+    path = str(body.get("path", ""))
+    force = bool(body.get("force", False))
+    if not path:
+        raise HTTPException(status_code=422, detail="'path' is required.")
+    try:
+        return await svc.parse(path, force=force)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"File not found: {path}") from None
 
 
 @router.put(
@@ -85,15 +97,16 @@ async def download_doc(
     path: str = Query(...),
     svc: DocService = Depends(get_doc_service),
 ) -> Response:
+    """Convert sidecar → DOCX and stream back as a file download. (Old: /api/doc/download)"""
     try:
         data = await svc.download(path)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Document not found or never parsed.") from None
-    filename = path.rsplit("/", 1)[-1]
-    if not filename.endswith(".docx"):
-        filename += ".docx"
+        raise HTTPException(status_code=404, detail="sidecar not found — open the file first") from None
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"could not generate DOCX: {exc}") from exc
+    p = __import__("pathlib").Path(path)
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
     )

@@ -92,6 +92,26 @@ async def set_secret(
     return OkResponse()
 
 
+@router.get(
+    "/secrets/{key}",
+    summary="Get a widget secret value",
+    description=(
+        "Return the stored value for a widget secret. Used by bzcode_assets scripts "
+        "(bzapp-anksy, bzapp-dynas, bzapp-dpyes) to retrieve third-party API keys at runtime."
+    ),
+)
+async def get_secret(
+    key: str,
+    creds: CredentialService = Depends(get_credential_service),
+) -> dict[str, str | None]:
+    value = await creds.get_secret(key)
+    if value is None:
+        from fastapi import HTTPException  # noqa: PLC0415
+
+        raise HTTPException(status_code=404, detail=f"Secret '{key}' not found.")
+    return {"key": key, "value": value}
+
+
 @router.delete(
     "/secrets/{key}",
     response_model=OkResponse,

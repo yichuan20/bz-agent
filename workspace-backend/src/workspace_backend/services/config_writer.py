@@ -61,10 +61,13 @@ class ConfigWriter:
         session_scripts = await self._store.copy_assets(agent_id, str(scripts_src), str(templates_src))
 
         widget_table = self._widget_table() if self._widget_table is not None else ""
+        # session_dir = $BZ_HOME/sessions/{agent_id} — used by create-widget.py --session-dir
+        session_dir = str(self._store.config_dir(agent_id))
         tokens = {
             "scripts_path": session_scripts,
             "server_data_path": str(self._server_data_dir),
             "widget_template_table": widget_table,
+            "session_dir": session_dir,
         }
         compiled = await self._modes.compile_config(
             agent_id, mode, working_dir=working_dir, model_name=model_name, tokens=tokens

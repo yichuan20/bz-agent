@@ -17,7 +17,7 @@ All paths are confined to the workspace root (see :class:`FileService`); escapes
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from workspace_backend.api.deps import get_file_service
@@ -145,7 +145,7 @@ async def duplicate_file(
 )
 async def upload_file(
     file: UploadFile = File(...),
-    dir: str = Query("", description="Destination directory; blank = default workspace."),
+    dir: str = Form("", description="Destination directory; blank = default workspace."),
     svc: FileService = Depends(get_file_service),
 ) -> UploadFileResponse:
     data = await file.read()

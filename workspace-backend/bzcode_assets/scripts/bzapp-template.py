@@ -21,7 +21,6 @@ import urllib.error
 
 BASE_URL = os.environ.get("BOLTZHUB_URL", "https://boltzhub.com")
 APPSTORE = f"{BASE_URL}/bz-appstore-api/v1"
-CRED_SERVER = "http://localhost:18789"
 
 
 def _get_api_key(cli_value=None):
@@ -30,14 +29,17 @@ def _get_api_key(cli_value=None):
     env_val = os.environ.get("BZ_API_KEY")
     if env_val:
         return env_val
+    # Fallback: try api_keys.json directly
     try:
-        with urllib.request.urlopen(f"{CRED_SERVER}/credentials/BZ_API_KEY", timeout=3) as r:
-            val = json.loads(r.read()).get("value", "")
+        server = os.environ.get("BZ_AGENT_URL", "http://localhost:18789")
+        with __import__("urllib.request", fromlist=["urlopen"]).urlopen(
+            f"{server}/api/v1/secrets/BZ_API_KEY", timeout=3
+        ) as _r:
+            val = __import__("json").loads(_r.read()).get("value", "")
             if val:
                 return val
     except Exception:
         pass
-    # Fallback: try api_keys.json directly
     try:
         bz_home = os.environ.get("BZ_HOME") or os.path.expanduser("~/.boltzbit")
         keys_path = os.path.join(bz_home, "api_keys.json")
@@ -48,7 +50,7 @@ def _get_api_key(cli_value=None):
     except Exception:
         pass
     print("ERROR: BZ_API_KEY not found. Save it first:", file=sys.stderr)
-    print('  POST http://localhost:18789/credentials  {"key":"BZ_API_KEY","value":"bz_..."}', file=sys.stderr)
+    print('  PUT /api/v1/secrets  {"key":"BZ_API_KEY","value":"bz_..."}  (on the running backend)', file=sys.stderr)
     sys.exit(1)
 
 

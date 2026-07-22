@@ -1,124 +1,161 @@
-"""Widget DB service — a per-widget JSON row-store.
+"""Widget DB service — per-widget JSON row-store.
 
-Each widget's data lives in ``<data_root>/widget_data/<canvas_id>.json``.  Rows are
-plain dicts with an auto-incremented integer ``id``.  An asyncio.Lock per canvas
-serialises writes so concurrent requests don't corrupt the file.
+Logic copied verbatim from old server.py (_widget_lock, _widget_path, _widget_load,
+_widget_save) and app.py (db_router widget routes).
+
+Each widget's data lives in:
+  ``<sessions_dir>/<session_id>/widget_data/<canvas_id>.json`` (session-scoped), or
+  ``<server_data_dir>/widget_data/<canvas_id>.json``           (global fallback).
+
+Rows are plain dicts with an auto-incremented integer ``id``.
+Per-canvas threading.Lock serialises writes (same as old code).
 """
 
 from __future__ import annotations
 
-import asyncio
+import datetime
 import json
+import re
+import threading
 from pathlib import Path
 from typing import Any
 
+# Copied from server.py
+_CANVAS_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{3,63}$")
+
+_widget_locks: dict[str, threading.Lock] = {}
+_widget_locks_meta = threading.Lock()
+
+
+def _widget_lock(canvas_id: str) -> threading.Lock:
+    with _widget_locks_meta:
+        if canvas_id not in _widget_locks:
+            _widget_locks[canvas_id] = threading.Lock()
+        return _widget_locks[canvas_id]
+
 
 class WidgetDbService:
-    def __init__(self, data_root: Path) -> None:
-        self._dir = data_root / "widget_data"
-        self._locks: dict[str, asyncio.Lock] = {}
+    def __init__(self, server_data_dir: Path, sessions_dir: Path | None = None) -> None:
+        self._server_data_dir = server_data_dir
+        self._sessions_dir = sessions_dir
+        self._widget_data_dir = server_data_dir / "widget_data"
 
-    def _lock(self, canvas_id: str) -> asyncio.Lock:
-        if canvas_id not in self._locks:
-            self._locks[canvas_id] = asyncio.Lock()
-        return self._locks[canvas_id]
+    def _validate(self, canvas_id: str) -> None:
+        if not _CANVAS_ID_RE.match(canvas_id):
+            raise ValueError(f"Invalid canvasId: {canvas_id!r}")
 
-    def _db_path(self, canvas_id: str) -> Path:
-        return self._dir / f"{canvas_id}.json"
+    def _widget_path(self, canvas_id: str, session_id: str = "") -> Path:
+        """Session-scoped path preferred; global fallback. Copied from server.py."""
+        if session_id and self._sessions_dir:
+            session_dir = self._sessions_dir / session_id / "widget_data"
+            p = session_dir / f"{canvas_id}.json"
+            if p.exists() or not (self._widget_data_dir / f"{canvas_id}.json").exists():  # noqa: ASYNC240
+                session_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+                return p
+        self._widget_data_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+        return self._widget_data_dir / f"{canvas_id}.json"
 
-    def _read(self, canvas_id: str) -> dict[str, Any]:
-        path = self._db_path(canvas_id)
-        if not path.exists():
-            return {"columns": [], "rows": []}
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except OSError, json.JSONDecodeError:
-            return {"columns": [], "rows": []}
+    def _load(self, canvas_id: str, session_id: str = "") -> dict[str, Any]:
+        p = self._widget_path(canvas_id, session_id)
+        if not p.exists():  # noqa: ASYNC240
+            return {"_next_id": 1, "records": []}
+        with open(p) as f:
+            return json.load(f)
 
-    def _write(self, canvas_id: str, data: dict[str, Any]) -> None:
-        path = self._db_path(canvas_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    def _save(self, canvas_id: str, data: dict[str, Any], session_id: str = "") -> None:
+        p = self._widget_path(canvas_id, session_id)
+        with open(p, "w") as f:
+            json.dump(data, f, indent=2, default=str)
 
-    # ── schema ─────────────────────────────────────────────────────────────────
+    # ── /db/widget/{id}/schema ────────────────────────────────────────────────
 
-    async def get_schema(self, canvas_id: str) -> dict[str, Any]:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            return {"columns": data.get("columns", []), "rowCount": len(data.get("rows", []))}
+    def get_schema(self, canvas_id: str, session_id: str = "") -> dict[str, Any]:
+        self._validate(canvas_id)
+        data = self._load(canvas_id, session_id)
+        return {"columns": data.get("_schema", []), "rowCount": len(data.get("records", []))}
 
-    async def set_schema(self, canvas_id: str, columns: list[str]) -> dict[str, Any]:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            data["columns"] = columns
-            await asyncio.to_thread(self._write, canvas_id, data)
-            return {"columns": data["columns"], "rowCount": len(data.get("rows", []))}
+    def ensure_schema(self, canvas_id: str, columns: list[dict[str, Any]], session_id: str = "") -> dict[str, Any]:
+        self._validate(canvas_id)
+        with _widget_lock(canvas_id):
+            data = self._load(canvas_id, session_id)
+            existing = {c["name"]: c for c in data.get("_schema", []) if "name" in c}
+            for col in columns:
+                if "name" in col and col["name"] not in existing:
+                    existing[col["name"]] = col
+            data["_schema"] = list(existing.values())
+            self._save(canvas_id, data, session_id)
+        return {"columns": data["_schema"], "rowCount": len(data.get("records", []))}
 
-    # ── rows ───────────────────────────────────────────────────────────────────
+    # ── /db/widget/{id}/rows ──────────────────────────────────────────────────
 
-    async def list_rows(
+    def query_rows(
         self,
         canvas_id: str,
         order: str = "id",
         direction: str = "asc",
-        limit: int = 100,
+        limit: int = 1000,
         offset: int = 0,
+        session_id: str = "",
     ) -> dict[str, Any]:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            rows: list[dict[str, Any]] = data.get("rows", [])
-            reverse = direction.lower() == "desc"
-            try:
-                rows = sorted(rows, key=lambda r: r.get(order, r.get("id", 0)), reverse=reverse)
-            except TypeError:
-                pass
-            total = len(rows)
-            page = rows[offset : offset + limit]
-            return {"rows": page, "total": total, "limit": limit, "offset": offset}
+        self._validate(canvas_id)
+        data = self._load(canvas_id, session_id)
+        records = data["records"]
+        desc = direction.upper() == "DESC"
+        records = sorted(records, key=lambda r: r.get(order, 0), reverse=desc)
+        page = records[offset : offset + min(limit, 10000)]
+        return {"rows": page, "total": len(records), "limit": limit, "offset": offset}
 
-    async def insert_rows(self, canvas_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            existing: list[dict[str, Any]] = data.setdefault("rows", [])
-            next_id = max((r.get("id", 0) for r in existing), default=0) + 1
+    def insert_rows(
+        self, canvas_id: str, row: dict[str, Any] | None, rows: list[dict[str, Any]] | None, session_id: str = ""
+    ) -> dict[str, Any]:
+        self._validate(canvas_id)
+        all_rows = rows or ([row] if row else [])
+        if not all_rows:
+            raise ValueError("Provide 'row' or 'rows'")
+        with _widget_lock(canvas_id):
+            data = self._load(canvas_id, session_id)
             inserted = []
-            for row in rows:
-                new_row = {**row, "id": next_id}
-                existing.append(new_row)
-                inserted.append(new_row)
-                next_id += 1
-            await asyncio.to_thread(self._write, canvas_id, data)
-            return inserted
+            for r in all_rows:
+                r = {k: v for k, v in r.items() if k not in ("id", "created_at")}
+                r["id"] = data["_next_id"]
+                r["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+                data["_next_id"] += 1
+                data["records"].append(r)
+                inserted.append(r)
+            self._save(canvas_id, data, session_id)
+        return {"inserted": inserted}
 
-    async def update_row(self, canvas_id: str, row_id: int, updates: dict[str, Any]) -> dict[str, Any] | None:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            rows: list[dict[str, Any]] = data.get("rows", [])
-            for i, row in enumerate(rows):
-                if row.get("id") == row_id:
-                    rows[i] = {**row, **updates, "id": row_id}
-                    data["rows"] = rows
-                    await asyncio.to_thread(self._write, canvas_id, data)
-                    return rows[i]
-            return None
+    def update_row(self, canvas_id: str, row_id: int, patch: dict[str, Any], session_id: str = "") -> dict[str, Any]:
+        self._validate(canvas_id)
+        clean = {k: v for k, v in patch.items() if k not in ("id", "created_at")}
+        if not clean:
+            raise ValueError("'data' required")
+        with _widget_lock(canvas_id):
+            data = self._load(canvas_id, session_id)
+            for r in data["records"]:
+                if r.get("id") == row_id:
+                    r.update(clean)
+                    self._save(canvas_id, data, session_id)
+                    return {"updated": r}
+        raise KeyError(f"Row {row_id} not found")
 
-    async def delete_row(self, canvas_id: str, row_id: int) -> bool:
-        async with self._lock(canvas_id):
-            data = await asyncio.to_thread(self._read, canvas_id)
-            rows: list[dict[str, Any]] = data.get("rows", [])
-            before = len(rows)
-            data["rows"] = [r for r in rows if r.get("id") != row_id]
-            if len(data["rows"]) == before:
-                return False
-            await asyncio.to_thread(self._write, canvas_id, data)
-            return True
+    def delete_row(self, canvas_id: str, row_id: int, session_id: str = "") -> dict[str, Any]:
+        self._validate(canvas_id)
+        with _widget_lock(canvas_id):
+            data = self._load(canvas_id, session_id)
+            before = len(data["records"])
+            data["records"] = [r for r in data["records"] if r.get("id") != row_id]
+            if len(data["records"]) == before:
+                raise KeyError(f"Row {row_id} not found")
+            self._save(canvas_id, data, session_id)
+        return {"deleted": row_id}
 
-    # ── exec ───────────────────────────────────────────────────────────────────
-
-    async def exec_code(self, canvas_id: str, code: str) -> Any:
-        """Run arbitrary Python with ``records`` in scope (matches old backend behaviour)."""
-        data = await asyncio.to_thread(self._read, canvas_id)
-        records = data.get("rows", [])
-        local_ns: dict[str, Any] = {"records": records}
-        exec(code, {}, local_ns)  # noqa: S102
-        return local_ns.get("result")
+    def exec_code(self, canvas_id: str, code: str, session_id: str = "") -> dict[str, Any]:
+        self._validate(canvas_id)
+        data = self._load(canvas_id, session_id)
+        ns: dict[str, Any] = {"records": data["records"], "result": None}
+        try:
+            exec(compile(code, "<widget-exec>", "exec"), ns)  # nosec
+        except Exception as exc:
+            raise RuntimeError(str(exc)) from exc
+        return {"result": ns.get("result")}

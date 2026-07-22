@@ -22,7 +22,17 @@ from workspace_backend.logging import get_logger
 log = get_logger(__name__)
 
 # Path prefixes owned by the API — never served the SPA shell.
-_RESERVED = ("api/", "healthz", "docs", "redoc", "openapi.json")
+# Includes non-/api/v1 backend routes (boltzhub, canvas, widgets, db, proxy, search).
+_RESERVED = (
+    "api/",  # covers /api/v1/* including canvas, widgets, custom-widgets, db, proxy, search
+    "healthz",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "boltzhub/",  # kept at old prefix, not under /api/v1/
+    "proxy",  # widget iframe helper, kept at old prefix
+    "search",  # widget iframe helper, kept at old prefix
+)
 
 
 def mount_spa(app: FastAPI, dist: Path) -> None:

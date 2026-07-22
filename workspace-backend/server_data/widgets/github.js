@@ -54,7 +54,7 @@ async function loadData() {
       issues:'https://api.github.com/repos/'+repo+'/issues?state=all&per_page=20',
       commits:'https://api.github.com/repos/'+repo+'/commits?per_page=20',
     };
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url:endpoints[activeTab],method:'GET',headers:{'Authorization':'Bearer {{GITHUB_TOKEN}}','Accept':'application/vnd.github.v3+json'}})});
     const items=await res.json();
     if(!Array.isArray(items)) throw new Error(items.message||JSON.stringify(items));

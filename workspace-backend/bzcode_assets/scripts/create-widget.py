@@ -4,7 +4,7 @@ create-widget.py — deploy a canvas widget onto the canvas.
 
 Canvas layout (.bzcanvas.json) and custom widget code live in the SESSION directory,
 not the working directory or bz-agent root. Built-in templates are fetched from the
-running server API (GET /widgets/template?name=<n>).
+running server API (GET /api/v1/widgets/template?name=<n>).
 
 Two modes:
 
@@ -17,7 +17,7 @@ Two modes:
       --session-dir ~/.boltzbit/sessions/{id} --cwd /path/to/project
 
 The script:
-  - For templates: fetches JS from GET /widgets/template?name=<template>
+  - For templates: fetches JS from GET /api/v1/widgets/template?name=<template>
   - For custom:    reads {session_dir}/custom_widgets/.pending.js
   - Writes JS to   {session_dir}/custom_widgets/{canvasId}.js
   - Seeds empty    {session_dir}/widget_data/{canvasId}.json
@@ -31,6 +31,7 @@ import os
 import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -40,7 +41,7 @@ SERVER_BASE = os.environ.get("BZ_AGENT_URL", "http://localhost:18789")
 
 def _fetch_template(name: str) -> str:
     """Fetch built-in template JS from the server API."""
-    url = f"{SERVER_BASE}/widgets/template?name={urllib.request.quote(name)}"
+    url = f"{SERVER_BASE}/api/v1/widgets/template?name={urllib.parse.quote(name)}"
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
             return resp.read().decode("utf-8")

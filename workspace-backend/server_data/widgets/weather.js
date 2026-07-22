@@ -29,7 +29,7 @@ async function fetchWeather() {
   content.innerHTML='<p style="color:'+textSecondary+'">Loading…</p>';
   try {
     const url='https://api.openweathermap.org/data/2.5/weather?q='+encodeURIComponent(city)+'&appid={{OPENWEATHERMAP_API_KEY}}&units=metric';
-    const res=await fetch(H+'/proxy',{method:'POST',headers:{'content-type':'application/json'},
+    const res=await fetch(H+'/api/v1/runtime/proxy',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({url,method:'GET',headers:{}})});
     const d=await res.json();
     if(d.cod&&d.cod!==200) throw new Error(d.message);
