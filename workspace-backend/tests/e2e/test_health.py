@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from workspace_backend import __version__
+
 
 async def test_healthz(client: AsyncClient) -> None:
     resp = await client.get("/healthz")
@@ -14,7 +16,7 @@ async def test_healthz(client: AsyncClient) -> None:
 async def test_version(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/version")
     assert resp.status_code == 200
-    assert resp.json()["backend"] == "0.1.0"
+    assert resp.json()["backend"] == __version__
 
 
 async def test_openapi_routes_documented(client: AsyncClient) -> None:

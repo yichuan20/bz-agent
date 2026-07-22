@@ -24,6 +24,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from workspace_backend import __version__
 from workspace_backend.api.context import build_context, close_context
 from workspace_backend.api.exception_handlers import register_exception_handlers
 from workspace_backend.api.routes import (
@@ -190,7 +191,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="BoltzAgent Workspace Backend",
-        version="0.1.0",
+        version=__version__,
         summary="Create and manage bzcode agent sessions.",
         description=_DESCRIPTION,
         lifespan=lifespan,

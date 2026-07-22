@@ -15,7 +15,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Default bzcode home when BZ_HOME is unset — matches the original server and the
-# deploy convention (DEPLOY.md).
+# deploy convention (docs/deployment.md).
 _DEFAULT_BZ_HOME = Path("/usr/local/boltzbit")
 
 

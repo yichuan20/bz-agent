@@ -5,12 +5,14 @@
 #   make dev-frontend   frontend only (vite :5010, proxies /api+/healthz → :18789)
 #   make build-frontend build the SPA into frontend/dist/
 #   make serve          build the SPA then serve it from the backend on :18789
+#   make package        build + zip a deployable bundle into dist/ (VERSION optional)
+#   make set-version     stamp one version into backend + frontend (VERSION=x.y.z)
 #   make check          backend (ruff+mypy+pytest) + frontend (biome+typecheck+test)
 
 PORT ?= 18789
 FE := frontend
 
-.PHONY: dev dev-backend dev-frontend build-frontend serve check check-backend check-frontend
+.PHONY: dev dev-backend dev-frontend build-frontend serve package set-version check check-backend check-frontend
 
 dev-backend:
 	uv run uvicorn workspace_backend.app:app --reload --port $(PORT)
@@ -29,6 +31,18 @@ build-frontend:
 # Open http://localhost:$(PORT)/ — one process, same origin, no proxy.
 serve: build-frontend
 	uv run uvicorn workspace_backend.app:app --port $(PORT)
+
+# Build the SPA, export requirements.txt from uv.lock, and zip a deployable bundle
+# into dist/bz-agent-v<ver>.zip. Version auto-detects from the frontend; override
+# with `make package VERSION=0.6.5`.
+package:
+	./scripts/package.sh $(VERSION)
+
+# Set and sync the single product version across backend (__init__.py, pyproject.toml)
+# and frontend (version.ts). Run with no VERSION to just report the current values.
+#   make set-version VERSION=0.6.5
+set-version:
+	./scripts/set-version.sh $(VERSION)
 
 check-backend:
 	uv run ruff format && uv run ruff check && uv run mypy && uv run pytest -q
