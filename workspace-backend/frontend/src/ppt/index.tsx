@@ -1254,7 +1254,7 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
     if (!filePath) return;
     setLoading(true);
     setError('');
-    fetch(`${HTTP_BASE}/api/ppt/load?path=${encodeURIComponent(filePath)}`)
+    fetch(`${HTTP_BASE}/api/v1/ppt/load?path=${encodeURIComponent(filePath)}`)
       .then(r => r.json())
       .then((d: any) => {
         if (d.error) {
@@ -1284,7 +1284,7 @@ export function PptEditor({ filePath, style, onDirty, onClean, saveRef }: PptEdi
             return rest;
           }) || [],
       }));
-      fetch(`${HTTP_BASE}/api/ppt/save`, {
+      fetch(`${HTTP_BASE}/api/v1/ppt/save`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, slides: clean }),

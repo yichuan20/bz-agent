@@ -1,13 +1,16 @@
 """File service — basic workspace file operations.
 
-Backs the ``/api/v1/files`` endpoints: list a directory, read/write/delete a file, and
-mkdir. Operates directly on the filesystem (user workspace paths), not through a
-storage port. Ports the directory-listing filters from the original ``/files`` handler
-(hide dotfiles and document sidecars) and adds path-safety checks.
+Backs the ``/api/v1/files`` endpoints: list, read/write/delete, mkdir, rename,
+duplicate, download, view, and upload. Operates directly on the filesystem (user
+workspace paths), not through a storage port. Ports the directory-listing filters
+from the original ``/files`` handler (hide dotfiles and document sidecars) and adds
+path-safety checks.
 """
 
 from __future__ import annotations
 
+import asyncio
+import mimetypes
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,3 +136,51 @@ class FileService:
         new_dir = self._resolve(parent) / clean
         new_dir.mkdir(parents=True, exist_ok=True)
         return str(new_dir)
+
+    def rename(self, path: str, new_name: str) -> str:
+        """Rename ``path`` to ``new_name`` (basename only). Returns the new path."""
+        clean = new_name.strip()
+        if not clean or "/" in clean or "\\" in clean or clean in (".", ".."):
+            raise InvalidPath(f"invalid name: {new_name!r}")
+        p = self._resolve(path)
+        dest = p.parent / clean
+        if dest.exists():
+            raise InvalidPath(f"destination already exists: {dest}")
+        p.rename(dest)
+        return str(dest)
+
+    def duplicate(self, path: str) -> str:
+        """Copy ``path`` to an auto-numbered ``<stem> copy[N]<suffix>``. Returns copy path."""
+        p = self._resolve(path)
+        if not p.exists() or not p.is_file():
+            raise InvalidPath(f"file not found: {p}")
+        stem, suffix = p.stem, p.suffix
+        dest = p.parent / f"{stem} copy{suffix}"
+        n = 2
+        while dest.exists():
+            dest = p.parent / f"{stem} copy {n}{suffix}"
+            n += 1
+        shutil.copy2(p, dest)
+        return str(dest)
+
+    async def save_upload(self, data: bytes, filename: str, dest_dir: str) -> str:
+        """Write uploaded bytes to ``dest_dir/<filename>``, auto-incrementing on collision."""
+        dir_path = self._resolve(dest_dir)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        p = Path(filename)
+        stem, suffix = p.stem, p.suffix
+        dest = dir_path / filename
+        n = 2
+        while dest.exists():
+            dest = dir_path / f"{stem} ({n}){suffix}"
+            n += 1
+        await asyncio.to_thread(dest.write_bytes, data)
+        return str(dest)
+
+    def download_path(self, path: str) -> tuple[Path, str]:
+        """Resolve ``path`` for download. Returns (resolved_path, mime_type)."""
+        p = self._resolve(path)
+        if not p.exists() or not p.is_file():
+            raise InvalidPath(f"file not found: {p}")
+        mime, _ = mimetypes.guess_type(str(p))
+        return p, mime or "application/octet-stream"

@@ -63,6 +63,9 @@ class FsSecretStore:
     async def list_keys(self) -> list[str]:
         return list(_read_json(self._paths.secrets_file).keys())
 
+    async def get_secret(self, key: str) -> str | None:
+        return _read_json(self._paths.secrets_file).get(key)
+
     async def set_secret(self, key: str, value: str) -> None:
         data = _read_json(self._paths.secrets_file)
         data[key] = value

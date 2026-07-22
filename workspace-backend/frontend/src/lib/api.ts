@@ -497,3 +497,75 @@ export async function makeDir(
 ): Promise<{ path: string }> {
   return jsonPost(`${base}/api/v1/files/mkdir`, { parent, name });
 }
+
+/**
+ * POST /api/file/rename {path, newName} → POST /api/v1/files/rename {path, new_name}
+ */
+export async function renameFile(
+  base: string,
+  path: string,
+  newName: string,
+): Promise<{ path: string }> {
+  return jsonPost(`${base}/api/v1/files/rename`, { path, new_name: newName });
+}
+
+/**
+ * POST /api/file/duplicate {path} → POST /api/v1/files/duplicate {path}
+ */
+export async function duplicateFile(base: string, path: string): Promise<{ path: string }> {
+  return jsonPost(`${base}/api/v1/files/duplicate`, { path });
+}
+
+/**
+ * POST /api/file/upload (FormData) → POST /api/v1/files/upload (FormData)
+ * Passes FormData through unchanged (path rewire only).
+ */
+export function uploadFileUrl(base: string): string {
+  return `${base}/api/v1/files/upload`;
+}
+
+/**
+ * GET /api/file/download?path= → GET /api/v1/files/download?path=
+ * Anchor href — just return the new URL string.
+ */
+export function downloadFileUrl(base: string, path: string): string {
+  return `${base}/api/v1/files/download?path=${encodeURIComponent(path)}`;
+}
+
+/**
+ * GET /api/file/view?path= → GET /api/v1/files/view?path=
+ * Iframe src — just return the new URL string.
+ */
+export function viewFileUrl(base: string, path: string): string {
+  return `${base}/api/v1/files/view?path=${encodeURIComponent(path)}`;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+/**
+ * GET /settings/resources → GET /api/v1/settings/resources
+ */
+export async function getResources(base: string): Promise<unknown> {
+  return jsonGet(`${base}/api/v1/settings/resources`);
+}
+
+/**
+ * DELETE /settings/sessions/clear → DELETE /api/v1/settings/sessions/clear
+ */
+export async function clearSessions(
+  base: string,
+  olderThanDays?: number,
+): Promise<{ deleted: number }> {
+  const qs = olderThanDays !== undefined ? `?olderThanDays=${olderThanDays}` : '';
+  const r = await fetch(`${base}/api/v1/settings/sessions/clear${qs}`, { method: 'DELETE' });
+  if (!r.ok) throw new ApiError(r.status, `${r.status} ${r.statusText}`);
+  return r.json() as Promise<{ deleted: number }>;
+}
+
+/**
+ * GET /api/server/log?lines= → GET /api/v1/settings/log?lines=
+ */
+export async function getServerLog(base: string, lines?: number): Promise<unknown> {
+  const qs = lines !== undefined ? `?lines=${lines}` : '';
+  return jsonGet(`${base}/api/v1/settings/log${qs}`);
+}

@@ -28,13 +28,21 @@ from workspace_backend.logging import get_logger
 from workspace_backend.runtime_state import RuntimeState
 from workspace_backend.services.agent_pool.pool import AgentPool
 from workspace_backend.services.agent_service import AgentService
+from workspace_backend.services.boltzhub_service import BoltzHubService
+from workspace_backend.services.canvas_service import CanvasService
 from workspace_backend.services.config_writer import ConfigWriter
 from workspace_backend.services.credential_service import CredentialService
+from workspace_backend.services.dev_server_service import DevServerService
+from workspace_backend.services.doc_service import DocService
+from workspace_backend.services.excel_service import ExcelService
 from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
+from workspace_backend.services.ppt_service import PptService
 from workspace_backend.services.user_service import UserService
 from workspace_backend.services.widget_catalog import WidgetCatalog
+from workspace_backend.services.widget_db_service import WidgetDbService
+from workspace_backend.services.widget_service import WidgetService
 
 log = get_logger(__name__)
 
@@ -81,6 +89,14 @@ async def build_context(settings: Settings) -> AppContext:
     model_service = ModelService(http_client, now=lambda: asyncio.get_event_loop().time())
     user_service = UserService(http_client, now=lambda: asyncio.get_event_loop().time())
     file_service = FileService(settings.bzcode_cwd)
+    boltzhub_service = BoltzHubService(http_client)
+    canvas_service = CanvasService(paths.sessions_dir, server_data)
+    widget_service = WidgetService(server_data / "widgets")
+    widget_db_service = WidgetDbService(server_data)
+    doc_service = DocService()
+    excel_service = ExcelService()
+    ppt_service = PptService()
+    dev_server_service = DevServerService()
 
     pool = _build_pool(settings, api_key_store, runtime_state)
 
@@ -95,6 +111,14 @@ async def build_context(settings: Settings) -> AppContext:
         model_service=model_service,
         user_service=user_service,
         file_service=file_service,
+        boltzhub_service=boltzhub_service,
+        canvas_service=canvas_service,
+        widget_service=widget_service,
+        widget_db_service=widget_db_service,
+        doc_service=doc_service,
+        excel_service=excel_service,
+        ppt_service=ppt_service,
+        dev_server_service=dev_server_service,
     )
 
 

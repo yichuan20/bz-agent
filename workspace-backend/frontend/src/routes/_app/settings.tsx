@@ -29,6 +29,9 @@ import {
   setApiKey as apiSetApiKey,
   deleteApiKey as apiDeleteApiKey,
   getApiKeyStatus as apiGetApiKeyStatus,
+  getResources as apiGetResources,
+  clearSessions as apiClearSessions,
+  getServerLog as apiGetServerLog,
 } from '#/lib/api';
 // HTTP_BASE imported from '#/lib/api'
 
@@ -271,9 +274,8 @@ function ResourcesSection() {
   const [clearMsg, setClearMsg] = useState('');
 
   const load = useCallback(() => {
-    fetch(`${HTTP_BASE}/settings/resources`)
-      .then(r => r.json())
-      .then((d: Resources) => setRes(d))
+    apiGetResources(HTTP_BASE)
+      .then((d) => setRes(d as Resources))
       .catch(() => null);
   }, []);
 
@@ -284,14 +286,11 @@ function ResourcesSection() {
   async function handleClear() {
     setClearing(true);
     setClearMsg('');
-    const r = await fetch(`${HTTP_BASE}/settings/sessions/clear?olderThanDays=${clearDays}`, {
-      method: 'DELETE',
-    }).catch(() => null);
-    if (r?.ok) {
-      const d = (await r.json()) as { deleted: number };
+    try {
+      const d = await apiClearSessions(HTTP_BASE, clearDays);
       setClearMsg(`Deleted ${d.deleted} session${d.deleted !== 1 ? 's' : ''}.`);
       load();
-    } else {
+    } catch {
       setClearMsg('Failed to clear sessions.');
     }
     setClearing(false);
@@ -765,9 +764,8 @@ function ServerLogSection() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${HTTP_BASE}/api/server/log?lines=200`)
-      .then(r => r.json())
-      .then((d: ServerLogInfo) => setInfo(d))
+    apiGetServerLog(HTTP_BASE, 200)
+      .then((d) => setInfo(d as ServerLogInfo))
       .catch(() => null)
       .finally(() => setLoading(false));
   }, []);

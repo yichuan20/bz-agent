@@ -328,3 +328,63 @@ class PathResponse(BaseModel):
     """A resolved path result."""
 
     path: str = Field(examples=["/home/boltzagent/workspace/reports"])
+
+
+# ── File extras ───────────────────────────────────────────────────────────────
+
+
+class RenameFileRequest(BaseModel):
+    """Rename a file to a new basename within the same directory."""
+
+    path: str = Field(description="Current file path.", examples=["workspace/old.md"])
+    new_name: str = Field(description="New filename (basename only, no slashes).", examples=["new.md"])
+
+
+class DuplicateFileRequest(BaseModel):
+    """Duplicate a file; the copy is auto-named."""
+
+    path: str = Field(description="File to duplicate.", examples=["workspace/report.docx"])
+
+
+class UploadFileResponse(BaseModel):
+    """Result of a file upload."""
+
+    ok: bool = Field(default=True)
+    path: str = Field(description="Absolute path where the file was written.")
+    name: str = Field(description="Final filename (may differ from upload if auto-incremented).")
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+
+class StorageStats(BaseModel):
+    count: int = Field(default=0)
+    bytes: int = Field(default=0)
+
+
+class DiskStats(BaseModel):
+    total: int
+    used: int
+    free: int
+
+
+class ResourcesResponse(BaseModel):
+    """Disk and session storage usage."""
+
+    sessions: StorageStats
+    server_data: StorageStats
+    disk: DiskStats
+
+
+class ClearSessionsResponse(BaseModel):
+    """Number of session directories deleted."""
+
+    deleted: int
+
+
+class ServerLogResponse(BaseModel):
+    """Tail of the server log."""
+
+    bz_home: str
+    log_file: str
+    lines: list[str]

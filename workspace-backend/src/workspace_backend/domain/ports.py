@@ -130,6 +130,10 @@ class SecretStore(Protocol):
         """Return the names of stored secrets (never the values)."""
         ...
 
+    async def get_secret(self, key: str) -> str | None:
+        """Return the value of a stored secret, or ``None`` if not present."""
+        ...
+
     async def set_secret(self, key: str, value: str) -> None:
         """Store or update a secret."""
         ...

@@ -56,6 +56,9 @@ class CredentialService:
     async def list_secret_keys(self) -> list[str]:
         return await self._secrets.list_keys()
 
+    async def get_secret(self, key: str) -> str | None:
+        return await self._secrets.get_secret(key)
+
     async def set_secret(self, key: str, value: str) -> None:
         await self._secrets.set_secret(key, value)
 

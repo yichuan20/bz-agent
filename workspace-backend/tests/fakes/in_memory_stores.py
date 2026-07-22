@@ -101,6 +101,9 @@ class InMemorySecretStore:
     async def list_keys(self) -> list[str]:
         return list(self.secrets.keys())
 
+    async def get_secret(self, key: str) -> str | None:
+        return self.secrets.get(key)
+
     async def set_secret(self, key: str, value: str) -> None:
         self.secrets[key] = value
 

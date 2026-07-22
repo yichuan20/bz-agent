@@ -99,7 +99,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
     if (!filePath) return;
     setLoading(true);
     setError('');
-    fetch(`${HTTP_BASE}/api/excel/load?path=${encodeURIComponent(filePath)}`)
+    fetch(`${HTTP_BASE}/api/v1/excel/load?path=${encodeURIComponent(filePath)}`)
       .then(r => r.json())
       .then((d: ExcelApiData) => {
         if (d.error) {
@@ -170,7 +170,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         sidecarCells[ref] = sc;
       }
 
-      fetch(`${HTTP_BASE}/api/excel/patch`, {
+      fetch(`${HTTP_BASE}/api/v1/excel/patch`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, sheet: selectedSheet, cells: sidecarCells }),
@@ -199,7 +199,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
             }
           : prev,
       );
-      fetch(`${HTTP_BASE}/api/excel/grid`, {
+      fetch(`${HTTP_BASE}/api/v1/excel/grid`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +237,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
             }
           : prev,
       );
-      fetch(`${HTTP_BASE}/api/excel/merge`, {
+      fetch(`${HTTP_BASE}/api/v1/excel/merge`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, sheet: selectedSheet, mergedCells: newMerges }),
@@ -264,7 +264,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
           : prev,
       );
       if (selectedSheet === oldName) setSelectedSheet(newName);
-      fetch(`${HTTP_BASE}/api/excel/renamesheet`, {
+      fetch(`${HTTP_BASE}/api/v1/excel/renamesheet`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, oldName, newName }),
@@ -300,7 +300,7 @@ export function ExcelEditor({ filePath, style }: ExcelEditorProps) {
         : prev,
     );
     setSelectedSheet(newName);
-    fetch(`${HTTP_BASE}/api/excel/addsheet`, {
+    fetch(`${HTTP_BASE}/api/v1/excel/addsheet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: filePath, sheetName: newName }),

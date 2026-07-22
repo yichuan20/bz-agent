@@ -54,7 +54,7 @@ const DOC_ICONS: Record<string, string> = {
   md: '🗒',
 };
 
-import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir } from '#/lib/api';
+import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir, renameFile as apiRenameFile, duplicateFile as apiDuplicateFile, uploadFileUrl, downloadFileUrl, viewFileUrl } from '#/lib/api';
 // HTTP_BASE imported from '#/lib/api'
 
 // Structural colours come from CSS variables (theme-adaptive).
@@ -779,7 +779,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
   const startPptxPolling = useCallback((filePath: string) => {
     setProcessingPptx(prev => new Set(prev).add(filePath));
     const poll = () => {
-      fetch(`${HTTP_BASE}/api/ppt/status?path=${encodeURIComponent(filePath)}`)
+      fetch(`${HTTP_BASE}/api/v1/ppt/status?path=${encodeURIComponent(filePath)}`)
         .then(r => r.json())
         .then((d: { ready?: boolean }) => {
           if (d.ready) {
@@ -810,7 +810,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
           const fd = new FormData();
           fd.append('file', file);
           fd.append('dir', uploadDirRef.current);
-          const r = await fetch(`${HTTP_BASE}/api/file/upload`, { method: 'POST', body: fd });
+          const r = await fetch(uploadFileUrl(HTTP_BASE), { method: 'POST', body: fd });
           const d = (await r.json()) as { ok?: boolean; path?: string; pptProcessing?: boolean };
           if (d.pptProcessing && d.path) startPptxPolling(d.path);
         }
@@ -843,11 +843,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
     async (entry: FsEntry, newName: string) => {
       setRenamingPath(null);
       if (!newName || newName === entry.name) return;
-      await fetch(`${HTTP_BASE}/api/file/rename`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: entry.path, newName }),
-      }).catch(() => null);
+      await apiRenameFile(HTTP_BASE, entry.path, newName).catch(() => null);
       setTreeVersion(v => v + 1);
       // Update any open tab for this file
       const newPath = entry.path.replace(/[^/]+$/, newName);
@@ -869,16 +865,12 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         if (entry) setRenamingPath(entry.path);
       } else if (action === 'duplicate') {
         if (!entry) return;
-        await fetch(`${HTTP_BASE}/api/file/duplicate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: entry.path }),
-        }).catch(() => null);
+        await apiDuplicateFile(HTTP_BASE, entry.path).catch(() => null);
         setTreeVersion(v => v + 1);
       } else if (action === 'download') {
         if (!entry) return;
         const a = document.createElement('a');
-        a.href = `${HTTP_BASE}/api/file/download?path=${encodeURIComponent(entry.path)}`;
+        a.href = downloadFileUrl(HTTP_BASE, entry.path);
         a.download = entry.name;
         document.body.appendChild(a);
         a.click();
@@ -994,7 +986,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
         return;
       }
       if (isDocExt(name)) {
-        const r = await fetch(`${HTTP_BASE}/api/doc/parse`, {
+        const r = await fetch(`${HTTP_BASE}/api/v1/doc/parse`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: filePath }),
@@ -1097,7 +1089,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
   }, [sessionId, openFile]);
 
   // Reload active file and refresh file tree when agent finishes a turn (increments refreshKey)
-  // Skip document files — they use /api/doc/parse and raw bytes would overwrite parsed content
+  // Skip document files — they use /api/v1/doc/parse and raw bytes would overwrite parsed content
   useEffect(() => {
     if (refreshKey === 0) return; // skip initial mount
     setTreeVersion(v => v + 1);
@@ -1148,7 +1140,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
       // Debounce: cancel previous timer for this path
       if (cursorSaveTimers.current[path]) clearTimeout(cursorSaveTimers.current[path]);
       cursorSaveTimers.current[path] = setTimeout(() => {
-        fetch(`${HTTP_BASE}/api/doc/cursor`, {
+        fetch(`${HTTP_BASE}/api/v1/doc/cursor`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path, ...cursor }),
@@ -1173,7 +1165,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
       const body = tab.blocks
         ? { path: tab.path, blocks: tab.blocks }
         : { path: tab.path, content: tab.content };
-      const r = await fetch(`${HTTP_BASE}/api/doc/save`, {
+      const r = await fetch(`${HTTP_BASE}/api/v1/doc/save`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -1299,7 +1291,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
             type="button"
             onClick={() => {
               setPreviewUrl(null);
-              fetch(`${HTTP_BASE}/api/dev-server/stop`, {
+              fetch(`${HTTP_BASE}/api/v1/dev-server/stop`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cwd }),
@@ -1972,7 +1964,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   type="button"
                   onClick={() => {
                     setPreviewUrl(null);
-                    fetch(`${HTTP_BASE}/api/dev-server/stop`, {
+                    fetch(`${HTTP_BASE}/api/v1/dev-server/stop`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ cwd }),
@@ -2010,7 +2002,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   onClick={async () => {
                     setPreviewLoading(true);
                     try {
-                      const r = await fetch(`${HTTP_BASE}/api/dev-server/start`, {
+                      const r = await fetch(`${HTTP_BASE}/api/v1/dev-server/start`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ cwd }),
@@ -2180,7 +2172,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
           ) : currentTab.docType === 'pdf' ? (
             <iframe
               key={currentTab.path}
-              src={`${HTTP_BASE}/api/file/view?path=${encodeURIComponent(currentTab.path)}`}
+              src={viewFileUrl(HTTP_BASE, currentTab.path)}
               style={{ flex: 1, border: 'none', minHeight: 0, background: '#fff' }}
               title={currentTab.name}
             />
@@ -2310,7 +2302,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     title="Re-parse the original DOCX file, discarding the cached sidecar"
                     onClick={async () => {
                       try {
-                        const r = await fetch(`${HTTP_BASE}/api/doc/parse`, {
+                        const r = await fetch(`${HTTP_BASE}/api/v1/doc/parse`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ path: currentTab.path, force: true }),
@@ -2358,7 +2350,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     style={{ borderColor: 'var(--accent-green)', color: 'var(--accent-green)' }}
                     onClick={() => {
                       const a = document.createElement('a');
-                      a.href = `${HTTP_BASE}/api/doc/download?path=${encodeURIComponent(currentTab.path)}`;
+                      a.href = `${HTTP_BASE}/api/v1/doc/download?path=${encodeURIComponent(currentTab.path)}`;
                       a.download = currentTab.name;
                       document.body.appendChild(a);
                       a.click();

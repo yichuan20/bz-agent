@@ -18,11 +18,19 @@ from workspace_backend.config import Settings
 from workspace_backend.runtime_state import RuntimeState
 from workspace_backend.services.agent_pool.pool import AgentPool
 from workspace_backend.services.agent_service import AgentService
+from workspace_backend.services.boltzhub_service import BoltzHubService
+from workspace_backend.services.canvas_service import CanvasService
 from workspace_backend.services.credential_service import CredentialService
+from workspace_backend.services.dev_server_service import DevServerService
+from workspace_backend.services.doc_service import DocService
+from workspace_backend.services.excel_service import ExcelService
 from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
+from workspace_backend.services.ppt_service import PptService
 from workspace_backend.services.user_service import UserService
+from workspace_backend.services.widget_db_service import WidgetDbService
+from workspace_backend.services.widget_service import WidgetService
 
 
 @dataclass
@@ -39,6 +47,14 @@ class AppContext:
     model_service: ModelService
     user_service: UserService
     file_service: FileService
+    boltzhub_service: BoltzHubService
+    canvas_service: CanvasService
+    widget_service: WidgetService
+    widget_db_service: WidgetDbService
+    doc_service: DocService
+    excel_service: ExcelService
+    ppt_service: PptService
+    dev_server_service: DevServerService
 
 
 def get_context(request: Request) -> AppContext:
@@ -72,6 +88,38 @@ def get_model_service(request: Request) -> ModelService:
 
 def get_user_service(request: Request) -> UserService:
     return get_context(request).user_service
+
+
+def get_boltzhub_service(request: Request) -> BoltzHubService:
+    return get_context(request).boltzhub_service
+
+
+def get_canvas_service(request: Request) -> CanvasService:
+    return get_context(request).canvas_service
+
+
+def get_widget_service(request: Request) -> WidgetService:
+    return get_context(request).widget_service
+
+
+def get_widget_db_service(request: Request) -> WidgetDbService:
+    return get_context(request).widget_db_service
+
+
+def get_doc_service(request: Request) -> DocService:
+    return get_context(request).doc_service
+
+
+def get_excel_service(request: Request) -> ExcelService:
+    return get_context(request).excel_service
+
+
+def get_ppt_service(request: Request) -> PptService:
+    return get_context(request).ppt_service
+
+
+def get_dev_server_service(request: Request) -> DevServerService:
+    return get_context(request).dev_server_service
 
 
 def get_file_service(request: Request) -> FileService:
