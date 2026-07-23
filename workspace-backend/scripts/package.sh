@@ -5,15 +5,19 @@
 # for a remote that has NO uv and NO Node — just Python + pip. The remote creates
 # a venv, `pip install -r requirements.txt`, and runs uvicorn (see DEPLOY.md).
 #
-# Usage: ./scripts/package.sh [version]     e.g.  ./scripts/package.sh 0.6.4
+# The version is the single product version stamped in the source tree; set it
+# with `./scripts/set-version.sh <version>` BEFORE packaging. This script only
+# reads it (never writes it) so the artifact always matches the committed source.
+#
+# Usage: ./scripts/package.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."   # workspace-backend/
 
-# Version: explicit arg, else the shipped product version from the frontend.
-VERSION="${1:-$(grep -m1 'FRONTEND_VERSION' frontend/src/version.ts | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?')}"
+# Version: the backend's runtime source of truth (see set-version.sh).
+VERSION="$(grep -m1 '__version__' src/workspace_backend/__init__.py | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?')"
 if [ -z "${VERSION}" ]; then
-  echo "ERROR: could not determine version — pass one explicitly: ./scripts/package.sh 0.6.4" >&2
+  echo "ERROR: could not determine version from src/workspace_backend/__init__.py — run ./scripts/set-version.sh <version> first" >&2
   exit 1
 fi
 ZIPFILE="dist/bz-agent-v${VERSION}.zip"
