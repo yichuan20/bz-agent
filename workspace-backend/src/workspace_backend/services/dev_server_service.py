@@ -1,9 +1,9 @@
 """Dev server service — spawn and stop per-cwd preview dev servers.
 
-Logic copied verbatim from old server.py (_dev_servers, _find_free_port) and
-app.py (dev_server_start / dev_server_stop handlers). The only difference is
-that the Request object (for the Host header) is passed in explicitly instead
-of coming from the route closure.
+Spawns ``pnpm/yarn/npm run dev`` on a free port and returns that port. The
+browser-facing preview URL is built by the frontend from ``window.location`` +
+the port, since behind the workspace reverse proxy the backend cannot see the
+public hostname (the ``Host`` header is rewritten to the internal target).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 
 # ── Module-level state (from server.py) ───────────────────────────────────────
 
-_dev_servers: dict[str, dict[str, Any]] = {}  # cwd → {proc, url}
+_dev_servers: dict[str, dict[str, Any]] = {}  # cwd → {proc, port}
 
 
 # ── Helpers (copied verbatim from server.py) ──────────────────────────────────
@@ -42,30 +42,16 @@ async def _pipe_output(proc: asyncio.subprocess.Process, label: str) -> None:
         pass
 
 
-def _build_preview_url(port: int, host_header: str, subdomain_suffix: str) -> str:
-    """Build the browser-facing URL for a dev server on ``port``.
-
-    Behind flowinfra (Host is a workspace subdomain), return the public
-    ``{wsid}-{port}.{suffix}`` URL that the reverse proxy routes to ``localhost:{port}``
-    inside the container. Otherwise (local dev) the browser shares the machine, so a plain
-    localhost URL works.
-    """
-    if subdomain_suffix and host_header.endswith(subdomain_suffix):
-        workspace_id = host_header.split(".")[0]
-        return f"https://{workspace_id}-{port}.{subdomain_suffix}"
-    return f"http://localhost:{port}"
-
-
-# ── Service ───────────────────────────────────────────────────────────────────
-
-
 class DevServerService:
     """Wraps the old dev_server_start / dev_server_stop handler logic."""
 
-    async def start(
-        self, cwd: str, default_cwd: str, host_header: str = "", subdomain_suffix: str = ""
-    ) -> dict[str, Any]:
-        """Start a dev server in ``cwd``. Copied verbatim from old app.py dev_server_start."""
+    async def start(self, cwd: str, default_cwd: str) -> dict[str, Any]:
+        """Start a dev server in ``cwd`` and return its port.
+
+        The browser-facing URL is built by the frontend from ``window.location`` +
+        this port, because behind flowinfra's reverse proxy the backend cannot see
+        the public hostname (the ``Host`` header is rewritten to the internal target).
+        """
         cwd = cwd or default_cwd
         if not cwd or not Path(cwd).is_dir():  # noqa: ASYNC240
             raise ValueError("invalid cwd")
@@ -74,11 +60,9 @@ class DevServerService:
         if cwd in _dev_servers:
             entry = _dev_servers[cwd]
             if entry["proc"].returncode is None:
-                return {"url": entry["url"]}
+                return {"port": entry["port"]}
 
         port = await _find_free_port()
-
-        url = _build_preview_url(port, host_header, subdomain_suffix)
 
         pkg_dir = Path(cwd)
         if (pkg_dir / "pnpm-lock.yaml").exists():  # noqa: ASYNC240
@@ -119,7 +103,7 @@ class DevServerService:
             raise FileNotFoundError(f"command not found: {exc}") from exc
 
         asyncio.create_task(_pipe_output(proc, f"dev-server:{Path(cwd).name}"))
-        _dev_servers[cwd] = {"proc": proc, "url": url}
+        _dev_servers[cwd] = {"proc": proc, "port": port}
 
         # Brief wait — if the process exits immediately the command/package.json is broken
         await asyncio.sleep(2)
@@ -128,8 +112,8 @@ class DevServerService:
             _dev_servers.pop(cwd, None)
             raise RuntimeError("dev server exited immediately — check package.json")
 
-        print(f"[dev-server] started pid={proc.pid} url={url}", file=sys.stderr)
-        return {"url": url, "pid": proc.pid}
+        print(f"[dev-server] started pid={proc.pid} port={port}", file=sys.stderr)
+        return {"port": port, "pid": proc.pid}
 
     async def stop(self, cwd: str) -> None:
         """Stop the dev server for ``cwd``. Copied verbatim from old app.py dev_server_stop."""

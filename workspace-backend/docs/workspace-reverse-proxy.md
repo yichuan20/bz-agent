@@ -134,6 +134,13 @@ The container-side hop is a Starlette HTTP middleware, `preview_proxy_middleware
 rely on **manual refresh** (the frontend's `↺ Reload` button), so live hot-reload does not
 propagate to the browser. Proxying the HMR WebSocket is a possible future enhancement.
 
+**Preview URL is built by the frontend.** `POST /api/v1/dev-server/start` returns only the
+`port`. The browser-facing preview URL (`https://{wsid}-{port}.{suffix}`) is constructed
+client-side from `window.location` (`devServerPreviewUrl` in `frontend/src/lib/api.ts`),
+because behind this proxy the backend never sees the public hostname — flowinfra rewrites
+the `Host` header to the internal target address before the request arrives. This also makes
+HTTPS automatic (the protocol comes from `window.location`).
+
 ### WebSocket Proxying
 
 **Source:** `flowinfra/internal/workspace/proxy.go:185-265`

@@ -59,11 +59,6 @@ class Settings(BaseSettings):
         alias="BZ_FRONTEND_DIST",
     )
 
-    # Domain suffix for workspace subdomains (e.g. ``ws_abc-3000.<suffix>``). Used to
-    # detect whether a request Host is a workspace subdomain and to build public
-    # dev-server preview URLs. Must match flowinfra's WORKSPACE_SUBDOMAIN_SUFFIX.
-    workspace_subdomain_suffix: str = Field(default="workspaces.boltzhub.com", alias="WORKSPACE_SUBDOMAIN_SUFFIX")
-
     # Seconds an idle (no-client) agent runtime lives before the sweeper reaps it.
     agent_idle_timeout: float = Field(default=300.0, alias="AGENT_IDLE_TIMEOUT")
 

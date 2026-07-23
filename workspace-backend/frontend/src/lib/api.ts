@@ -736,11 +736,26 @@ export async function getPptStatus(
 
 // ── Dev server ────────────────────────────────────────────────────────────────
 
-export async function startDevServer(
-  base: string,
-  cwd: string,
-): Promise<{ url: string; pid: number }> {
+export async function startDevServer(base: string, cwd: string): Promise<{ port: number; pid: number }> {
   return jsonPost(`${base}/api/v1/dev-server/start`, { cwd });
+}
+
+/**
+ * Browser-facing preview URL for a dev server on ``port``.
+ *
+ * The backend can't build this: behind the workspace reverse proxy it never sees the
+ * public hostname (flowinfra rewrites the Host header). The browser does, via
+ * ``window.location`` — so we insert ``-{port}`` after the first subdomain label,
+ * matching flowinfra's ``{wsid}-{port}.{suffix}`` port-preview scheme. Locally the
+ * page is same-machine, so a plain localhost URL works.
+ */
+export function devServerPreviewUrl(port: number): string {
+  const { hostname, protocol } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `http://localhost:${port}`;
+  }
+  const [label, ...rest] = hostname.split('.');
+  return `${protocol}//${label}-${port}.${rest.join('.')}`;
 }
 
 export async function stopDevServer(base: string, cwd?: string): Promise<void> {

@@ -8,7 +8,7 @@ Logic copied verbatim from old app.py dev_server_start / dev_server_stop.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from workspace_backend.api.deps import get_dev_server_service, get_settings_dep
@@ -28,21 +28,21 @@ class DevServerBody(BaseModel):
     summary="Start dev server",
     description=(
         "Spawn a preview dev server (pnpm/yarn/npm run dev) on a free port in ``cwd``. "
-        "Idempotent — returns the existing URL if already running. "
-        "Detects the package manager from the lockfile. "
-        "On BoltzHub-hosted workspaces, returns a public ``*.workspaces.boltzhub.com`` URL."
+        "Idempotent — returns the existing port if already running. "
+        "Detects the package manager from the lockfile. Returns the ``port`` the dev "
+        "server is listening on; the frontend builds the browser-facing preview URL "
+        "from ``window.location`` + this port (the backend cannot see the public "
+        "hostname behind the reverse proxy)."
     ),
 )
 async def start(
     body: DevServerBody,
-    request: Request,
     svc: DevServerService = Depends(get_dev_server_service),
     settings: Settings = Depends(get_settings_dep),
 ) -> dict[str, object]:
-    host_header = request.headers.get("host", "")
     default_cwd = str(settings.bzcode_cwd)
     try:
-        return await svc.start(body.cwd, default_cwd, host_header, settings.workspace_subdomain_suffix)
+        return await svc.start(body.cwd, default_cwd)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
