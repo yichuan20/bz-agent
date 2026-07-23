@@ -22,7 +22,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from workspace_backend import __version__
@@ -204,15 +203,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Reverse-proxy dev-server preview requests (X-Target-Port) to localhost:{port} inside
     # the container, before any routing. No-op pass-through when the header is absent.
     app.add_middleware(BaseHTTPMiddleware, dispatch=preview_proxy_middleware)
-
-    # CORS: permissive for now (local-first / behind the workspace gateway). Tighten
-    # when the deployment model requires it.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     register_exception_handlers(app)
 
