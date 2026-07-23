@@ -3,6 +3,8 @@
 GET    /api/v1/settings/resources               disk + session storage stats
 DELETE /api/v1/settings/sessions/clear          prune old session directories
 GET    /api/v1/settings/log?lines=              tail the server log
+GET    /api/v1/settings/tool-paths              configured toolchain paths
+PUT    /api/v1/settings/tool-paths              set toolchain paths
 """
 
 from __future__ import annotations
@@ -14,15 +16,19 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 
-from workspace_backend.api.deps import get_settings_dep
+from workspace_backend.api.deps import get_settings_dep, get_tool_config_service
 from workspace_backend.api.schemas import (
     ClearSessionsResponse,
     DiskStats,
+    OkResponse,
     ResourcesResponse,
     ServerLogResponse,
+    SetToolPathsRequest,
     StorageStats,
+    ToolPathsResponse,
 )
 from workspace_backend.config import Settings
+from workspace_backend.services.tool_config_service import KNOWN_TOOLS, ToolConfigService
 
 router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
 
@@ -140,3 +146,38 @@ async def get_log(
         log_file=str(log_file),
         lines=log_lines,
     )
+
+
+@router.get(
+    "/tool-paths",
+    response_model=ToolPathsResponse,
+    summary="Toolchain paths",
+    description=(
+        "Configured absolute paths to the npm/pnpm/node executables, plus a "
+        "per-tool `valid` flag (path is set and points at an existing file). Used by "
+        "the dev server to locate the package manager and node."
+    ),
+)
+async def get_tool_paths(
+    svc: ToolConfigService = Depends(get_tool_config_service),
+) -> ToolPathsResponse:
+    paths = await svc.get_paths()
+    valid = {tool: (await svc.resolve(tool)) is not None for tool in KNOWN_TOOLS}
+    return ToolPathsResponse(paths=paths, valid=valid)
+
+
+@router.put(
+    "/tool-paths",
+    response_model=OkResponse,
+    summary="Set toolchain paths",
+    description=(
+        "Store absolute paths for the npm/pnpm/node executables. Unknown keys are "
+        "ignored and blank values clear the corresponding tool."
+    ),
+)
+async def set_tool_paths(
+    body: SetToolPathsRequest,
+    svc: ToolConfigService = Depends(get_tool_config_service),
+) -> OkResponse:
+    await svc.set_paths(body.paths)
+    return OkResponse()

@@ -28,6 +28,7 @@ from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
 from workspace_backend.services.ppt_service import PptService
+from workspace_backend.services.tool_config_service import ToolConfigService
 from workspace_backend.services.user_service import UserService
 from workspace_backend.services.widget_db_service import WidgetDbService
 from workspace_backend.services.widget_service import WidgetService
@@ -55,6 +56,7 @@ class AppContext:
     excel_service: ExcelService
     ppt_service: PptService
     dev_server_service: DevServerService
+    tool_config_service: ToolConfigService
 
 
 def get_context(request: Request) -> AppContext:
@@ -124,3 +126,7 @@ def get_dev_server_service(request: Request) -> DevServerService:
 
 def get_file_service(request: Request) -> FileService:
     return get_context(request).file_service
+
+
+def get_tool_config_service(request: Request) -> ToolConfigService:
+    return get_context(request).tool_config_service

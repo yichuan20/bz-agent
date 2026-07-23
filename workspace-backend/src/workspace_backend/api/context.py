@@ -24,6 +24,7 @@ from workspace_backend.infra.storage.filesystem.agents import (
 from workspace_backend.infra.storage.filesystem.credentials import FsApiKeyStore, FsSecretStore
 from workspace_backend.infra.storage.filesystem.modes import FsModeConfigStore
 from workspace_backend.infra.storage.filesystem.paths import Paths
+from workspace_backend.infra.storage.filesystem.tool_paths import FsToolPathsStore
 from workspace_backend.logging import get_logger
 from workspace_backend.runtime_state import RuntimeState
 from workspace_backend.services.agent_pool.pool import AgentPool
@@ -39,6 +40,7 @@ from workspace_backend.services.file_service import FileService
 from workspace_backend.services.mode_service import ModeService
 from workspace_backend.services.model_service import ModelService
 from workspace_backend.services.ppt_service import PptService
+from workspace_backend.services.tool_config_service import ToolConfigService
 from workspace_backend.services.user_service import UserService
 from workspace_backend.services.widget_catalog import WidgetCatalog
 from workspace_backend.services.widget_db_service import WidgetDbService
@@ -63,6 +65,7 @@ async def build_context(settings: Settings) -> AppContext:
     defaults_store = FsDefaultsStore(paths)
     api_key_store = FsApiKeyStore(paths)
     secret_store = FsSecretStore(paths)
+    tool_paths_store = FsToolPathsStore(paths)
     mode_config_store = FsModeConfigStore(modes_file)
 
     runtime_state = RuntimeState()
@@ -96,7 +99,8 @@ async def build_context(settings: Settings) -> AppContext:
     doc_service = DocService()
     excel_service = ExcelService(scripts_dir=assets_root / "scripts")
     ppt_service = PptService()
-    dev_server_service = DevServerService()
+    tool_config_service = ToolConfigService(tool_paths_store)
+    dev_server_service = DevServerService(tool_path_resolver=tool_config_service.resolve)
 
     pool = _build_pool(settings, api_key_store, runtime_state)
 
@@ -119,6 +123,7 @@ async def build_context(settings: Settings) -> AppContext:
         excel_service=excel_service,
         ppt_service=ppt_service,
         dev_server_service=dev_server_service,
+        tool_config_service=tool_config_service,
     )
 
 

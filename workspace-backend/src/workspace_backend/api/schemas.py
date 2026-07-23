@@ -394,3 +394,20 @@ class ServerLogResponse(BaseModel):
     bz_home: str
     log_file: str
     lines: list[str]
+
+
+class ToolPathsResponse(BaseModel):
+    """Configured toolchain paths plus per-tool validity.
+
+    ``valid[tool]`` is ``True`` when the configured path is set and points at an
+    existing file, so the UI can render a connected/not-configured status.
+    """
+
+    paths: dict[str, str]
+    valid: dict[str, bool]
+
+
+class SetToolPathsRequest(BaseModel):
+    """Absolute paths for toolchain executables, keyed by tool name."""
+
+    paths: dict[str, str]

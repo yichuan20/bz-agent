@@ -41,6 +41,11 @@ class Paths:
         return self.bz_home / "api_keys.json"
 
     @property
+    def tool_paths_file(self) -> Path:
+        """Configured absolute paths to toolchain executables (npm/pnpm/node)."""
+        return self.bz_home / "tool_paths.json"
+
+    @property
     def titles_file(self) -> Path:
         """User-assigned session titles, keyed by agent id."""
         return self.bz_home / "session_titles.json"
