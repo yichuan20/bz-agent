@@ -42,7 +42,7 @@ async def start(
     host_header = request.headers.get("host", "")
     default_cwd = str(settings.bzcode_cwd)
     try:
-        return await svc.start(body.cwd, default_cwd, host_header)
+        return await svc.start(body.cwd, default_cwd, host_header, settings.workspace_subdomain_suffix)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

@@ -31,6 +31,14 @@ def test_reads_env(monkeypatch, tmp_path: Path) -> None:
     assert s.agent_idle_timeout == 42.0
 
 
+def test_subdomain_suffix(monkeypatch) -> None:
+    """workspace_subdomain_suffix defaults and reads WORKSPACE_SUBDOMAIN_SUFFIX."""
+    monkeypatch.delenv("WORKSPACE_SUBDOMAIN_SUFFIX", raising=False)
+    assert Settings(_env_file=None).workspace_subdomain_suffix == "workspaces.boltzhub.com"
+    monkeypatch.setenv("WORKSPACE_SUBDOMAIN_SUFFIX", "ws.example.com")
+    assert Settings(_env_file=None).workspace_subdomain_suffix == "ws.example.com"
+
+
 def test_derived_paths(tmp_path: Path) -> None:
     """sessions_dir and api_keys_file are derived from bz_home."""
     s = Settings(BZ_HOME=str(tmp_path), _env_file=None)

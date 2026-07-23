@@ -42,13 +42,29 @@ async def _pipe_output(proc: asyncio.subprocess.Process, label: str) -> None:
         pass
 
 
+def _build_preview_url(port: int, host_header: str, subdomain_suffix: str) -> str:
+    """Build the browser-facing URL for a dev server on ``port``.
+
+    Behind flowinfra (Host is a workspace subdomain), return the public
+    ``{wsid}-{port}.{suffix}`` URL that the reverse proxy routes to ``localhost:{port}``
+    inside the container. Otherwise (local dev) the browser shares the machine, so a plain
+    localhost URL works.
+    """
+    if subdomain_suffix and host_header.endswith(subdomain_suffix):
+        workspace_id = host_header.split(".")[0]
+        return f"https://{workspace_id}-{port}.{subdomain_suffix}"
+    return f"http://localhost:{port}"
+
+
 # ── Service ───────────────────────────────────────────────────────────────────
 
 
 class DevServerService:
     """Wraps the old dev_server_start / dev_server_stop handler logic."""
 
-    async def start(self, cwd: str, default_cwd: str, host_header: str = "") -> dict[str, Any]:
+    async def start(
+        self, cwd: str, default_cwd: str, host_header: str = "", subdomain_suffix: str = ""
+    ) -> dict[str, Any]:
         """Start a dev server in ``cwd``. Copied verbatim from old app.py dev_server_start."""
         cwd = cwd or default_cwd
         if not cwd or not Path(cwd).is_dir():  # noqa: ASYNC240
@@ -62,12 +78,7 @@ class DevServerService:
 
         port = await _find_free_port()
 
-        # Workspace-hosted URL vs local URL (same logic as old code)
-        if ".workspaces.boltzhub.com" in host_header:
-            workspace_id = host_header.split(".")[0]
-            url = f"https://{workspace_id}-{port}.workspaces.boltzhub.com"
-        else:
-            url = f"http://localhost:{port}"
+        url = _build_preview_url(port, host_header, subdomain_suffix)
 
         pkg_dir = Path(cwd)
         if (pkg_dir / "pnpm-lock.yaml").exists():  # noqa: ASYNC240
