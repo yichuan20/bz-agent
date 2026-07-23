@@ -1,0 +1,32 @@
+[data-theme="nexus-hc"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eeeeee;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #1e00bb;
+  --color-accent-2: #005533;
+  --color-accent-3: #bb0000;
+  --color-accent-4: #885500;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #1e00bb;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.15s ease;
+  --font-display: "Syne", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 20px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+}

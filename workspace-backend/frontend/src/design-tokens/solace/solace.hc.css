@@ -1,0 +1,32 @@
+[data-theme="solace-hc"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f0f0f0;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #006b5e;
+  --color-accent-2: #994400;
+  --color-accent-3: #aa0000;
+  --color-accent-4: #335c3c;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #006b5e;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+  --motion-transition: all 0.2s ease;
+  --font-display: "Fraunces", serif;
+  --font-body: "Epilogue", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 16px;
+  --font-size-lg: 19px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 42px;
+  --card-padding: 24px;
+  --hero-padding: 48px;
+  --section-gap: 40px;
+}

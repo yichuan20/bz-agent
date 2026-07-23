@@ -1,0 +1,32 @@
+[data-theme="flow-hc"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eeeeee;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #3300cc;
+  --color-accent-2: #006644;
+  --color-accent-3: #cc0000;
+  --color-accent-4: #885500;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #3300cc;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --motion-transition: all 0.15s ease;
+  --font-display: "Syne", sans-serif;
+  --font-body: "Epilogue", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 16px;
+  --font-size-lg: 19px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 44px;
+  --card-padding: 24px;
+  --hero-padding: 48px;
+  --section-gap: 40px;
+}

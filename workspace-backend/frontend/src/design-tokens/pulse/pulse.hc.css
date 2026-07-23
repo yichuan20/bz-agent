@@ -1,0 +1,32 @@
+[data-theme="pulse-hc"] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #000000;
+  --color-bg-tertiary: #0a0a14;
+  --color-bg-elevated: #0a0a14;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffffff;
+  --color-text-tertiary: #aaaacc;
+  --color-border-primary: #ffffff;
+  --color-border-secondary: #ffffff;
+  --color-accent-1: #aa55ff;
+  --color-accent-2: #00ffaa;
+  --color-accent-3: #ff6600;
+  --color-accent-4: #ffdd00;
+  --shadow-card: 0 0 0 2px #ffffff;
+  --shadow-hover: 0 0 0 2px #aa55ff, 0 0 20px rgba(170, 85, 255, 0.4);
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --motion-transition: all 0.05s linear;
+  --font-display: "Syne", sans-serif;
+  --font-body: "IBM Plex Mono", monospace;
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 14px;
+  --font-size-lg: 17px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 38px;
+  --card-padding: 12px;
+  --hero-padding: 24px;
+  --section-gap: 20px;
+}

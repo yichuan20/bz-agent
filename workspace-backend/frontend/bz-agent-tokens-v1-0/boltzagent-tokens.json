@@ -1,0 +1,440 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$meta": {
+    "name": "BoltzAgent Design Tokens",
+    "version": "1.1",
+    "generated": "2026-03-11",
+    "prefix": "--ba-"
+  },
+  "color": {
+    "$type": "color",
+    "gray": {
+      "0": { "$value": "#ffffff" },
+      "50": { "$value": "#fafafa" },
+      "100": { "$value": "#f0f0f0" },
+      "150": { "$value": "#e8e8e8" },
+      "200": { "$value": "#e0e0e0" },
+      "300": { "$value": "#cccccc" },
+      "400": { "$value": "#999999" },
+      "500": { "$value": "#666666" },
+      "600": { "$value": "#444444" },
+      "700": { "$value": "#333333" },
+      "750": { "$value": "#2a2a2a" },
+      "800": { "$value": "#222222" },
+      "850": { "$value": "#1e1e1e" },
+      "875": { "$value": "#1a1a1a" },
+      "900": { "$value": "#111111" },
+      "950": { "$value": "#0a0a0a" }
+    },
+    "sand": {
+      "$description": "Boltzbit brand warm neutrals — drives both themes (light surfaces, warm-shifted dark surfaces, text).",
+      "25": { "$value": "#faf8f3" },
+      "50": { "$value": "#f7f4ef" },
+      "75": { "$value": "#f4efe6" },
+      "100": { "$value": "#f1ece4" },
+      "150": { "$value": "#eee9e1", "$description": "Soft White · brand" },
+      "200": { "$value": "#e7e0d5" },
+      "300": { "$value": "#ded4c6" },
+      "400": { "$value": "#cec4b6", "$description": "Sand · brand" },
+      "500": { "$value": "#c4b9a9" },
+      "600": { "$value": "#a69e90" },
+      "650": { "$value": "#8a857d" },
+      "700": { "$value": "#5e5a55", "$description": "Stone · brand" },
+      "800": { "$value": "#47443f" },
+      "850": { "$value": "#333333", "$description": "Ink · brand" },
+      "900": { "$value": "#272320" },
+      "925": { "$value": "#221e1a" },
+      "950": { "$value": "#1e1b18" },
+      "975": { "$value": "#14120f" },
+      "1000": { "$value": "#0c0b0a" }
+    },
+    "blue": {
+      "50": { "$value": "#dbeafe" },
+      "100": { "$value": "#bfdbfe" },
+      "200": { "$value": "#93c5fd" },
+      "300": { "$value": "#60a5fa" },
+      "400": { "$value": "#3b82f6" },
+      "500": { "$value": "#2563eb" },
+      "600": { "$value": "#1d4ed8" },
+      "650": { "$value": "#1668c7", "$description": "Boltzbit Blue hover" },
+      "700": { "$value": "#1473df", "$description": "Boltzbit Blue — primary accent" },
+      "800": { "$value": "#1e40af" },
+      "900": { "$value": "#1e3a8a" },
+      "alpha-12": { "$value": "rgba(20,115,223,0.12)" },
+      "alpha-10": { "$value": "rgba(20,115,223,0.10)" }
+    },
+    "green": {
+      "50": { "$value": "#f0fdf4" },
+      "100": { "$value": "#dcfce7" },
+      "200": { "$value": "#bbf7d0" },
+      "300": { "$value": "#86efac" },
+      "400": { "$value": "#4ade80" },
+      "500": { "$value": "#22c55e", "$description": "Sheets / Data accent" },
+      "600": { "$value": "#16a34a" },
+      "700": { "$value": "#15803d" },
+      "alpha-12": { "$value": "rgba(34,197,94,0.12)" },
+      "alpha-10": { "$value": "rgba(34,197,94,0.10)" }
+    },
+    "red": {
+      "400": { "$value": "#f87171" },
+      "500": { "$value": "#ef4444" },
+      "600": { "$value": "#dc2626" },
+      "alpha-12": { "$value": "rgba(239,68,68,0.12)" }
+    },
+    "orange": {
+      "400": { "$value": "#fb923c" },
+      "500": { "$value": "#f97316", "$description": "Slides accent" },
+      "600": { "$value": "#ea580c" },
+      "alpha-12": { "$value": "rgba(249,115,22,0.12)" },
+      "alpha-10": { "$value": "rgba(249,115,22,0.10)" }
+    },
+    "purple": {
+      "400": { "$value": "#a78bfa" },
+      "500": { "$value": "#8b5cf6", "$description": "Workbit accent" },
+      "600": { "$value": "#7c3aed" },
+      "alpha-12": { "$value": "rgba(139,92,246,0.12)" }
+    },
+    "yellow": {
+      "400": { "$value": "#facc15" },
+      "500": { "$value": "#eab308" },
+      "600": { "$value": "#ca8a04" },
+      "alpha-12": { "$value": "rgba(234,179,8,0.12)" }
+    },
+    "cyan": {
+      "400": { "$value": "#22d3ee" },
+      "500": { "$value": "#06b6d4" },
+      "600": { "$value": "#0891b2" },
+      "alpha-12": { "$value": "rgba(6,182,212,0.12)" }
+    },
+    "pink": {
+      "400": { "$value": "#f472b6" },
+      "500": { "$value": "#ec4899" },
+      "600": { "$value": "#db2777" },
+      "alpha-12": { "$value": "rgba(236,72,153,0.12)" }
+    }
+  },
+  "semantic": {
+    "$description": "Theme-aware semantic tokens. Dark = warm-shifted toward Stone; light = warm sand (A+). Both draw from the sand scale.",
+    "bg": {
+      "$type": "color",
+      "primary": { "$value": "#0c0b0a", "light": "#f4efe6" },
+      "secondary": { "$value": "#14120f", "light": "#ece5da" },
+      "tertiary": { "$value": "#1e1b18", "light": "#e4dccf" },
+      "elevated": { "$value": "#272320", "light": "#faf8f3" },
+      "hover": { "$value": "#221e1a", "light": "#f1ebe1" },
+      "overlay": { "$value": "rgba(0,0,0,0.6)", "light": "rgba(51,48,45,0.35)" }
+    },
+    "text": {
+      "$type": "color",
+      "primary": { "$value": "#f7f5f1", "light": "#333333" },
+      "secondary": { "$value": "#a8a29a", "light": "#5e5a55" },
+      "tertiary": { "$value": "#6e6860", "light": "#847f77" },
+      "disabled": { "$value": "#4a453d", "light": "#ada596" },
+      "accent": { "$value": "#1473df" }
+    },
+    "border": {
+      "$type": "color",
+      "default": { "$value": "#2e2921", "light": "#ddd3c5" },
+      "subtle": { "$value": "#221e1a", "light": "#e7e0d4" },
+      "strong": { "$value": "#4a453d", "light": "#c4b9a9" },
+      "focus": { "$value": "#1473df" }
+    },
+    "accent": {
+      "$type": "color",
+      "blue": { "$value": "#1473df" },
+      "blue-hover": { "$value": "#1668c7" },
+      "blue-subtle": { "$value": "rgba(20,115,223,0.12)", "light": "rgba(20,115,223,0.10)" },
+      "green": { "$value": "#22c55e" },
+      "green-subtle": { "$value": "rgba(34,197,94,0.12)" },
+      "red": { "$value": "#ef4444" },
+      "red-subtle": { "$value": "rgba(239,68,68,0.12)" },
+      "orange": { "$value": "#f97316" },
+      "orange-subtle": { "$value": "rgba(249,115,22,0.12)" },
+      "purple": { "$value": "#8b5cf6" },
+      "purple-subtle": { "$value": "rgba(139,92,246,0.12)" },
+      "yellow": { "$value": "#eab308" },
+      "yellow-subtle": { "$value": "rgba(234,179,8,0.12)" },
+      "cyan": { "$value": "#06b6d4" },
+      "cyan-subtle": { "$value": "rgba(6,182,212,0.12)" },
+      "pink": { "$value": "#ec4899" },
+      "pink-subtle": { "$value": "rgba(236,72,153,0.12)" }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "0": { "$value": "0px" },
+    "px": { "$value": "1px" },
+    "0-5": { "$value": "2px" },
+    "1": { "$value": "4px" },
+    "1-5": { "$value": "6px" },
+    "2": { "$value": "8px" },
+    "2-5": { "$value": "10px" },
+    "3": { "$value": "12px" },
+    "4": { "$value": "16px" },
+    "5": { "$value": "20px" },
+    "6": { "$value": "24px" },
+    "7": { "$value": "28px" },
+    "8": { "$value": "32px" },
+    "10": { "$value": "40px" },
+    "12": { "$value": "48px" },
+    "16": { "$value": "64px" },
+    "20": { "$value": "80px" },
+    "24": { "$value": "96px" },
+    "32": { "$value": "128px" }
+  },
+  "typography": {
+    "font": {
+      "ui": {
+        "$type": "fontFamily",
+        "$value": ["Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"]
+      },
+      "mono": { "$type": "fontFamily", "$value": ["Martian Mono", "Fira Code", "monospace"] }
+    },
+    "size": {
+      "$type": "dimension",
+      "2xs": { "$value": "10px" },
+      "xs": { "$value": "11px" },
+      "sm": { "$value": "12px" },
+      "base": { "$value": "13px" },
+      "md": { "$value": "14px" },
+      "lg": { "$value": "15px" },
+      "xl": { "$value": "16px" },
+      "2xl": { "$value": "18px" },
+      "3xl": { "$value": "20px" },
+      "4xl": { "$value": "24px" },
+      "5xl": { "$value": "30px" },
+      "6xl": { "$value": "36px" },
+      "7xl": { "$value": "48px" },
+      "8xl": { "$value": "60px" },
+      "9xl": { "$value": "72px" }
+    },
+    "weight": {
+      "thin": { "$type": "fontWeight", "$value": 100 },
+      "light": { "$type": "fontWeight", "$value": 300 },
+      "regular": { "$type": "fontWeight", "$value": 400 },
+      "medium": { "$type": "fontWeight", "$value": 500 },
+      "semibold": { "$type": "fontWeight", "$value": 600 },
+      "bold": { "$type": "fontWeight", "$value": 700 },
+      "extrabold": { "$type": "fontWeight", "$value": 800 }
+    },
+    "lineHeight": {
+      "none": { "$type": "number", "$value": 1 },
+      "tight": { "$type": "number", "$value": 1.15 },
+      "snug": { "$type": "number", "$value": 1.25 },
+      "normal": { "$type": "number", "$value": 1.4 },
+      "relaxed": { "$type": "number", "$value": 1.5 },
+      "loose": { "$type": "number", "$value": 2.0 }
+    },
+    "letterSpacing": {
+      "tighter": { "$type": "dimension", "$value": "-0.05em" },
+      "tight": { "$type": "dimension", "$value": "-0.025em" },
+      "normal": { "$type": "dimension", "$value": "0em" },
+      "wide": { "$type": "dimension", "$value": "0.025em" },
+      "wider": { "$type": "dimension", "$value": "0.05em" },
+      "widest": { "$type": "dimension", "$value": "0.1em" }
+    }
+  },
+  "borderRadius": {
+    "$type": "dimension",
+    "none": { "$value": "0px" },
+    "sm": { "$value": "4px" },
+    "md": { "$value": "6px" },
+    "lg": { "$value": "8px" },
+    "xl": { "$value": "12px" },
+    "2xl": { "$value": "16px" },
+    "3xl": { "$value": "24px" },
+    "full": { "$value": "9999px" }
+  },
+  "borderWidth": {
+    "$type": "dimension",
+    "none": { "$value": "0px" },
+    "sm": { "$value": "1px" },
+    "md": { "$value": "2px" },
+    "lg": { "$value": "4px" }
+  },
+  "shadow": {
+    "none": { "$type": "shadow", "$value": "none" },
+    "xs": { "$type": "shadow", "$value": "0 1px 2px rgba(0,0,0,0.30)" },
+    "sm": { "$type": "shadow", "$value": "0 2px 4px rgba(0,0,0,0.40)" },
+    "md": { "$type": "shadow", "$value": "0 4px 12px rgba(0,0,0,0.50)" },
+    "lg": { "$type": "shadow", "$value": "0 8px 24px rgba(0,0,0,0.60)" },
+    "xl": { "$type": "shadow", "$value": "0 16px 48px rgba(0,0,0,0.70)" },
+    "panel": { "$type": "shadow", "$value": "0 2px 8px rgba(0,0,0,0.40)" },
+    "dropdown": { "$type": "shadow", "$value": "0 8px 32px rgba(0,0,0,0.40)" },
+    "tabGhost": { "$type": "shadow", "$value": "0 8px 24px rgba(0,0,0,0.50)" },
+    "dialog": { "$type": "shadow", "$value": "0 24px 80px rgba(0,0,0,0.65)" },
+    "workbitDialog": { "$type": "shadow", "$value": "0 24px 64px rgba(0,0,0,0.60)" },
+    "tabDropGlow": { "$type": "shadow", "$value": "0 0 6px rgba(20,115,223,0.60)" }
+  },
+  "motion": {
+    "duration": {
+      "instant": { "$type": "duration", "$value": "0ms" },
+      "fast": { "$type": "duration", "$value": "100ms" },
+      "normal": { "$type": "duration", "$value": "150ms" },
+      "slow": { "$type": "duration", "$value": "200ms" },
+      "slower": { "$type": "duration", "$value": "300ms" },
+      "deliberate": { "$type": "duration", "$value": "400ms" }
+    },
+    "easing": {
+      "linear": { "$type": "cubicBezier", "$value": [0, 0, 1, 1] },
+      "in": { "$type": "cubicBezier", "$value": [0.4, 0, 1, 1] },
+      "out": { "$type": "cubicBezier", "$value": [0, 0, 0.2, 1] },
+      "default": { "$type": "cubicBezier", "$value": [0.4, 0, 0.2, 1] },
+      "spring": { "$type": "cubicBezier", "$value": [0.34, 1.56, 0.64, 1] },
+      "decelerate": { "$type": "cubicBezier", "$value": [0, 0, 0.35, 1] }
+    }
+  },
+  "zIndex": {
+    "below": { "$type": "number", "$value": -1 },
+    "base": { "$type": "number", "$value": 0 },
+    "raised": { "$type": "number", "$value": 10 },
+    "toolbar": { "$type": "number", "$value": 50 },
+    "sidebar": { "$type": "number", "$value": 100 },
+    "menu": { "$type": "number", "$value": 200 },
+    "dropdown": { "$type": "number", "$value": 300 },
+    "modal": { "$type": "number", "$value": 400 },
+    "overlay": { "$type": "number", "$value": 500 },
+    "toast": { "$type": "number", "$value": 600 },
+    "tabOverflow": { "$type": "number", "$value": 2000 },
+    "contextMenu": { "$type": "number", "$value": 3000 },
+    "tagModal": { "$type": "number", "$value": 3500 },
+    "quickSwitch": { "$type": "number", "$value": 4000 },
+    "dragGhost": { "$type": "number", "$value": 9999 }
+  },
+  "component": {
+    "chrome": {
+      "sidebarWidth": { "$type": "dimension", "$value": "220px" },
+      "sidebarWidthCollapsed": { "$type": "dimension", "$value": "52px" },
+      "menubarHeight": { "$type": "dimension", "$value": "32px" },
+      "tabbarHeight": { "$type": "dimension", "$value": "44px" },
+      "toolbarHeight": { "$type": "dimension", "$value": "36px" },
+      "formulabarHeight": { "$type": "dimension", "$value": "36px" },
+      "sheettabsHeight": { "$type": "dimension", "$value": "36px" },
+      "statusbarHeight": { "$type": "dimension", "$value": "28px" }
+    },
+    "tab": {
+      "minWidth": { "$type": "dimension", "$value": "120px" },
+      "maxWidth": { "$type": "dimension", "$value": "220px" },
+      "pinnedWidth": { "$type": "dimension", "$value": "40px" },
+      "fontSize": { "$type": "dimension", "$value": "11px" },
+      "fontWeight": { "$type": "number", "$value": 400 },
+      "iconSize": { "$type": "dimension", "$value": "13px" },
+      "separatorHeight": { "$type": "dimension", "$value": "14px" },
+      "pillRadius": { "$type": "dimension", "$value": "8px" },
+      "activeBorderWidth": { "$type": "dimension", "$value": "2px" },
+      "activeBgSheets": { "$type": "color", "$value": "rgba(34,197,94,0.10)" },
+      "activeBgDocs": { "$type": "color", "$value": "rgba(20,115,223,0.12)" },
+      "activeBgSlides": { "$type": "color", "$value": "rgba(249,115,22,0.10)" },
+      "activeBgWorkbit": { "$type": "color", "$value": "rgba(20,115,223,0.10)" }
+    },
+    "toolbar": {
+      "btnSize": { "$type": "dimension", "$value": "26px" },
+      "btnRadius": { "$type": "dimension", "$value": "5px" },
+      "crossfadeDuration": { "$type": "duration", "$value": "150ms" }
+    },
+    "panel": {
+      "resizerSize": { "$type": "dimension", "$value": "4px" },
+      "resizerHitArea": { "$type": "dimension", "$value": "12px" },
+      "navHeight": { "$type": "dimension", "$value": "32px" },
+      "activeBorderSheets": { "$type": "color", "$value": "#22c55e" },
+      "activeBorderDocs": { "$type": "color", "$value": "#1473df" },
+      "activeBorderSlides": { "$type": "color", "$value": "#f97316" },
+      "activeBorderCollection": { "$type": "color", "$value": "#555555" }
+    },
+    "app": {
+      "sheetsAccent": { "$type": "color", "$value": "#22c55e" },
+      "docsAccent": { "$type": "color", "$value": "#1473df" },
+      "slidesAccent": { "$type": "color", "$value": "#f97316" },
+      "workbitAccent": { "$type": "color", "$value": "#8b5cf6" },
+      "collectionAccent": { "$type": "color", "$value": "#555555" }
+    },
+    "mode": {
+      "$description": "BoltzAgent chat-mode accents. Each mode has a base colour, a subtle chip fill (12%) and a border tint (22%). Distinct from the app/file accents.",
+      "generalBase": { "$type": "color", "$value": "#1473df" },
+      "generalSubtle": { "$type": "color", "$value": "rgba(20, 115, 223, 0.12)" },
+      "generalBorder": { "$type": "color", "$value": "rgba(20, 115, 223, 0.22)" },
+      "widgetBase": { "$type": "color", "$value": "#ec4899" },
+      "widgetSubtle": { "$type": "color", "$value": "rgba(236, 72, 153, 0.12)" },
+      "widgetBorder": { "$type": "color", "$value": "rgba(236, 72, 153, 0.22)" },
+      "workerBase": { "$type": "color", "$value": "#f97316" },
+      "workerSubtle": { "$type": "color", "$value": "rgba(249, 115, 22, 0.12)" },
+      "workerBorder": { "$type": "color", "$value": "rgba(249, 115, 22, 0.22)" },
+      "coderBase": { "$type": "color", "$value": "#06b6d4" },
+      "coderSubtle": { "$type": "color", "$value": "rgba(6, 182, 212, 0.12)" },
+      "coderBorder": { "$type": "color", "$value": "rgba(6, 182, 212, 0.22)" }
+    },
+    "button": {
+      "heightSm": { "$type": "dimension", "$value": "24px" },
+      "heightMd": { "$type": "dimension", "$value": "28px" },
+      "heightLg": { "$type": "dimension", "$value": "32px" },
+      "radius": { "$type": "dimension", "$value": "6px" },
+      "fontSize": { "$type": "dimension", "$value": "13px" },
+      "fontWeight": { "$type": "number", "$value": 500 }
+    },
+    "input": {
+      "height": { "$type": "dimension", "$value": "28px" },
+      "radius": { "$type": "dimension", "$value": "5px" },
+      "fontSize": { "$type": "dimension", "$value": "12px" },
+      "paddingX": { "$type": "dimension", "$value": "10px" }
+    },
+    "dropdown": {
+      "radius": { "$type": "dimension", "$value": "8px" },
+      "itemRadius": { "$type": "dimension", "$value": "5px" },
+      "itemHeight": { "$type": "dimension", "$value": "30px" },
+      "itemFont": { "$type": "dimension", "$value": "12px" }
+    },
+    "quickSwitch": {
+      "radius": { "$type": "dimension", "$value": "12px" },
+      "inputHeight": { "$type": "dimension", "$value": "48px" },
+      "width": { "$type": "dimension", "$value": "520px" }
+    },
+    "aiPanel": {
+      "$description": "Reference only — always use hardcoded hex values in implementation. AI panel must stay dark regardless of theme.",
+      "bg": { "$type": "color", "$value": "#111111" },
+      "border": { "$type": "color", "$value": "#262626" },
+      "headerBg": { "$type": "color", "$value": "#1a1a1a" },
+      "text": { "$type": "color", "$value": "#a0a0a0" },
+      "fabSize": { "$type": "dimension", "$value": "44px" },
+      "fabRadius": { "$type": "dimension", "$value": "10px" },
+      "panelWidth": { "$type": "dimension", "$value": "320px" }
+    },
+    "agentChrome": {
+      "$description": "Structural dimensions for the bz-agent-mock BoltzAgent prototype shell — distinct from bitwork-suite's own layout tokens.",
+      "topbarHeight": { "$type": "dimension", "$value": "52px" },
+      "sidebarWidth": { "$type": "dimension", "$value": "220px" },
+      "agentHeaderHeight": { "$type": "dimension", "$value": "40px" },
+      "editorTabHeight": { "$type": "dimension", "$value": "36px" },
+      "filetreeWidth": { "$type": "dimension", "$value": "200px" },
+      "chatPanelWidthMin": { "$type": "dimension", "$value": "360px" },
+      "chatPanelWidthMax": { "$type": "dimension", "$value": "420px" },
+      "inputBoxMaxWidth": { "$type": "dimension", "$value": "720px" },
+      "inputBoxRadius": { "$type": "dimension", "$value": "16px" }
+    },
+    "syntax": {
+      "$description": "Reference only — always use hardcoded hex values in implementation. Code editor and code blocks stay on this fixed dark (Catppuccin Mocha) palette regardless of the active app theme, same rule as AI Panel.",
+      "bg": { "$type": "color", "$value": "#1e1e2e" },
+      "headerBg": { "$type": "color", "$value": "#2a2a3e" },
+      "text": { "$type": "color", "$value": "#cdd6f4" },
+      "lineNumber": { "$type": "color", "$value": "#6c7086" },
+      "comment": { "$type": "color", "$value": "#6c7086" },
+      "keyword": { "$type": "color", "$value": "#cba6f7" },
+      "string": { "$type": "color", "$value": "#a6e3a1" },
+      "type": { "$type": "color", "$value": "#89b4fa" },
+      "function": { "$type": "color", "$value": "#89dceb" },
+      "langLabel": { "$type": "color", "$value": "#888888" },
+      "fontSize": { "$type": "dimension", "$value": "12.5px" },
+      "lineHeight": { "$type": "number", "$value": 1.7 }
+    },
+    "collection": {
+      "cardRadius": { "$type": "dimension", "$value": "8px" },
+      "thumbHeight": { "$type": "dimension", "$value": "80px" },
+      "thumbRadius": { "$type": "dimension", "$value": "6px" },
+      "nameFontSize": { "$type": "dimension", "$value": "13px" },
+      "metaFontSize": { "$type": "dimension", "$value": "11px" },
+      "starColor": { "$type": "color", "$value": "#eab308" },
+      "filterHeight": { "$type": "dimension", "$value": "32px" },
+      "gridGap": { "$type": "dimension", "$value": "12px" },
+      "gridMinWidth": { "$type": "dimension", "$value": "160px" }
+    }
+  }
+}

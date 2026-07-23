@@ -1,0 +1,55 @@
+// Template: boltzbit-mock.ts.tmpl
+// Usage: Copy to src/mocks/{domain}.mock.ts and replace {Domain}/{domain} with the actual domain name.
+// Pattern: status enum → main entity interface → create-input type → static mock array (5-10 items).
+// camelCase TS field names map 1:1 to snake_case Dynas column names.
+// JSON-type Dynas fields (arrays, nested objects) use typed TS arrays/interfaces here.
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export type {Domain}Status = 'active' | 'pending' | 'archived';
+
+export interface {Domain} {
+  id: string;
+  name: string;
+  status: {Domain}Status;
+  // Add domain-specific fields here, e.g.:
+  // description: string;
+  // amount: number;
+  // tags: string[];         ← json column in Dynas
+  // metadata: Record<string, unknown>;  ← json column in Dynas
+  createdAt: string;        // ISO 8601 datetime string
+  updatedAt: string;
+}
+
+export interface Create{Domain}Input {
+  name: string;
+  status?: {Domain}Status;
+  // Add required/optional create fields here (omit id, createdAt, updatedAt)
+}
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+// Replace with 5-10 realistic records for the specific domain.
+
+export const mock{Domain}s: {Domain}[] = [
+  {
+    id: '1',
+    name: 'Example One',
+    status: 'active',
+    createdAt: '2026-01-10T08:00:00Z',
+    updatedAt: '2026-01-10T08:00:00Z',
+  },
+  {
+    id: '2',
+    name: 'Example Two',
+    status: 'pending',
+    createdAt: '2026-01-11T09:30:00Z',
+    updatedAt: '2026-01-12T14:00:00Z',
+  },
+  {
+    id: '3',
+    name: 'Example Three',
+    status: 'archived',
+    createdAt: '2026-01-05T11:00:00Z',
+    updatedAt: '2026-01-08T16:20:00Z',
+  },
+];

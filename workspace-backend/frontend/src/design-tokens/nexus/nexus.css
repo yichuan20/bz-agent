@@ -1,0 +1,98 @@
+[data-theme="nexus-light"] {
+  --color-bg-primary: #f8f9ff;
+  --color-bg-secondary: #eef0ff;
+  --color-bg-tertiary: #e4e6ff;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #1a1b3a;
+  --color-text-secondary: #5a5c80;
+  --color-text-tertiary: #9a9cb8;
+  --color-border-primary: #d8daff;
+  --color-border-secondary: #c4c6f0;
+  --color-accent-1: #4f46e5;
+  --color-accent-2: #059669;
+  --color-accent-3: #dc2626;
+  --color-accent-4: #d97706;
+  --shadow-card: 0 2px 12px rgba(26, 27, 58, 0.06);
+  --shadow-hover: 0 8px 28px rgba(79, 70, 229, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font-display: "Syne", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 20px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+}
+
+[data-theme="nexus-dark"] {
+  --color-bg-primary: #16172e;
+  --color-bg-secondary: #0e0f22;
+  --color-bg-tertiary: #1e2040;
+  --color-bg-elevated: #262848;
+  --color-text-primary: #e8e9ff;
+  --color-text-secondary: #8890c0;
+  --color-text-tertiary: #4a5080;
+  --color-border-primary: #2a2c50;
+  --color-border-secondary: #363860;
+  --color-accent-1: #7c73ff;
+  --color-accent-2: #34d399;
+  --color-accent-3: #f87171;
+  --color-accent-4: #fbbf24;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 8px 28px rgba(124, 115, 255, 0.15);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font-display: "Syne", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 20px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+}
+
+[data-theme="nexus-hc"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eeeeee;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-tertiary: #333333;
+  --color-border-primary: #000000;
+  --color-border-secondary: #000000;
+  --color-accent-1: #1e00bb;
+  --color-accent-2: #005533;
+  --color-accent-3: #bb0000;
+  --color-accent-4: #885500;
+  --shadow-card: 0 0 0 2px #000000;
+  --shadow-hover: 0 0 0 3px #1e00bb;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --motion-transition: all 0.15s ease;
+  --font-display: "Syne", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 26px;
+  --font-size-2xl: 40px;
+  --card-padding: 20px;
+  --hero-padding: 40px;
+  --section-gap: 36px;
+}

@@ -1,0 +1,129 @@
+// Template: boltzbit-route.tsx.tmpl
+// Usage: Copy to src/routes/_app/{domain}/index.tsx and fill in {Domain}/{domain}.
+// Pattern: TanStack Router list page — table with loading/error states, create modal placeholder.
+
+import { createFileRoute } from '@tanstack/react-router';
+import { useState } from 'react';
+import { use{Domain}s, useCreate{Domain}, useDelete{Domain} } from '../../../lib/{domain}/use-{domain}-data';
+import type { Create{Domain}Input } from '../../../mocks/{domain}.mock';
+
+export const Route = createFileRoute('/_app/{domain}/')({
+  component: {Domain}ListPage,
+});
+
+function {Domain}ListPage() {
+  const { data: items = [], isLoading, error } = use{Domain}s();
+  const createMutation = useCreate{Domain}();
+  const deleteMutation = useDelete{Domain}();
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    const input: Create{Domain}Input = { name: newName.trim() };
+    await createMutation.mutateAsync(input);
+    setNewName('');
+    setCreating(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: 24, color: 'var(--text-tertiary)', fontSize: 13 }}>
+        Loading…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 24, color: 'var(--accent-red)', fontSize: 13 }}>
+        {String(error)}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '24px 32px', maxWidth: 960 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>{Domain}s</h1>
+        <button
+          onClick={() => setCreating(true)}
+          style={{
+            padding: '6px 14px', fontSize: 13, fontWeight: 500,
+            background: 'var(--accent-blue)', color: '#fff',
+            border: 'none', borderRadius: 6, cursor: 'pointer',
+          }}
+        >
+          + New {Domain}
+        </button>
+      </div>
+
+      {/* Inline create form */}
+      {creating && (
+        <div style={{
+          background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+          borderRadius: 8, padding: 16, marginBottom: 16,
+          display: 'flex', gap: 8, alignItems: 'center',
+        }}>
+          <input
+            autoFocus
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+            placeholder="{Domain} name…"
+            style={{
+              flex: 1, padding: '6px 10px', fontSize: 13,
+              border: '1px solid var(--border-primary)', borderRadius: 6,
+              background: 'var(--bg-primary)', color: 'var(--text-primary)',
+            }}
+          />
+          <button onClick={handleCreate} disabled={createMutation.isPending}
+            style={{ padding: '6px 14px', fontSize: 13, background: 'var(--accent-blue)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+            {createMutation.isPending ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={() => setCreating(false)}
+            style={{ padding: '6px 10px', fontSize: 13, background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Table */}
+      {items.length === 0 ? (
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '32px 0', textAlign: 'center' }}>
+          No {domain}s yet. Create one above.
+        </div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-secondary)', fontWeight: 500 }}>Name</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-secondary)', fontWeight: 500 }}>Status</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-secondary)', fontWeight: 500 }}>Created</th>
+              <th style={{ width: 48 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                <td style={{ padding: '10px 12px', fontWeight: 500 }}>{item.name}</td>
+                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{item.status}</td>
+                <td style={{ padding: '10px 12px', color: 'var(--text-tertiary)' }}>
+                  {new Date(item.createdAt).toLocaleDateString()}
+                </td>
+                <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                  <button
+                    onClick={() => deleteMutation.mutate(item.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', fontSize: 16, lineHeight: 1 }}
+                    title="Delete"
+                  >×</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,32 @@
+[data-theme="terra-light"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #fff8f6;
+  --color-bg-tertiary: #ffede8;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #222222;
+  --color-text-secondary: #717171;
+  --color-text-tertiary: #aaaaaa;
+  --color-border-primary: #ebebeb;
+  --color-border-secondary: #dddddd;
+  --color-accent-1: #ff5a5f;
+  --color-accent-2: #00a699;
+  --color-accent-3: #fc642d;
+  --color-accent-4: #484848;
+  --shadow-card: 0 2px 16px rgba(34, 34, 34, 0.08);
+  --shadow-hover: 0 6px 24px rgba(34, 34, 34, 0.14);
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --motion-transition: all 0.25s ease;
+  --font-display: "Fraunces", serif;
+  --font-body: "Epilogue", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 42px;
+  --card-padding: 24px;
+  --hero-padding: 56px;
+  --section-gap: 48px;
+}

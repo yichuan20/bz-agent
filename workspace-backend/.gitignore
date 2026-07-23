@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# uv
+# (uv.lock IS committed)
+
+# env
+.env
+
+# runtime data written at runtime (secrets + widget records). The built-in widget
+# library (server_data/widgets/) IS committed as a shipped asset.
+server_data/credentials.json
+server_data/widget_data/
+server_data/custom_widgets/

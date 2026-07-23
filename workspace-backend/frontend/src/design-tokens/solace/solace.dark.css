@@ -1,0 +1,32 @@
+[data-theme="solace-dark"] {
+  --color-bg-primary: #1c1714;
+  --color-bg-secondary: #141210;
+  --color-bg-tertiary: #241e1a;
+  --color-bg-elevated: #2c2520;
+  --color-text-primary: #f0eae2;
+  --color-text-secondary: #b8a898;
+  --color-text-tertiary: #7a6a5a;
+  --color-border-primary: #3a3028;
+  --color-border-secondary: #4a3e34;
+  --color-accent-1: #5bbdaf;
+  --color-accent-2: #f0b88c;
+  --color-accent-3: #e06060;
+  --color-accent-4: #90b89c;
+  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(91, 189, 175, 0.1);
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+  --motion-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --font-display: "Fraunces", serif;
+  --font-body: "Epilogue", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 19px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 42px;
+  --card-padding: 24px;
+  --hero-padding: 48px;
+  --section-gap: 40px;
+}

@@ -1,0 +1,821 @@
+{
+  "version": 1,
+  "widgets": [
+    {
+      "id": "clock",
+      "kind": "clock",
+      "label": "Clock",
+      "emoji": "⏰",
+      "defaultW": 240,
+      "defaultH": 130,
+      "keywords": [
+        "time",
+        "clock",
+        "date",
+        "timer",
+        "live",
+        "analog"
+      ],
+      "description": "Displays the current time and date, updating every second.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "utility"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "bar",
+      "kind": "bar",
+      "label": "Bar Chart",
+      "emoji": "📊",
+      "defaultW": 380,
+      "defaultH": 280,
+      "keywords": [
+        "bar chart",
+        "chart",
+        "visualization",
+        "graph",
+        "data",
+        "chart.js"
+      ],
+      "description": "Interactive bar chart with hover tooltips powered by Chart.js. Editable data.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "visualization"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "pie",
+      "kind": "pie",
+      "label": "Pie Chart",
+      "emoji": "🥧",
+      "defaultW": 320,
+      "defaultH": 280,
+      "keywords": [
+        "pie chart",
+        "donut",
+        "chart",
+        "visualization",
+        "proportion",
+        "chart.js"
+      ],
+      "description": "Donut-style pie chart with legend and hover tooltips. Editable slices.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "visualization"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "kpi",
+      "kind": "kpi",
+      "label": "Key Figures",
+      "emoji": "📈",
+      "defaultW": 380,
+      "defaultH": 200,
+      "keywords": [
+        "kpi",
+        "metrics",
+        "dashboard",
+        "stats",
+        "key figures",
+        "numbers"
+      ],
+      "description": "A 2×2 grid of editable KPI cards with label, value, change indicator and trend arrow.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dashboard"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "news",
+      "kind": "news",
+      "label": "News",
+      "emoji": "📰",
+      "defaultW": 320,
+      "defaultH": 300,
+      "keywords": [
+        "news",
+        "headlines",
+        "feed",
+        "articles",
+        "stories"
+      ],
+      "description": "Scrollable news headline list. Add custom stories via the built-in form.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "search",
+      "kind": "search",
+      "label": "Search",
+      "emoji": "🔍",
+      "defaultW": 380,
+      "defaultH": 420,
+      "keywords": [
+        "search",
+        "google",
+        "serpapi",
+        "web",
+        "results",
+        "query"
+      ],
+      "description": "Google search powered by SerpAPI. Enter your API key to see inline results.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "editor",
+      "kind": "editor",
+      "label": "Editor",
+      "emoji": "📝",
+      "defaultW": 340,
+      "defaultH": 260,
+      "keywords": [
+        "text",
+        "editor",
+        "notes",
+        "write",
+        "plain text",
+        "scratchpad"
+      ],
+      "description": "Plain-text scratchpad. Type freely; content is held in widget memory.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "table",
+      "kind": "table",
+      "label": "Table",
+      "emoji": "🗂",
+      "defaultW": 400,
+      "defaultH": 220,
+      "keywords": [
+        "table",
+        "spreadsheet",
+        "grid",
+        "cells",
+        "data",
+        "rows",
+        "columns"
+      ],
+      "description": "Editable spreadsheet-style table. Add rows and columns dynamically.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "calendar",
+      "kind": "calendar",
+      "label": "Calendar",
+      "emoji": "📅",
+      "defaultW": 280,
+      "defaultH": 290,
+      "keywords": [
+        "calendar",
+        "date",
+        "month",
+        "schedule",
+        "planner",
+        "day"
+      ],
+      "description": "Month-view calendar with day selection. Navigate months with arrow buttons.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "utility"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "video",
+      "kind": "video",
+      "label": "Video",
+      "emoji": "▶️",
+      "defaultW": 400,
+      "defaultH": 280,
+      "keywords": [
+        "video",
+        "youtube",
+        "vimeo",
+        "player",
+        "embed",
+        "media",
+        "stream"
+      ],
+      "description": "Embed a YouTube or Vimeo video by pasting its URL.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "media"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "email",
+      "kind": "email",
+      "label": "Email",
+      "emoji": "📮",
+      "defaultW": 340,
+      "defaultH": 360,
+      "keywords": [
+        "email",
+        "gmail",
+        "outlook",
+        "yahoo",
+        "protonmail",
+        "compose",
+        "mail"
+      ],
+      "description": "Compose and open emails in Gmail, Outlook, Yahoo or ProtonMail.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "communication"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "map",
+      "kind": "map",
+      "label": "Map",
+      "emoji": "🗺️",
+      "defaultW": 400,
+      "defaultH": 340,
+      "keywords": [
+        "map",
+        "google maps",
+        "location",
+        "places",
+        "geography",
+        "search"
+      ],
+      "description": "Google Maps search widget. Optionally add an API key for the official embed.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "chat",
+      "kind": "chat",
+      "label": "Chat",
+      "emoji": "💬",
+      "defaultW": 300,
+      "defaultH": 360,
+      "keywords": [
+        "chat",
+        "messages",
+        "conversation",
+        "notes",
+        "bubble",
+        "talk"
+      ],
+      "description": "Local chat-bubble notepad. Messages are held in widget memory.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "communication"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "videocall",
+      "kind": "videocall",
+      "label": "Video Call",
+      "emoji": "📹",
+      "defaultW": 480,
+      "defaultH": 360,
+      "keywords": [
+        "video call",
+        "jitsi",
+        "meeting",
+        "conference",
+        "voice",
+        "video"
+      ],
+      "description": "Start or join a free encrypted video call via Jitsi Meet. Share the room name to invite others.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "communication"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "custom",
+      "kind": "custom",
+      "label": "Custom",
+      "emoji": "⚡",
+      "defaultW": 340,
+      "defaultH": 280,
+      "keywords": [
+        "custom",
+        "code",
+        "javascript",
+        "widget",
+        "script"
+      ],
+      "description": "User-defined widget. Write any JavaScript and run it in a sandboxed iframe.",
+      "meta": {
+        "author": "user",
+        "version": "1.0.0",
+        "category": "custom"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "llm-chat",
+      "kind": "llm-chat",
+      "label": "LLM Chat",
+      "emoji": "🤖",
+      "defaultW": 380,
+      "defaultH": 420,
+      "keywords": [
+        "llm",
+        "ai",
+        "chatgpt",
+        "claude",
+        "openai",
+        "anthropic",
+        "chat",
+        "gpt"
+      ],
+      "description": "Chat with OpenAI or Anthropic LLMs via the credential proxy. Needs OPENAI_API_KEY or ANTHROPIC_API_KEY.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "ai"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "terminal",
+      "kind": "terminal",
+      "label": "Terminal",
+      "emoji": "🖥️",
+      "defaultW": 440,
+      "defaultH": 340,
+      "keywords": [
+        "terminal",
+        "shell",
+        "bash",
+        "cli",
+        "command",
+        "run",
+        "execute"
+      ],
+      "description": "Run shell commands on the Python server and see live output.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dev"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "line-chart",
+      "kind": "line-chart",
+      "label": "Line Chart",
+      "emoji": "📉",
+      "defaultW": 380,
+      "defaultH": 280,
+      "keywords": [
+        "line chart",
+        "area",
+        "trend",
+        "time series",
+        "graph",
+        "chart.js"
+      ],
+      "description": "Line/area chart with hover tooltips powered by Chart.js. Editable data.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "visualization"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "markdown",
+      "kind": "markdown",
+      "label": "Markdown",
+      "emoji": "📄",
+      "defaultW": 380,
+      "defaultH": 340,
+      "keywords": [
+        "markdown",
+        "md",
+        "readme",
+        "document",
+        "viewer",
+        "render"
+      ],
+      "description": "Render any local file path or URL as formatted Markdown.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "json",
+      "kind": "json",
+      "label": "JSON Explorer",
+      "emoji": "🔬",
+      "defaultW": 360,
+      "defaultH": 340,
+      "keywords": [
+        "json",
+        "yaml",
+        "tree",
+        "explorer",
+        "data",
+        "inspect",
+        "parse"
+      ],
+      "description": "Paste JSON to get a collapsible tree viewer with syntax colouring.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dev"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "files",
+      "kind": "files",
+      "label": "File Browser",
+      "emoji": "🗂️",
+      "defaultW": 320,
+      "defaultH": 360,
+      "keywords": [
+        "files",
+        "browser",
+        "directory",
+        "folder",
+        "tree",
+        "navigate"
+      ],
+      "description": "Browse the server filesystem starting from the working directory.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dev"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "timer",
+      "kind": "timer",
+      "label": "Timer",
+      "emoji": "⏱️",
+      "defaultW": 280,
+      "defaultH": 260,
+      "keywords": [
+        "timer",
+        "pomodoro",
+        "countdown",
+        "focus",
+        "break",
+        "clock"
+      ],
+      "description": "Pomodoro timer with short/long break presets and a progress bar.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "weather",
+      "kind": "weather",
+      "label": "Weather",
+      "emoji": "🌤️",
+      "defaultW": 300,
+      "defaultH": 320,
+      "keywords": [
+        "weather",
+        "temperature",
+        "forecast",
+        "openweathermap",
+        "climate"
+      ],
+      "description": "Live weather for any city via OpenWeatherMap. Needs OPENWEATHERMAP_API_KEY.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "github",
+      "kind": "github",
+      "label": "GitHub",
+      "emoji": "🐙",
+      "defaultW": 360,
+      "defaultH": 360,
+      "keywords": [
+        "github",
+        "gitlab",
+        "prs",
+        "issues",
+        "commits",
+        "ci",
+        "git"
+      ],
+      "description": "Browse PRs, issues and commits for any GitHub repo. Needs GITHUB_TOKEN.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dev"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "stock",
+      "kind": "stock",
+      "label": "Crypto / Stock",
+      "emoji": "📊",
+      "defaultW": 380,
+      "defaultH": 320,
+      "keywords": [
+        "crypto",
+        "bitcoin",
+        "stock",
+        "price",
+        "coingecko",
+        "ticker",
+        "market"
+      ],
+      "description": "Live cryptocurrency prices via CoinGecko (free, no API key needed).",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "kanban",
+      "kind": "kanban",
+      "label": "Kanban",
+      "emoji": "🗃️",
+      "defaultW": 480,
+      "defaultH": 360,
+      "keywords": [
+        "kanban",
+        "board",
+        "tasks",
+        "todo",
+        "project",
+        "drag",
+        "cards"
+      ],
+      "description": "Drag-and-drop Kanban board with three columns. Persisted to localStorage.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "sticky",
+      "kind": "sticky",
+      "label": "Sticky Notes",
+      "emoji": "📌",
+      "defaultW": 360,
+      "defaultH": 320,
+      "keywords": [
+        "sticky",
+        "notes",
+        "memo",
+        "post-it",
+        "colour",
+        "reminder"
+      ],
+      "description": "Colour-coded sticky notes, persisted to localStorage.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "web-preview",
+      "kind": "web-preview",
+      "label": "Web Preview",
+      "emoji": "🌐",
+      "defaultW": 420,
+      "defaultH": 360,
+      "keywords": [
+        "web",
+        "browser",
+        "url",
+        "preview",
+        "reader",
+        "scraper",
+        "fetch"
+      ],
+      "description": "Load any URL in reader mode via the server-side proxy (bypasses CORS).",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "information"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "sql",
+      "kind": "sql",
+      "label": "SQL Runner",
+      "emoji": "🛢️",
+      "defaultW": 440,
+      "defaultH": 380,
+      "keywords": [
+        "sql",
+        "database",
+        "postgres",
+        "mysql",
+        "query",
+        "db",
+        "table"
+      ],
+      "description": "Run SQL queries against a database. Needs DB_URL credential.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "dev"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "whiteboard",
+      "kind": "whiteboard",
+      "label": "Whiteboard",
+      "emoji": "🎨",
+      "defaultW": 440,
+      "defaultH": 360,
+      "keywords": [
+        "whiteboard",
+        "draw",
+        "sketch",
+        "canvas",
+        "paint",
+        "diagram",
+        "freehand"
+      ],
+      "description": "Freehand drawing canvas with pen, eraser, shapes and undo.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "productivity"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-06-06T20:29:23Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    },
+    {
+      "id": "translator",
+      "kind": "translator",
+      "label": "Translator",
+      "emoji": "🌐",
+      "defaultW": 380,
+      "defaultH": 320,
+      "keywords": [
+        "translator",
+        "translate",
+        "language",
+        "multilingual",
+        "text",
+        "localization"
+      ],
+      "description": "Translate text between 12 languages. Press Ctrl+Enter to translate, ⇄ to swap.",
+      "meta": {
+        "author": "builtin",
+        "version": "1.0.0",
+        "category": "utility"
+      },
+      "isBuiltin": true,
+      "archived": false,
+      "createdAt": "2026-07-01T15:37:56Z",
+      "updatedAt": "2026-07-21T14:01:32Z"
+    }
+  ]
+}
