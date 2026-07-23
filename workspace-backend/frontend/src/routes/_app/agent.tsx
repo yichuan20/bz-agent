@@ -169,7 +169,7 @@ type SlashCommand = {
 type SlashCommandGroup = { title: string; commands: SlashCommand[] };
 
 type StreamingBlocks = Map<number, { type: string; content: string }>;
-type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
+type ConnectionStatus = 'connecting' | 'warming' | 'connected' | 'error' | 'disconnected';
 
 // HTTP_BASE imported from '#/lib/api'
 
@@ -4527,7 +4527,12 @@ function AgentPage() {
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
+    let warmingTimer: ReturnType<typeof setTimeout> | null = null;
     let abortController: AbortController | null = null;
+    // Set once the /events stream delivers its first frame (the `stream_open` marker,
+    // or any bzcode frame). Distinguishes "stream confirmed alive" from "stream never
+    // opened" so we only show 'disconnected' for a stream that genuinely dropped.
+    let streamConfirmed = false;
 
     // Helper: restore history from messages array (same logic as before)
     const restoreHistory = (
@@ -4931,8 +4936,17 @@ function AgentPage() {
             }
           })
           .catch(() => null);
-        setConnStatus('connected');
-        reconnectAttemptsRef.current = 0;
+        // Connect POST succeeded, but bzcode may still be booting/replaying its
+        // transcript on a cold start. Don't claim 'connected' yet — wait for the first
+        // frame on the /events stream (see the read loop below). This avoids the
+        // connected→disconnected flash when a slow cold start's stream isn't ready.
+        setConnStatus('warming');
+        // Watchdog: if the stream never delivers a first frame within this window
+        // (longer than the backend's 30s _READY_TIMEOUT), treat it as a genuine
+        // failure and fall into the reconnect/backoff path rather than warming forever.
+        warmingTimer = setTimeout(() => {
+          if (!cancelled && !streamConfirmed && abortController) abortController.abort();
+        }, 45_000);
 
         // Load title
         listSessions(HTTP_BASE, activeCwd)
@@ -5001,6 +5015,17 @@ function AgentPage() {
           buffer = chunks.pop() ?? '';
           if (isFirstRead) {
             isFirstRead = false;
+            // First frame on the stream — it's confirmed alive. Now (and only now) do
+            // we declare the connection established. On a cold start this is the
+            // `stream_open` marker; on a warm reconnect it's the same marker or a
+            // replayed frame. Reset the reconnect budget here, not on the connect POST.
+            streamConfirmed = true;
+            if (warmingTimer) {
+              clearTimeout(warmingTimer);
+              warmingTimer = null;
+            }
+            reconnectAttemptsRef.current = 0;
+            setConnStatus('connected');
             console.log(
               '[stream] first chunk types:',
               chunks.map(c => {
@@ -5033,12 +5058,17 @@ function AgentPage() {
           return;
         }
         console.error('[sse] connection error:', e);
-        setConnStatus('error');
+        // Only surface an error visibly if the stream had confirmed open and then
+        // dropped. A failure before the first frame (slow/failed cold start) stays in
+        // 'warming' and retries silently — no premature "Connection failed" flash.
+        if (streamConfirmed) setConnStatus('error');
       }
 
       // Reconnect with backoff (unless intentionally cancelled)
       if (!cancelled) {
-        setConnStatus('disconnected');
+        // Show 'disconnected' only for a stream that was genuinely open then dropped.
+        // Otherwise keep the calmer 'warming' state while we retry the cold start.
+        if (streamConfirmed) setConnStatus('disconnected');
         const MAX_RECONNECT = 5;
         const attempt = reconnectAttemptsRef.current;
         if (attempt >= MAX_RECONNECT) {
@@ -5060,6 +5090,7 @@ function AgentPage() {
       if (abortController) abortController.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (autoSendTimer) clearTimeout(autoSendTimer);
+      if (warmingTimer) clearTimeout(warmingTimer);
     };
   }, [connectParams, reconnectKey, items.findLast, activeCwd, agentMode]);
 
@@ -5883,15 +5914,19 @@ function AgentPage() {
             <div ref={scrollRef} className="chat-messages">
               {allItems.length === 0 ? (
                 <div className="chat-empty">
-                  {/* Connecting state: show for any session while bzcode is starting */}
-                  {connStatus === 'connecting' && (
+                  {/* Connecting / warming: show while the runtime is being reached
+                      (connecting) or bzcode is booting/replaying its transcript before
+                      its first stream frame (warming). Both are calm loading states. */}
+                  {(connStatus === 'connecting' || connStatus === 'warming') && (
                     <>
                       <BoltzbitLogo
                         key={activeSessionId || reconnectKey}
                         size={40}
                         className="boltzbit-logo-animate"
                       />
-                      <p className="chat-loading-label">Connecting…</p>
+                      <p className="chat-loading-label">
+                        {connStatus === 'warming' ? 'Starting session…' : 'Connecting…'}
+                      </p>
                     </>
                   )}
 

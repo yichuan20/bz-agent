@@ -159,6 +159,18 @@ class DevServerService:
 
         port = await _find_free_port()
 
+        # NOTE: Behind the workspace reverse proxy, Vite's HMR (hot-module-reload)
+        # WebSocket fails to connect and prints a console error in the *preview iframe*:
+        #   "WebSocket connection to 'wss://<host>/?token=…' failed … [vite] failed to
+        #    connect to websocket."
+        # This is EXPECTED and harmless — the preview itself loads and works over HTTP;
+        # only live-reload-on-edit is lost (reload the iframe to see changes). The proxy
+        # forwards HTTP but not the WS upgrade for the per-port preview subdomains, and
+        # Vite then falls back to wss://localhost:<port> which the browser can't reach.
+        # We do NOT try to silence it: the error originates in the previewed app's own
+        # Vite client (a different origin/iframe), so the parent frontend can't intercept
+        # it, and Vite has no CLI flag to disable HMR (it needs server.hmr:false in the
+        # user's own vite.config, which we don't own). HMR is intentionally not supported.
         pkg_dir = Path(cwd)
         if (pkg_dir / "pnpm-lock.yaml").exists():  # noqa: ASYNC240
             cmd = ["pnpm", "dev", "--port", str(port), "--host", "0.0.0.0"]

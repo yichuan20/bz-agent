@@ -1,6 +1,6 @@
 [project]
 name = "workspace-backend"
-version = "0.6.5"
+version = "0.6.6"
 description = "BoltzAgent workspace backend — a FastAPI service that manages bzcode agent sessions."
 requires-python = ">=3.12"
 dependencies = [

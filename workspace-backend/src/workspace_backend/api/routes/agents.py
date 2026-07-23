@@ -242,10 +242,13 @@ async def connect_agent(
         meta = await svc.get(agent_id)
         mode = meta.mode if meta else await modes.default_mode()
 
-    # Write/refresh session config so bzcode picks up identity/soul/settings on resume.
-    compiled = await svc.write_config(agent_id, mode, working_dir=effective_cwd)
+    # Config is written once at create — connect does NOT rewrite it (that caused a
+    # TOCTOU crash when two connects raced on the same dir, and bzcode only reads the
+    # config at spawn anyway). Derive the bzcode runtime mode from the mode definition
+    # without touching the filesystem.
+    session_mode = await modes.session_mode_for(mode)
 
-    runtime = await pool.get_or_create(agent_id, effective_cwd, mode, session_mode=compiled.session_mode)
+    runtime = await pool.get_or_create(agent_id, effective_cwd, mode, session_mode=session_mode)
     # Note: modes/commands are best-effort here — on a fresh spawn bzcode's `session`
     # message may not be dispatched yet, so they can be empty. The client reads them
     # (and the current mode, from the follow-up `status: idle`) off the /events stream,

@@ -7,7 +7,7 @@ the architecture and roadmap.
 
 # Single source of truth for the product version. Keep in sync with
 # ``pyproject.toml`` and ``frontend/src/version.ts`` via ``scripts/set-version.sh``.
-__version__ = "0.6.5"
+__version__ = "0.6.6"
 
 from workspace_backend.config import Settings, get_settings
 
