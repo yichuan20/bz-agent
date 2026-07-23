@@ -14,6 +14,19 @@ _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 
 _configured = False
 
+# High-frequency polling endpoints that flood the access log — suppress them.
+_MUTED_PATHS = frozenset([
+    "/api/v1/agents",
+    "/api/v1/models",
+    "/healthz",
+])
+
+
+class _SuppressPolling(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(path in msg for path in _MUTED_PATHS)
+
 
 def configure_logging(level: str = "INFO") -> None:
     """Configure the root logger once. Idempotent across repeated calls."""
@@ -23,6 +36,8 @@ def configure_logging(level: str = "INFO") -> None:
         logging.getLogger().setLevel(resolved)
         return
     logging.basicConfig(level=resolved, format=_LOG_FORMAT, datefmt=_DATE_FORMAT)
+    # Suppress noisy polling from uvicorn's access log.
+    logging.getLogger("uvicorn.access").addFilter(_SuppressPolling())
     _configured = True
 
 

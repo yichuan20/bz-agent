@@ -40,7 +40,8 @@ const TableGridContainer = ({ children, ...p }) => (
 );
 
 const TableGridCell = ({ children, isSelected, isHovered, style = {}, ...p }) => (
-  <div
+  <button
+    type="button"
     style={{
       width: 16,
       height: 16,
@@ -50,12 +51,13 @@ const TableGridCell = ({ children, isSelected, isHovered, style = {}, ...p }) =>
       background: isSelected
         ? 'color-mix(in srgb,var(--accent-blue) 20%,transparent)'
         : 'transparent',
+      padding: 0,
       ...style,
     }}
     {...p}
   >
     {children}
-  </div>
+  </button>
 );
 
 const TableSizeText = ({ children, ...p }) => (
@@ -144,8 +146,8 @@ const TablePickerTooltip = ({ onTableSelect = () => {}, triggerIcon, disabled = 
 
   return (
     <TablePickerContainer>
-      <button
-        type="button"
+      <div
+        role="presentation"
         onClick={() => {
           if (!disabled) {
             setIsOpen(true);
@@ -167,7 +169,7 @@ const TablePickerTooltip = ({ onTableSelect = () => {}, triggerIcon, disabled = 
         }
       >
         {triggerIcon}
-      </button>
+      </div>
       {isOpen && !disabled && (
         <TablePickerTip ref={tipRef} isVisible={isOpen}>
           <TableGridContainer

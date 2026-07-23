@@ -139,7 +139,6 @@
   border-radius: 5px;
   font-size: 11px;
   font-weight: 500;
-  cursor: pointer;
   color: var(--text-primary);
   background: transparent;
   border: none;
@@ -148,7 +147,20 @@
 .bzt-toolbar-dropdown:hover {
   background: var(--bg-hover, var(--bg-tertiary));
 }
-.bzt-toolbar-dropdown > svg {
+
+.bzt-heading-dropdown-trigger {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+}
+.bzt-heading-dropdown-trigger > svg {
   width: 10px;
   height: 10px;
   stroke: currentColor;
@@ -159,12 +171,10 @@
 .bzt-font-dropdown {
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
-  cursor: pointer;
   color: var(--text-primary);
   background: transparent;
   position: relative;
@@ -174,10 +184,23 @@
 .bzt-font-dropdown:hover {
   background: var(--bg-hover, var(--bg-tertiary));
 }
-.bzt-font-dropdown > span {
+
+.bzt-font-dropdown-trigger {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+}
+.bzt-font-dropdown-trigger > span {
   flex: 1;
 }
-.bzt-font-dropdown > svg {
+.bzt-font-dropdown-trigger > svg {
   flex-shrink: 0;
   margin-left: auto;
   width: 10px;
@@ -214,6 +237,9 @@
   color: var(--text-secondary);
   background: transparent;
   transition: all 0.12s ease;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 .bzt-font-option:hover {
   background: var(--bg-hover, var(--bg-tertiary));
@@ -227,13 +253,10 @@
 .bzt-font-size-dropdown {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
   padding: 4px 6px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
-  cursor: pointer;
   color: var(--text-primary);
   background: transparent;
   position: relative;
@@ -242,6 +265,20 @@
 }
 .bzt-font-size-dropdown:hover {
   background: var(--bg-hover, var(--bg-tertiary));
+}
+
+.bzt-font-size-dropdown-trigger {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
 }
 
 .bzt-font-size-dropdown-menu {
@@ -270,8 +307,11 @@
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
+  background: transparent;
   text-align: center;
   transition: all 0.12s ease;
+  border: none;
+  width: 100%;
 }
 .bzt-font-size-option:hover {
   background: var(--bg-hover, var(--bg-tertiary));
@@ -324,8 +364,12 @@
   border-radius: 5px;
   cursor: pointer;
   color: var(--text-secondary);
+  background: transparent;
   transition: all 0.12s ease;
   font-size: 12px;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 .bzt-heading-option:hover {
   background: var(--bg-hover, var(--bg-tertiary));
@@ -416,7 +460,11 @@
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
+  background: transparent;
   transition: all 0.12s ease;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 .bzt-line-spacing-option:hover {
   background: var(--bg-hover, var(--bg-tertiary));
@@ -458,6 +506,10 @@
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 .bzt-more-dropdown-item:hover {
   background: var(--bg-hover, var(--bg-tertiary));

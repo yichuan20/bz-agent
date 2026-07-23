@@ -94,7 +94,7 @@ async def build_context(settings: Settings) -> AppContext:
     widget_service = WidgetService(server_data / "widgets")
     widget_db_service = WidgetDbService(server_data, paths.sessions_dir)
     doc_service = DocService()
-    excel_service = ExcelService()
+    excel_service = ExcelService(scripts_dir=assets_root / "scripts")
     ppt_service = PptService()
     dev_server_service = DevServerService()
 

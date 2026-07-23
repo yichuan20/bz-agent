@@ -28,13 +28,14 @@ _SIDECAR_SUFFIX = ".excel.json"
 # ── Formula recalc (delegates to excel-worker.py engine, loaded once) ────────
 
 
-def _recalc_sheets(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _recalc_sheets(sheets: list[dict[str, Any]], scripts_dir: Path | None = None) -> list[dict[str, Any]]:
     """Re-evaluate all formula cells across all sheets. Best-effort; returns original on error."""
     try:
         import importlib.util
 
-        _scripts = Path(__file__).resolve().parents[4] / "bzcode_assets" / "scripts"
-        _worker_path = _scripts / "excel-worker.py"
+        if scripts_dir is None:
+            scripts_dir = Path(__file__).resolve().parents[4] / "bzcode_assets" / "scripts"
+        _worker_path = scripts_dir / "excel-worker.py"
         _spec = importlib.util.spec_from_file_location("_excel_worker", str(_worker_path))
         if _spec and _spec.loader:
             _mod = importlib.util.module_from_spec(_spec)
@@ -252,6 +253,9 @@ def _write_xlsx(p: Path, sidecar: dict[str, Any]) -> None:
 
 
 class ExcelService:
+    def __init__(self, scripts_dir: Path | None = None) -> None:
+        self._scripts_dir = scripts_dir
+
     async def load(self, path: str) -> dict[str, Any]:
         p = Path(path)
 
@@ -314,7 +318,7 @@ class ExcelService:
 
             # Re-evaluate all formula cells using the same engine as excel-worker.py
             # (imported directly — no subprocess needed).
-            sc["sheets"] = _recalc_sheets(sc["sheets"])
+            sc["sheets"] = _recalc_sheets(sc["sheets"], self._scripts_dir)
 
             _write_sidecar(p, sc)
             _write_xlsx(p, sc)

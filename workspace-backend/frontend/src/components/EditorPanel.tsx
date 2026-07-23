@@ -1830,12 +1830,14 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   .filter(Boolean)
                   .join(' ');
                 return (
-                  <button
+                  <div
                     key={tab.path}
-                    type="button"
+                    role="tab"
+                    tabIndex={0}
                     draggable
                     className={cls}
                     onClick={() => setActiveTab(tab.path)}
+                    onKeyDown={e => e.key === 'Enter' && setActiveTab(tab.path)}
                     onDragStart={e => {
                       setDragTab(tab.path);
                       e.dataTransfer.effectAllowed = 'move';
@@ -1882,7 +1884,7 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                     >
                       <XIcon size={10} weight="bold" />
                     </button>
-                  </button>
+                  </div>
                 );
               })
             )}

@@ -218,7 +218,6 @@ export default function Sidebar({ expanded, onToggle, bzcodeOutdated, onNewChat 
   }
 
   const w = expanded ? SIDEBAR_WIDTH : SIDEBAR_ICON_WIDTH;
-  const [headerHovered, setHeaderHovered] = useState(false);
 
   // Custom tooltip (replaces slow native title tooltips in collapsed mode)
   const [tooltip, setTooltip] = useState<{ label: string; y: number } | null>(null);
@@ -288,7 +287,7 @@ export default function Sidebar({ expanded, onToggle, bzcodeOutdated, onNewChat 
       >
         {expanded && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BoltzAgentLogo size={24} />
+            <BoltzAgentLogo size={32} />
             <span
               style={{
                 fontSize: 15,
@@ -302,55 +301,56 @@ export default function Sidebar({ expanded, onToggle, bzcodeOutdated, onNewChat 
             </span>
           </div>
         )}
-        <button
-          type="button"
-          onClick={onToggle}
-          title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
-          style={{
-            width: 32,
-            height: 32,
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 8,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            position: 'relative',
-            transition: 'background 120ms ease, color 120ms ease',
-          }}
-          onMouseEnter={e => {
-            setHeaderHovered(true);
-            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={e => {
-            setHeaderHovered(false);
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
-          }}
-        >
-          {bzcodeOutdated && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: '#f97316',
-                border: '1.5px solid var(--bg-primary)',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-          {/* Collapsed: show logo by default, toggle icon on hover */}
-          {!expanded && !headerHovered ? (
-            <BoltzAgentLogo size={22} />
-          ) : (
+        {/* Collapsed + not hovered: logo directly (no button wrapper) */}
+        {!expanded ? (
+          <div style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }} onClick={onToggle}>
+            <BoltzAgentLogo size={32} />
+            {bzcodeOutdated && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#f97316',
+                  border: '1.5px solid var(--bg-primary)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onToggle}
+            title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            style={{
+              width: 32,
+              height: 32,
+              padding: 0,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 8,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              position: 'relative',
+              transition: 'background 120ms ease, color 120ms ease',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+            }}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <rect x="1.5" y="2" width="2" height="12" rx="1" fill="currentColor" opacity="0.6" />
               <path
@@ -361,8 +361,8 @@ export default function Sidebar({ expanded, onToggle, bzcodeOutdated, onNewChat 
                 strokeLinejoin="round"
               />
             </svg>
-          )}
-        </button>
+          </button>
+        )}
       </div>
 
       {/* ── New chat button ── */}

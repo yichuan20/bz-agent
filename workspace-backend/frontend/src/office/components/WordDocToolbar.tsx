@@ -85,9 +85,9 @@ const FontDropdownMenu = ({ children, $open, ...p }: SC) => (
 );
 
 const FontOption = ({ children, $active, ...p }: SC) => (
-  <div className="bzt-font-option" data-active={$active ? 'true' : 'false'} {...p}>
+  <button type="button" className="bzt-font-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
-  </div>
+  </button>
 );
 
 const FontSizeDropdown = ({ children, ...p }: SC) => (
@@ -103,9 +103,9 @@ const FontSizeDropdownMenu = ({ children, $open, ...p }: SC) => (
 );
 
 const FontSizeOption = ({ children, $active, ...p }: SC) => (
-  <div className="bzt-font-size-option" data-active={$active ? 'true' : 'false'} {...p}>
+  <button type="button" className="bzt-font-size-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
-  </div>
+  </button>
 );
 
 const FontSizeBtn = ({ children, ...p }: SC) => (
@@ -121,9 +121,9 @@ const HeadingDropdownMenu = ({ children, $open, ...p }: SC) => (
 );
 
 const HeadingOption = ({ children, $variant, ...p }: SC) => (
-  <div className="bzt-heading-option" data-variant={$variant} {...p}>
+  <button type="button" className="bzt-heading-option" data-variant={$variant} {...p}>
     {children}
-  </div>
+  </button>
 );
 
 const ColorPicker = ({ children, ...p }: SC) => (
@@ -145,14 +145,15 @@ const ColorPickerGrid = ({ children, ...p }: SC) => (
 );
 
 const ColorSwatch = ({ children, $color, $transparent, ...p }: SC) => (
-  <div
+  <button
+    type="button"
     className="bzt-color-swatch"
     style={{ background: $color }}
     data-transparent={$transparent ? 'true' : 'false'}
     {...p}
   >
     {children}
-  </div>
+  </button>
 );
 
 const LineSpacingDropdown = ({ children, ...p }: SC) => (
@@ -168,9 +169,9 @@ const LineSpacingMenu = ({ children, $open, ...p }: SC) => (
 );
 
 const LineSpacingOption = ({ children, $active, ...p }: SC) => (
-  <div className="bzt-line-spacing-option" data-active={$active ? 'true' : 'false'} {...p}>
+  <button type="button" className="bzt-line-spacing-option" data-active={$active ? 'true' : 'false'} {...p}>
     {children}
-  </div>
+  </button>
 );
 
 const MoreMenu = ({ children, ...p }: SC) => (
@@ -186,9 +187,9 @@ const MoreDropdown = ({ children, $open, ...p }: SC) => (
 );
 
 const MoreDropdownItem = ({ children, ...p }: SC) => (
-  <div className="bzt-more-dropdown-item" {...p}>
+  <button type="button" className="bzt-more-dropdown-item" {...p}>
     {children}
-  </div>
+  </button>
 );
 
 const MoreDropdownDivider = ({ children, ...p }: SC) => (
@@ -556,16 +557,20 @@ const WordDocToolbar = ({
       </ToolbarDragHandle>
 
       {/* Font Family Dropdown */}
-      <FontDropdown
-        onClick={() => {
-          closeAllDropdowns();
-          setFontDropdownOpen(!fontDropdownOpen);
-        }}
-      >
-        <span>{currentFont}</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <polyline points="6,9 12,15 18,9" />
-        </svg>
+      <FontDropdown>
+        <button
+          type="button"
+          className="bzt-font-dropdown-trigger"
+          onClick={() => {
+            closeAllDropdowns();
+            setFontDropdownOpen(!fontDropdownOpen);
+          }}
+        >
+          <span>{currentFont}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="6,9 12,15 18,9" />
+          </svg>
+        </button>
         <FontDropdownMenu
           $open={fontDropdownOpen}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -590,13 +595,17 @@ const WordDocToolbar = ({
 
       {/* Font Size Controls */}
       <FontSizeBtn onClick={decreaseFontSize}>−</FontSizeBtn>
-      <FontSizeDropdown
-        onClick={() => {
-          closeAllDropdowns();
-          setFontSizeDropdownOpen(!fontSizeDropdownOpen);
-        }}
-      >
-        <span>{currentFontSize}</span>
+      <FontSizeDropdown>
+        <button
+          type="button"
+          className="bzt-font-size-dropdown-trigger"
+          onClick={() => {
+            closeAllDropdowns();
+            setFontSizeDropdownOpen(!fontSizeDropdownOpen);
+          }}
+        >
+          <span>{currentFontSize}</span>
+        </button>
         <FontSizeDropdownMenu
           $open={fontSizeDropdownOpen}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -621,16 +630,20 @@ const WordDocToolbar = ({
       <ToolbarDivider />
 
       {/* Heading Dropdown */}
-      <ToolbarDropdown
-        onClick={() => {
-          closeAllDropdowns();
-          setHeadingDropdownOpen(!headingDropdownOpen);
-        }}
-      >
-        <span>{currentHeading}</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <polyline points="6,9 12,15 18,9" />
-        </svg>
+      <ToolbarDropdown>
+        <button
+          type="button"
+          className="bzt-heading-dropdown-trigger"
+          onClick={() => {
+            closeAllDropdowns();
+            setHeadingDropdownOpen(!headingDropdownOpen);
+          }}
+        >
+          <span>{currentHeading}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="6,9 12,15 18,9" />
+          </svg>
+        </button>
         <HeadingDropdownMenu
           $open={headingDropdownOpen}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}

@@ -294,26 +294,13 @@ const ImageResizeOverlay = ({
 
   return (
     <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-move handle; role/tabIndex applied conditionally */}
-      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-label is only set when role=button */}
       <div
-        role={isMovable ? 'button' : undefined}
-        tabIndex={isMovable ? 0 : undefined}
-        aria-label={isMovable ? 'Move image' : undefined}
         style={{
           ...overlayStyle,
-          cursor: isMovable ? 'move' : 'default',
-          pointerEvents: isMovable ? 'all' : 'none',
+          cursor: 'default',
+          pointerEvents: 'none',
           opacity: isDragging ? 0.35 : 1,
         }}
-        onMouseDown={isMovable ? handleMoveStart : undefined}
-        onKeyDown={
-          isMovable
-            ? e => {
-                if (e.key === 'Enter' || e.key === ' ') handleMoveStart(e);
-              }
-            : undefined
-        }
       >
         {/* Selection border */}
         <div
@@ -325,6 +312,27 @@ const ImageResizeOverlay = ({
             pointerEvents: 'none',
           }}
         />
+
+        {/* Drag-move handle — separate element so it doesn't contain the resize/action buttons */}
+        {isMovable && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: drag gesture; keyboard activation via onKeyDown
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Move image"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              cursor: 'move',
+              pointerEvents: 'all',
+              background: 'transparent',
+            }}
+            onMouseDown={handleMoveStart}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') handleMoveStart(e);
+            }}
+          />
+        )}
 
         {/* Resize handles */}
         {HANDLES.map(h => (

@@ -136,6 +136,10 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [xs, setXs] = useState([]);
   const [ys, setYs] = useState([]);
+  const xsRef = useRef([]);
+  const ysRef = useRef([]);
+  xsRef.current = xs;
+  ysRef.current = ys;
   const [isFocussed, setIsFocussed] = useState(false);
   const [_canvasVersion, setCanvasVersion] = useState(0); // increments when canvas is resized
   // Track mousedown position to require a minimum drag distance before extending selection.
@@ -443,8 +447,8 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
       ctx,
       doc,
       scrollY,
-      xs,
-      ys,
+      xs: xsRef.current,
+      ys: ysRef.current,
       topMargin,
       hideCaretAtIndex: selectedImageIndex,
       caretVisible: false,
@@ -456,7 +460,8 @@ const DocArea = ({ className, doc = EMPTY_DOC, onDocChange = () => {}, topMargin
     if (caretVisible && selStart === selEnd && selectedImageIndex == null) {
       paintCursor(ctx, newXs, newYs, selStart, scrollY, styles, topMargin);
     }
-  }, [styles, selStart, selEnd, scrollY, selectedImageIndex, caretVisible, doc, topMargin, xs, ys]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: xs/ys read via refs to avoid self-loop
+  }, [styles, selStart, selEnd, scrollY, selectedImageIndex, caretVisible, doc, topMargin, _canvasVersion, _imageLoadTrigger]);
 
   const onMouseDown = e => {
     e.preventDefault();

@@ -13,6 +13,7 @@ export function BoltzAgentLogo({ size = 32 }: { size?: number }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
+      style={{ width: size, height: size, flexShrink: 0, display: 'block' }}
     >
       {/* Stone background — matches token logo-bg-rect */}
       <rect width="134.054" height="134" rx="31.9125" fill="#5E5A55" />
