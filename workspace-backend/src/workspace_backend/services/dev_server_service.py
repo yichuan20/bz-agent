@@ -11,10 +11,14 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
-import sys
+import signal
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+
+from workspace_backend.logging import get_logger
+
+log = get_logger(__name__)
 
 # Resolves a tool name (e.g. ``pnpm``, ``node``) to its configured absolute path,
 # or ``None`` to fall back to PATH-based auto-detection.
@@ -42,7 +46,7 @@ async def _pipe_output(proc: asyncio.subprocess.Process, label: str) -> None:
     try:
         async for raw in proc.stdout:
             line = raw.decode(errors="replace").rstrip()
-            print(f"[{label}] {line}", file=sys.stderr)
+            log.info("[%s] %s", label, line)
     except Exception:
         pass
 
@@ -66,6 +70,43 @@ async def _is_listening(port: int) -> bool:
     except OSError:
         pass
     return True
+
+
+# Seconds to wait for a graceful process-group SIGTERM before escalating to SIGKILL.
+_TERM_GRACE = 3.0
+
+
+async def _kill_process_tree(proc: asyncio.subprocess.Process, label: str) -> None:
+    """Terminate ``proc`` and every child it spawned, then reap it.
+
+    Dev servers spawn a tree (``pnpm`` → ``node`` → ``vite`` → ``esbuild`` …). Calling
+    ``proc.terminate()`` only signals the direct child, orphaning the rest — which keep
+    holding memory (fatal on a small box). We spawn with ``start_new_session=True`` so the
+    whole tree shares a process group, then signal the group. Falls back to signalling just
+    the process if the group send fails (e.g. it already exited).
+    """
+    if proc.returncode is not None:
+        return
+
+    def _signal_group(sig: int) -> None:
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError):
+            try:
+                proc.send_signal(sig)
+            except ProcessLookupError:
+                pass
+
+    _signal_group(signal.SIGTERM)
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=_TERM_GRACE)
+    except TimeoutError:
+        log.warning("[dev-server] %s did not exit on SIGTERM — sending SIGKILL", label)
+        _signal_group(signal.SIGKILL)
+        try:
+            await proc.wait()
+        except Exception:
+            pass
 
 
 class DevServerService:
@@ -98,11 +139,23 @@ class DevServerService:
         if not cwd or not Path(cwd).is_dir():  # noqa: ASYNC240
             raise ValueError("invalid cwd")
 
+        # Reap any tracked servers that have already exited so the registry reflects
+        # reality (crashed dev servers otherwise linger forever) and drop this cwd's
+        # entry if it is dead.
+        await self._reap_dead()
+
         # Return existing running server
         if cwd in _dev_servers:
             entry = _dev_servers[cwd]
             if entry["proc"].returncode is None:
                 return {"port": entry["port"]}
+
+        # One dev server at a time. On a constrained box (1 vCPU / 2 GB) each Vite
+        # server can hold hundreds of MB, so stacking them exhausts memory and starves
+        # the event loop. Stop every other running server before spawning a new one.
+        for other_cwd in list(_dev_servers):
+            if other_cwd != cwd:
+                await self.stop(other_cwd)
 
         port = await _find_free_port()
 
@@ -115,6 +168,15 @@ class DevServerService:
             cmd = ["npm", "run", "dev", "--", "--port", str(port), "--host", "0.0.0.0"]
 
         env = os.environ.copy()
+
+        # Cap the child's resource use for small hosts (1 vCPU / 2 GB): bound Node's
+        # heap and stop Rust-based toolchain bits (esbuild/lightningcss/swc via rayon)
+        # from spawning a worker thread per core — thread creation fails with EAGAIN
+        # under memory pressure, crashing the build. Only set when unset so a project
+        # can override. See the ThreadPoolBuildError seen on the 2 GB workspace box.
+        env.setdefault("NODE_OPTIONS", "--max-old-space-size=512")
+        env.setdefault("RAYON_NUM_THREADS", "2")
+        env.setdefault("UV_THREADPOOL_SIZE", "2")
 
         # If the user configured an absolute path for node, prepend its dir so the
         # package manager (and anything it spawns) resolves that node first.
@@ -132,7 +194,7 @@ class DevServerService:
             if resolved:
                 cmd = [resolved] + cmd[1:]
 
-        print(f"[dev-server] starting {' '.join(cmd)} in {cwd}", file=sys.stderr)
+        log.info("[dev-server] starting %s in %s", " ".join(cmd), cwd)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -140,9 +202,13 @@ class DevServerService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
+                # New session → the whole tree (pnpm → node → vite → esbuild) shares a
+                # process group, so stop() can signal the group and reap every child
+                # instead of orphaning them.
+                start_new_session=True,
             )
         except FileNotFoundError as exc:
-            print(f"[dev-server] command not found: {exc}", file=sys.stderr)
+            log.error("[dev-server] command not found: %s", exc)
             raise FileNotFoundError(f"command not found: {exc}") from exc
 
         asyncio.create_task(_pipe_output(proc, f"dev-server:{Path(cwd).name}"))
@@ -153,11 +219,11 @@ class DevServerService:
         # for the port to bind here; the frontend polls status() until it is listening.
         await asyncio.sleep(_CRASH_GUARD)
         if proc.returncode is not None:
-            print(f"[dev-server] exited immediately (rc={proc.returncode})", file=sys.stderr)
+            log.error("[dev-server] exited immediately (rc=%s)", proc.returncode)
             _dev_servers.pop(cwd, None)
             raise RuntimeError("dev server exited immediately — check package.json")
 
-        print(f"[dev-server] started pid={proc.pid} port={port}", file=sys.stderr)
+        log.info("[dev-server] started pid=%s port=%s", proc.pid, port)
         return {"port": port, "pid": proc.pid}
 
     async def status(self, cwd: str, default_cwd: str) -> dict[str, Any]:
@@ -174,11 +240,19 @@ class DevServerService:
         return {"running": True, "listening": await _is_listening(port), "port": port}
 
     async def stop(self, cwd: str) -> None:
-        """Stop the dev server for ``cwd``. Copied verbatim from old app.py dev_server_stop."""
+        """Stop the dev server for ``cwd`` and kill its whole process tree."""
         entry = _dev_servers.pop(cwd, None)
         if entry:
-            print(f"[dev-server] stopping pid={entry['proc'].pid} cwd={cwd}", file=sys.stderr)
-            try:
-                entry["proc"].terminate()
-            except Exception:
-                pass
+            proc = entry["proc"]
+            log.info("[dev-server] stopping pid=%s cwd=%s", proc.pid, cwd)
+            await _kill_process_tree(proc, f"dev-server:{Path(cwd).name}")
+
+    async def _reap_dead(self) -> None:
+        """Drop registry entries whose process has already exited.
+
+        Keeps ``_dev_servers`` in sync with reality — crashed/exited dev servers would
+        otherwise linger as stale entries. Their process is already dead so there is
+        nothing to kill; we just forget them.
+        """
+        for dead_cwd in [c for c, e in _dev_servers.items() if e["proc"].returncode is not None]:
+            _dev_servers.pop(dead_cwd, None)

@@ -281,11 +281,20 @@ class BoltzHubService:
             await asyncio.to_thread(_sync_env_oauth_client_id, cwd, app_id)
             build_cmd = cfg.get("buildCommand") or "pnpm build"
             yield _emit("build", f"Running: {build_cmd}")
+            # Cap toolchain resource use on small hosts (1 vCPU / 2 GB): bound Node's
+            # heap and stop Rust-based build tools (rayon) from spawning a worker thread
+            # per core — thread creation fails with EAGAIN under memory pressure, which
+            # surfaces as a ThreadPoolBuildError panic. Only set when unset.
+            build_env = os.environ.copy()
+            build_env.setdefault("NODE_OPTIONS", "--max-old-space-size=512")
+            build_env.setdefault("RAYON_NUM_THREADS", "2")
+            build_env.setdefault("UV_THREADPOOL_SIZE", "2")
             proc = await asyncio.create_subprocess_shell(
                 build_cmd,
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=build_env,
             )
             _, stderr = await proc.communicate()
             if proc.returncode != 0:
