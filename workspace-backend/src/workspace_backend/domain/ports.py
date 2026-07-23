@@ -153,6 +153,24 @@ class SecretStore(Protocol):
 
 
 @runtime_checkable
+class ToolPathsStore(Protocol):
+    """Persistence for configured absolute paths to toolchain executables.
+
+    Maps a tool name (e.g. ``pnpm``, ``node``) to the absolute path of its
+    binary. Used by the dev server to locate the package manager and node when
+    they are installed outside the default PATH search locations.
+    """
+
+    async def get_all(self) -> dict[str, str]:
+        """Return all configured tool → path mappings."""
+        ...
+
+    async def set_all(self, paths: dict[str, str]) -> None:
+        """Store (overwrite) the full tool → path mapping."""
+        ...
+
+
+@runtime_checkable
 class ModeConfigStore(Protocol):
     """Read access to the agent-modes configuration (``agent_modes.json``)."""
 

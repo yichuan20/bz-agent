@@ -54,7 +54,7 @@ const DOC_ICONS: Record<string, string> = {
   md: '🗒',
 };
 
-import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir, renameFile as apiRenameFile, duplicateFile as apiDuplicateFile, uploadFileUrl, downloadFileUrl, viewFileUrl, parseDoc, setDocCursor, saveDoc, getPptStatus, startDevServer, stopDevServer } from '#/lib/api';
+import { HTTP_BASE, listFiles as apiListFiles, readFile as apiReadFile, writeFile as apiWriteFile, deleteFile as apiDeleteFile, makeDir as apiMakeDir, renameFile as apiRenameFile, duplicateFile as apiDuplicateFile, uploadFileUrl, downloadFileUrl, viewFileUrl, parseDoc, setDocCursor, saveDoc, getPptStatus, startDevServerAndWait, stopDevServer, devServerPreviewUrl } from '#/lib/api';
 // HTTP_BASE imported from '#/lib/api'
 
 // Structural colours come from CSS variables (theme-adaptive).
@@ -1978,8 +1978,8 @@ export function EditorPanel({ cwd, codeMode, refreshKey, sessionId, isStreaming 
                   onClick={async () => {
                     setPreviewLoading(true);
                     try {
-                      const d = await startDevServer(HTTP_BASE, cwd);
-                      if (d.url) setPreviewUrl(d.url);
+                      const d = await startDevServerAndWait(HTTP_BASE, cwd);
+                      if (d.port) setPreviewUrl(devServerPreviewUrl(d.port));
                       else setError('Failed to start dev server');
                     } catch (e) {
                       setError(String(e));

@@ -15,11 +15,13 @@ _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 _configured = False
 
 # High-frequency polling endpoints that flood the access log — suppress them.
-_MUTED_PATHS = frozenset([
-    "/api/v1/agents",
-    "/api/v1/models",
-    "/healthz",
-])
+_MUTED_PATHS = frozenset(
+    [
+        "/api/v1/agents",
+        "/api/v1/models",
+        "/healthz",
+    ]
+)
 
 
 class _SuppressPolling(logging.Filter):

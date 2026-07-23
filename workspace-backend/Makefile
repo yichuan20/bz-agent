@@ -5,7 +5,7 @@
 #   make dev-frontend   frontend only (vite :5010, proxies /api+/healthz → :18789)
 #   make build-frontend build the SPA into frontend/dist/
 #   make serve          build the SPA then serve it from the backend on :18789
-#   make package        build + zip a deployable bundle into dist/ (VERSION optional)
+#   make package        build + zip a deployable bundle into dist/ (version from source; set-version first)
 #   make set-version     stamp one version into backend + frontend (VERSION=x.y.z)
 #   make check          backend (ruff+mypy+pytest) + frontend (biome+typecheck+test)
 
@@ -33,10 +33,10 @@ serve: build-frontend
 	uv run uvicorn workspace_backend.app:app --port $(PORT)
 
 # Build the SPA, export requirements.txt from uv.lock, and zip a deployable bundle
-# into dist/bz-agent-v<ver>.zip. Version auto-detects from the frontend; override
-# with `make package VERSION=0.6.5`.
+# into dist/bz-agent-v<ver>.zip. The version is read from the source tree; stamp it
+# first with `make set-version VERSION=x.y.z`.
 package:
-	./scripts/package.sh $(VERSION)
+	./scripts/package.sh
 
 # Set and sync the single product version across backend (__init__.py, pyproject.toml)
 # and frontend (version.ts). Run with no VERSION to just report the current values.

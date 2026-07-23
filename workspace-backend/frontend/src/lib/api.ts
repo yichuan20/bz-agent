@@ -432,6 +432,29 @@ export async function deleteCredential(base: string, key: string): Promise<void>
   return jsonDelete(`${base}/api/v1/secrets/${encodeURIComponent(key)}`);
 }
 
+// ── Tool paths (npm/pnpm/node) ────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/settings/tool-paths
+ * Returns configured absolute paths per tool plus a per-tool `valid` flag
+ * (path set and points at an existing file).
+ */
+export async function getToolPaths(
+  base: string,
+): Promise<{ paths: Record<string, string>; valid: Record<string, boolean> }> {
+  return jsonGet(`${base}/api/v1/settings/tool-paths`);
+}
+
+/**
+ * PUT /api/v1/settings/tool-paths {paths}
+ */
+export async function setToolPaths(
+  base: string,
+  paths: Record<string, string>,
+): Promise<void> {
+  await jsonPut(`${base}/api/v1/settings/tool-paths`, { paths });
+}
+
 // ── Files ─────────────────────────────────────────────────────────────────────
 
 type NewFileEntry = {
@@ -736,11 +759,61 @@ export async function getPptStatus(
 
 // ── Dev server ────────────────────────────────────────────────────────────────
 
-export async function startDevServer(
+export async function startDevServer(base: string, cwd: string): Promise<{ port: number; pid: number }> {
+  return jsonPost(`${base}/api/v1/dev-server/start`, { cwd });
+}
+
+export interface DevServerStatus {
+  running: boolean;
+  listening: boolean;
+  port: number | null;
+}
+
+/** GET dev-server status — whether the port is up and accepting connections. */
+export async function getDevServerStatus(base: string, cwd: string): Promise<DevServerStatus> {
+  return jsonGet(`${base}/api/v1/dev-server/status?cwd=${encodeURIComponent(cwd)}`);
+}
+
+/**
+ * Start a dev server and resolve only once its port is accepting connections.
+ *
+ * `start` returns as soon as the process is spawned; the dev server (Vite/webpack)
+ * can take several more seconds to bind. We poll `/status` until `listening` so the
+ * caller never loads the preview iframe before the server is reachable (which would
+ * 502). Rejects if the server dies during startup or `timeoutMs` elapses.
+ */
+export async function startDevServerAndWait(
   base: string,
   cwd: string,
-): Promise<{ url: string; pid: number }> {
-  return jsonPost(`${base}/api/v1/dev-server/start`, { cwd });
+  { timeoutMs = 60_000, intervalMs = 500 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<{ port: number }> {
+  const { port } = await startDevServer(base, cwd);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const s = await getDevServerStatus(base, cwd);
+    if (s.listening) return { port };
+    if (!s.running) throw new Error('dev server stopped during startup — check package.json');
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error('dev server did not become reachable in time');
+}
+
+/**
+ * Browser-facing preview URL for a dev server on ``port``.
+ *
+ * The backend can't build this: behind the workspace reverse proxy it never sees the
+ * public hostname (flowinfra rewrites the Host header). The browser does, via
+ * ``window.location`` — so we insert ``-{port}`` after the first subdomain label,
+ * matching flowinfra's ``{wsid}-{port}.{suffix}`` port-preview scheme. Locally the
+ * page is same-machine, so a plain localhost URL works.
+ */
+export function devServerPreviewUrl(port: number): string {
+  const { hostname, protocol } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `http://localhost:${port}`;
+  }
+  const [label, ...rest] = hostname.split('.');
+  return `${protocol}//${label}-${port}.${rest.join('.')}`;
 }
 
 export async function stopDevServer(base: string, cwd?: string): Promise<void> {

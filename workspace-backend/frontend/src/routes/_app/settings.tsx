@@ -32,6 +32,8 @@ import {
   getResources as apiGetResources,
   clearSessions as apiClearSessions,
   getServerLog as apiGetServerLog,
+  getToolPaths as apiGetToolPaths,
+  setToolPaths as apiSetToolPaths,
 } from '#/lib/api';
 // HTTP_BASE imported from '#/lib/api'
 
@@ -754,6 +756,131 @@ function ApiKeySection() {
   );
 }
 
+// ── Tool paths section ────────────────────────────────────────────────────────
+
+const TOOL_PATH_FIELDS: { key: string; label: string; default: string }[] = [
+  { key: 'npm', label: 'npm', default: '/usr/local/bin/npm' },
+  { key: 'pnpm', label: 'pnpm', default: '/usr/local/bin/pnpm' },
+  { key: 'node', label: 'node', default: '/usr/local/bin/node' },
+];
+
+const TOOL_PATH_DEFAULTS: Record<string, string> = Object.fromEntries(
+  TOOL_PATH_FIELDS.map(f => [f.key, f.default]),
+);
+
+function ToolPathsSection() {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [valid, setValid] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    apiGetToolPaths(HTTP_BASE)
+      .then(d => {
+        setValues(d.paths ?? {});
+        setValid(d.valid ?? {});
+      })
+      .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    setSavedOk(false);
+    try {
+      await apiSetToolPaths(HTTP_BASE, values);
+      setSavedOk(true);
+      load();
+      setTimeout(() => setSavedOk(false), 2000);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleRestoreDefaults() {
+    setValues({ ...TOOL_PATH_DEFAULTS });
+    setSavedOk(false);
+  }
+
+  return (
+    <section className="settings-section">
+      <h2 className="settings-section-title">
+        <TerminalIcon size={15} />
+        Tool Paths
+      </h2>
+      <div className="settings-cards">
+        <div className="settings-card">
+          <p className="settings-card-hint">
+            Absolute paths to the executables the coder-mode dev server uses. Leave a
+            field blank to auto-detect it on <code className="settings-code">PATH</code>.
+          </p>
+          <div className="settings-fields">
+            {TOOL_PATH_FIELDS.map(f => {
+              const hasValue = !!(values[f.key] ?? '').trim();
+              return (
+                <label key={f.key} className="settings-field">
+                  <span className="settings-field-label">
+                    {f.label}
+                    {hasValue &&
+                      (valid[f.key] ? (
+                        <CheckCircleIcon
+                          size={12}
+                          weight="fill"
+                          color="var(--accent-green)"
+                        />
+                      ) : (
+                        <XCircleIcon size={12} weight="fill" color="var(--accent-red)" />
+                      ))}
+                  </span>
+                  <input
+                    type="text"
+                    className="settings-input"
+                    placeholder={f.default}
+                    value={values[f.key] ?? ''}
+                    onChange={e =>
+                      setValues(prev => ({ ...prev, [f.key]: e.target.value }))
+                    }
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+              );
+            })}
+          </div>
+          {error && <p className="settings-error">{error}</p>}
+          <div className="settings-integration-actions">
+            <button
+              type="button"
+              className="settings-btn settings-btn--primary"
+              onClick={() => void handleSave()}
+              disabled={saving}
+            >
+              {savedOk ? <CheckCircleIcon size={13} weight="fill" /> : null}
+              {saving ? 'Saving…' : savedOk ? 'Saved' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className="settings-btn"
+              onClick={handleRestoreDefaults}
+              disabled={saving}
+            >
+              <ArrowClockwiseIcon size={13} />
+              Restore defaults
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Server log section ────────────────────────────────────────────────────────
 
 type ServerLogInfo = { bzHome: string; logFile: string; lines: string[] };
@@ -870,6 +997,7 @@ function SettingsPage() {
       <div className="settings-body">
         <VersionSection />
         <ApiKeySection />
+        <ToolPathsSection />
         <ResourcesSection />
         <IntegrationsSection />
         <ServerLogSection />

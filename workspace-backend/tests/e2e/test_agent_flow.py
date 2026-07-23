@@ -129,3 +129,37 @@ async def test_send_before_connect_409(agent_client: httpx.AsyncClient) -> None:
     agent_id = created.json()["id"]
     resp = await agent_client.post(f"/api/v1/agents/{agent_id}/messages", json={"content": "hi"})
     assert resp.status_code == 409
+
+
+async def test_connect_does_not_rewrite_config(agent_client: httpx.AsyncClient, agent_settings) -> None:
+    """Config is written once at create; connect must NOT rewrite the session dir.
+
+    Rewriting on connect caused a TOCTOU crash when two connects raced on the same
+    dir. Here we snapshot the config dir after create and assert connect leaves every
+    file's mtime untouched.
+    """
+    created = await agent_client.post("/api/v1/agents", json={"mode": "general"})
+    agent_id = created.json()["id"]
+
+    cfg_dir = agent_settings.sessions_dir / agent_id
+    assert cfg_dir.is_dir()  # create wrote the config
+    before = {p: p.stat().st_mtime_ns for p in cfg_dir.rglob("*") if p.is_file()}
+    assert before  # sanity: there are compiled files
+
+    # Two connects (mirrors the double-connect that used to race).
+    for _ in range(2):
+        resp = await agent_client.post(f"/api/v1/agents/{agent_id}/connect", json={})
+        assert resp.status_code == 200
+
+    after = {p: p.stat().st_mtime_ns for p in cfg_dir.rglob("*") if p.is_file()}
+    assert after == before  # connect touched nothing
+
+
+async def test_connect_returns_session_mode_without_rewrite(agent_client: httpx.AsyncClient) -> None:
+    """Connect still reports the mode's session_mode (derived, not compiled-on-write)."""
+    created = await agent_client.post("/api/v1/agents", json={"mode": "general"})
+    agent_id = created.json()["id"]
+    resp = await agent_client.post(f"/api/v1/agents/{agent_id}/connect", json={})
+    assert resp.status_code == 200
+    # general mode → default session mode; present and valid regardless of the write path.
+    assert resp.json()["session_mode"] in {"default", "plan", "yolo"}
